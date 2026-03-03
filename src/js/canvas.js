@@ -376,10 +376,12 @@ export function renderCanvas(){
   const board = document.getElementById('canvas-board');
   const zonesLayer = document.getElementById('zones-layer');
   const nodesLayer = document.getElementById('nodes-layer');
-  if (!board || !zonesLayer || !nodesLayer) return;
+  const arrowsLayer = document.getElementById('arrows-layer');
+  if (!board || !zonesLayer || !nodesLayer || !arrowsLayer) return;
 
   zonesLayer.innerHTML = "";
   nodesLayer.innerHTML = "";
+  arrowsLayer.innerHTML = "";
 
   const W = Math.max(1000, Math.min(5000, Number(project?.ui?.canvasW || 5000)));
   const H = Math.max(700, Math.min(5000, Number(project?.ui?.canvasH || 5000)));
