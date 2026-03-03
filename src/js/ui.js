@@ -1728,8 +1728,7 @@ function renderFlows(panel){
       </div>
     </div>
     
-    <div style="margin-top:8px; padding: 12px; background: rgba(255,255,255,0.6); border-radius: 8px; border: 1px solid var(--stroke);">
-      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+        <div style="margin-top:8px; padding: 12px; background: var(--panel2); border-radius: 8px; border: 1px solid var(--stroke);">      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
         <label style="margin:0; font-weight: 600;">Сумма платежа (Amount)</label>
         <label style="font-size: 0.9em; display:flex; align-items:center; gap:6px; cursor: pointer; color: #a855f7; font-weight: 600;">
           <input type="checkbox" id="isNet" style="width:16px; height:16px; margin:0;">
