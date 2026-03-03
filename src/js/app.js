@@ -58,5 +58,16 @@ import { onPointerCancel } from './canvas.js';
   document.addEventListener('visibilitychange', ()=>{ if (document.hidden) onPointerCancel(); });
 
   if (project.readOnly) toast("Audit log нарушен. Режим read-only.");
+  // --- Переключение темной/светлой темы ---
+  const themeToggle = document.getElementById('themeToggle');
+  const themeIcon = document.getElementById('themeIcon');
+  if (themeToggle) {
+    themeToggle.onclick = () => {
+      document.body.classList.toggle('dark-mode');
+      const isDark = document.body.classList.contains('dark-mode');
+      themeIcon.textContent = isDark ? '☀️' : '🌓';
+      // Можно даже сохранить выбор в localStorage, если захотите
+    };
+  }
   render();
 })();
