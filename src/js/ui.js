@@ -1564,7 +1564,7 @@ function renderCatalogs(panel){
       </div>
       <div style="margin-top:8px">
         <label>Название</label>
-        <input id="nodeName" placeholder="HoldCo, Founder"/>
+        <input id="newNodeName" placeholder="HoldCo, Founder"/>
       </div>
       <div class="row" style="margin-top:10px">
         <button class="btn" id="createNode">Создать</button>
@@ -1684,7 +1684,7 @@ function renderCatalogs(panel){
   root.querySelector('#createNode').onclick = async ()=>{
     if (project.readOnly) return toast("Read-only");
     const kind = root.querySelector('#tplSel').value;
-    const name = String(root.querySelector('#nodeName').value || '').trim();
+    const name = String(root.querySelector('#newNodeName').value || '').trim();
     if (!name) return toast('Укажи название элемента');
     const zoneId = zoneSel.value || null;
     const z = zoneId ? getZone(project, zoneId) : null;
@@ -1700,7 +1700,7 @@ function renderCatalogs(panel){
     }
     project.nodes.push(n);
     await auditAppend(project, 'NODE_CREATE', { entityType:'NODE', entityId:n.id }, { nodes: [] }, { nodes: [n] });
-    save(); root.querySelector('#nodeName').value = ''; render();
+    save(); root.querySelector('#newNodeName').value = ''; render();
   };
 }
 
