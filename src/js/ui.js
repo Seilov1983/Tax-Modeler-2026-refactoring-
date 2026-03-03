@@ -10,10 +10,10 @@ import {
   makeNode, frozenThresholdFunctional, nodeDebtToTXA, yearOf, isYearClosed, 
   ensurePeriods, ensureAccounting, ensureAccountingYear, createSnapshot, 
   runPipeline, recomputeFrozen, recomputeRisks, applyTaxAdjustment, convert, 
-  bootstrapNormalizeZones, syncTXANodes, normalizeZoneCascade, defaultCatalogs,
+  bootstrapNormalizeZones, defaultCatalogs,
   makeTXA, makeFlowDraft
 } from './engine.js';
-import { renderCanvas } from './canvas.js';
+import { renderCanvas, syncTXANodes, normalizeZoneCascade } from './canvas.js';
 
 const tabs = [
   { id:"flows", name:"Потоки и налоги" },
