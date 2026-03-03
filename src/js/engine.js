@@ -72,6 +72,9 @@ export function defaultProject(){
   ensureZoneTaxDefaults(p);
   bootstrapNormalizeZones(p);
   recomputeRisks(p);
+  // Сдвигаем весь демо-проект в центр холста (2000, 2000)
+  p.zones.forEach(z => { z.x += 2000; z.y += 2000; });
+  p.nodes.forEach(n => { n.x += 2000; n.y += 2000; });
   return p;
 }
 
