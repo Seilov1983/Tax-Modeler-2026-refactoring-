@@ -769,240 +769,240 @@ function renderSettingsJurisdictions(panel){
   }
 
   function renderEditor(){
-      editor.innerHTML = "";
-      const z = uiState.settingsSelectedZoneId ? getZone(project, uiState.settingsSelectedZoneId) : null;
-      if (!z){
-        editor.innerHTML = `<div class="small">Выберите режим (зону) слева. Затем здесь можно отредактировать базовые налоговые параметры режима.</div>`;
-        return;
-      }
-      const tx = effectiveZoneTax(project, z);
-      const md = project.masterData[z.jurisdiction] || {};
-      const payroll = tx.payroll || {};
-
-      const wrap = document.createElement('div');
-      wrap.className = 'col';
-      wrap.innerHTML = `
-        <div class="title">${escapeHtml(z.name)}</div>
-        <div class="small">${escapeHtml(z.jurisdiction)} · ${escapeHtml(z.code)} · ${escapeHtml(z.currency)}</div>
-        <div class="sep"></div>
-
-        <div class="title">Параметры зоны</div>
-        <div class="kv">
-          <div><label>Название</label><input id="zName" value="${escapeHtml(z.name)}"/></div>
-          <div><label>zIndex</label><input id="zZI" type="number" step="1" min="0" value="${escapeHtml(String(z.zIndex||0))}"/></div>
-        </div>
-        <div class="kv">
-          <div><label>Код режима (zone.code)</label><input id="zCode" value="${escapeHtml(z.code)}"/></div>
-          <div><label>Валюта</label><input id="zCcy" value="${escapeHtml(z.currency)}"/></div>
-        </div>
-
-        <div class="sep"></div>
-        <div class="title">Налоги (режим)</div>
-        <div class="kv">
-          <div><label>VAT/GST (доля)</label><input id="tVat" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(tx.vatRate||0))}"/></div>
-          <div><label>WHT (Div/Int/Roy/Serv), %</label><input id="tWhtPack" value="${escapeHtml(String(bankersRound2((tx.wht?.dividends||0)*100)))};${escapeHtml(String(bankersRound2((tx.wht?.interest||0)*100)))};${escapeHtml(String(bankersRound2((tx.wht?.royalties||0)*100)))};${escapeHtml(String(bankersRound2((tx.wht?.services||0)*100)))}"/></div>
-        </div>
-
-        <div class="kv">
-          <div>
-            <label>CIT mode</label>
-            <select id="tCitMode">
-              ${["flat","threshold","twoTier","qfzp","brackets","smallProfits"].map(m=>`<option value="${m}" ${tx.cit?.mode===m?"selected":""}>${m}</option>`).join("")}
-            </select>
-          </div>
-          <div><label>Примечание</label><input id="tNote" value="${escapeHtml(String(tx.notes||""))}"/></div>
-        </div>
-
-        <div id="citFields" class="col"></div>
-
-        <div class="sep"></div>
-        <div class="title">Payroll (упрощенно, доли)</div>
-        <div class="kv">
-          <div><label>PIT</label><input id="pPit" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(payroll.pitRate||0))}"/></div>
-          <div><label>Соц.налог работодателя</label><input id="pSocTax" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(payroll.socialTaxEmployerRate||0))}"/></div>
-        </div>
-        <div class="kv">
-          <div><label>Пенсия работник</label><input id="pPenE" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(payroll.pensionEmployeeRate||0))}"/></div>
-          <div><label>Пенсия работодатель</label><input id="pPenER" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(payroll.pensionEmployerRate||0))}"/></div>
-        </div>
-
-        <div class="row" style="margin-top:16px; justify-content:space-between; border-top: 1px solid var(--stroke); padding-top: 16px;">
-          <div class="row">
-            <button class="btn" id="btnSaveZoneTax">Сохранить</button>
-            <button class="btn secondary" id="btnResetZoneTax">Сбросить</button>
-          </div>
-          <button class="btn danger" id="btnDeleteZone">Удалить зону</button>
-        </div>
-      `;
-      editor.appendChild(wrap);
-
-      const citFields = wrap.querySelector('#citFields');
-      const renderCitFields = ()=>{
-        const mode = wrap.querySelector('#tCitMode').value;
-        const cit = tx.cit || { mode:"flat", rate: 0 };
-        let html = "";
-        if (mode === "flat"){
-          html = `<div class="kv"><div><label>CIT rate (доля)</label><input id="cit_rate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.rate ?? md.citRateStandard ?? 0))}"/></div><div></div></div>`;
-        } else if (mode === "threshold"){
-          html = `<div class="kv">
-            <div><label>0% up to (amount)</label><input id="cit_zeroUpTo" type="number" step="1" min="0" value="${escapeHtml(String(cit.zeroUpTo ?? 0))}"/></div>
-            <div><label>Main rate (доля)</label><input id="cit_mainRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.mainRate ?? 0))}"/></div>
-          </div>`;
-        } else if (mode === "twoTier"){
-          html = `<div class="kv">
-            <div><label>Small rate (доля)</label><input id="cit_smallRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.smallRate ?? 0))}"/></div>
-            <div><label>Small limit (amount)</label><input id="cit_smallLimit" type="number" step="1" min="0" value="${escapeHtml(String(cit.smallLimit ?? 0))}"/></div>
-          </div>
-          <div class="kv">
-            <div><label>Main rate (доля)</label><input id="cit_mainRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.mainRate ?? 0))}"/></div>
-            <div></div>
-          </div>`;
-        } else if (mode === "qfzp"){
-          html = `<div class="kv">
-            <div><label>Qualifying rate (доля)</label><input id="cit_qRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.qualifyingRate ?? 0))}"/></div>
-            <div><label>Non-qualifying rate (доля)</label><input id="cit_nqRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.nonQualifyingRate ?? 0))}"/></div>
-          </div>`;
-        } else if (mode === "brackets"){
-          const b1 = (cit.brackets && cit.brackets[0]) ? cit.brackets[0] : {upTo:0, rate:0};
-          const b2 = (cit.brackets && cit.brackets[1]) ? cit.brackets[1] : {upTo:null, rate:0};
-          html = `<div class="kv">
-            <div><label>Up to (amount)</label><input id="cit_b1_up" type="number" step="1" min="0" value="${escapeHtml(String(b1.upTo ?? 0))}"/></div>
-            <div><label>Rate 1 (доля)</label><input id="cit_b1_r" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(b1.rate ?? 0))}"/></div>
-          </div>
-          <div class="kv">
-            <div><label>Rate 2 (доля)</label><input id="cit_b2_r" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(b2.rate ?? 0))}"/></div>
-            <div></div>
-          </div>`;
-        } else if (mode === "smallProfits"){
-          html = `<div class="kv">
-            <div><label>Small rate (доля)</label><input id="cit_smallRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.smallRate ?? 0))}"/></div>
-            <div><label>Small limit</label><input id="cit_smallLimit" type="number" step="1" min="0" value="${escapeHtml(String(cit.smallLimit ?? 0))}"/></div>
-          </div>
-          <div class="kv">
-            <div><label>Main rate (доля)</label><input id="cit_mainRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.mainRate ?? 0))}"/></div>
-            <div><label>Main limit</label><input id="cit_mainLimit" type="number" step="1" min="0" value="${escapeHtml(String(cit.mainLimit ?? 0))}"/></div>
-          </div>`;
-        }
-        citFields.innerHTML = html;
-      };
-      renderCitFields();
-      wrap.querySelector('#tCitMode').onchange = ()=>{ renderCitFields(); };
-
-      wrap.querySelector('#btnResetZoneTax').onclick = ()=>{
-        if (project.readOnly) return toast("Read-only: изменения запрещены");
-        const before = JSON.parse(JSON.stringify(z));
-        z.tax = {};
-        auditAppend(project, 'MASTERDATA_OVERRIDE', { entityType:'ZONE', entityId: z.id }, [
-          {op:'replace', path:`/zones`, value: project.zones}
-        ]);
-        save();
-        toast("Переопределения сброшены");
-        render();
-      };
-
-      wrap.querySelector('#btnSaveZoneTax').onclick = ()=>{
-        if (project.readOnly) return toast("Read-only: изменения запрещены");
-        z.name = String(wrap.querySelector('#zName').value || z.name).trim() || z.name;
-        z.code = String(wrap.querySelector('#zCode').value || z.code).trim().toUpperCase().replace(/\s+/g,'_') || z.code;
-        z.currency = String(wrap.querySelector('#zCcy').value || z.currency).trim().toUpperCase() || z.currency;
-        z.zIndex = Math.max(0, Math.floor(Number(wrap.querySelector('#zZI').value || z.zIndex || 0)));
-
-        z.tax = z.tax || {};
-        z.tax.vatRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#tVat').value || 0)));
-
-        const pack = String(wrap.querySelector('#tWhtPack').value || "").split(';').map(s=>Number(String(s).trim()||0));
-        const wht = { dividends: (pack[0]||0)/100, interest:(pack[1]||0)/100, royalties:(pack[2]||0)/100, services:(pack[3]||0)/100 };
-        z.tax.wht = wht;
-
-        const mode = wrap.querySelector('#tCitMode').value;
-        const cit = { mode };
-        if (mode === "flat"){
-          cit.rate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_rate').value || 0)));
-        } else if (mode === "threshold"){
-          cit.zeroUpTo = Math.max(0, Number(wrap.querySelector('#cit_zeroUpTo').value || 0));
-          cit.zeroRate = 0.00;
-          cit.mainRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_mainRate').value || 0)));
-        } else if (mode === "twoTier"){
-          cit.smallRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_smallRate').value || 0)));
-          cit.smallLimit = Math.max(0, Number(wrap.querySelector('#cit_smallLimit').value || 0));
-          cit.mainRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_mainRate').value || 0)));
-        } else if (mode === "qfzp"){
-          cit.qualifyingRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_qRate').value || 0)));
-          cit.nonQualifyingRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_nqRate').value || 0)));
-        } else if (mode === "brackets"){
-          const up = Math.max(0, Number(wrap.querySelector('#cit_b1_up').value || 0));
-          const r1 = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_b1_r').value || 0)));
-          const r2 = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_b2_r').value || 0)));
-          cit.brackets = [{ upTo: up, rate: r1 }, { upTo: null, rate: r2 }];
-        } else if (mode === "smallProfits"){
-          cit.smallRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_smallRate').value || 0)));
-          cit.smallLimit = Math.max(0, Number(wrap.querySelector('#cit_smallLimit').value || 0));
-          cit.mainRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_mainRate').value || 0)));
-          cit.mainLimit = Math.max(0, Number(wrap.querySelector('#cit_mainLimit').value || 0));
-        }
-        z.tax.cit = cit;
-        z.tax.notes = String(wrap.querySelector('#tNote').value || "").trim();
-
-        z.tax.payroll = z.tax.payroll || {};
-        z.tax.payroll.pitRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#pPit').value || 0)));
-        z.tax.payroll.socialTaxEmployerRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#pSocTax').value || 0)));
-        z.tax.payroll.pensionEmployeeRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#pPenE').value || 0)));
-        z.tax.payroll.pensionEmployerRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#pPenER').value || 0)));
-
-        project.fx = project.fx || { fxDate:"2026-01-15", rateToKZT:{KZT:1}, source:"manual" };
-        project.fx.rateToKZT = project.fx.rateToKZT || { KZT:1 };
-        if (!project.fx.rateToKZT[z.currency]){
-          const rStr = prompt(`Нет курса для ${z.currency} → KZT. Введите курс (число > 0):`, "1");
-          const r = Number(rStr);
-          if (!isFinite(r) || r<=0) return toast("Неверный курс");
-          project.fx.rateToKZT[z.currency] = r;
-        }
-
-        syncTXANodes(project);
-        bootstrapNormalizeZones(project);
-        recomputeRisks(project);
-        recomputeFrozen(project);
-
-        auditAppend(project, 'MASTERDATA_OVERRIDE', { entityType:'ZONE', entityId: z.id }, [
-          {op:'replace', path:`/zones`, value: project.zones},
-          {op:'replace', path:`/fx/rateToKZT`, value: project.fx.rateToKZT},
-          {op:'replace', path:`/nodes`, value: project.nodes}
-        ]);
-        save();
-        toast("Режим сохранён");
-        render();
-      };
-
-      // ЛОГИКА УДАЛЕНИЯ ЗОНЫ
-      wrap.querySelector('#btnDeleteZone').onclick = async () => {
-        if (project.readOnly) return toast("Read-only: изменения запрещены");
-        if (!confirm(`Точно удалить режим "${z.name}"? Все узлы, находящиеся внутри, останутся на канвасе, но потеряют налоговую привязку.`)) return;
-
-        const before = JSON.parse(JSON.stringify({ zones: project.zones, nodes: project.nodes }));
-
-        // Удаляем саму зону
-        project.zones = project.zones.filter(x => x.id !== z.id);
-        
-        // Удаляем TXA-ноду этой зоны (сборщик налогов)
-        project.nodes = project.nodes.filter(n => n.id !== 'txa_' + z.id);
-        
-        // Открепляем узлы, которые были в этой зоне
-        project.nodes.forEach(n => {
-          if (n.zoneId === z.id) n.zoneId = null;
-        });
-
-        uiState.settingsSelectedZoneId = null;
-
-        await auditAppend(project, 'ZONE_DELETE', { entityType:'ZONE', entityId: z.id }, before, { zones: project.zones, nodes: project.nodes }, { note: 'Zone deleted by user' });
-
-        syncTXANodes(project);
-        bootstrapNormalizeZones(project);
-        recomputeRisks(project);
-        save();
-        toast("Режим удален");
-        render();
-      };
+    editor.innerHTML = "";
+    const z = uiState.settingsSelectedZoneId ? getZone(project, uiState.settingsSelectedZoneId) : null;
+    if (!z){
+      editor.innerHTML = `<div class="small">Выберите режим (зону) слева. Затем здесь можно отредактировать базовые налоговые параметры режима.</div>`;
+      return;
     }
+    const tx = effectiveZoneTax(project, z);
+    const md = project.masterData[z.jurisdiction] || {};
+    const payroll = tx.payroll || {};
+
+    const wrap = document.createElement('div');
+    wrap.className = 'col';
+    wrap.innerHTML = `
+      <div class="title">${escapeHtml(z.name)}</div>
+      <div class="small">${escapeHtml(z.jurisdiction)} · ${escapeHtml(z.code)} · ${escapeHtml(z.currency)}</div>
+      <div class="sep"></div>
+
+      <div class="title">Параметры зоны</div>
+      <div class="kv">
+        <div><label>Название</label><input id="zName" value="${escapeHtml(z.name)}"/></div>
+        <div><label>zIndex</label><input id="zZI" type="number" step="1" min="0" value="${escapeHtml(String(z.zIndex||0))}"/></div>
+      </div>
+      <div class="kv">
+        <div><label>Код режима (zone.code)</label><input id="zCode" value="${escapeHtml(z.code)}"/></div>
+        <div><label>Валюта</label><input id="zCcy" value="${escapeHtml(z.currency)}"/></div>
+      </div>
+
+      <div class="sep"></div>
+      <div class="title">Налоги (режим)</div>
+      <div class="kv">
+        <div><label>VAT/GST (доля)</label><input id="tVat" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(tx.vatRate||0))}"/></div>
+        <div><label>WHT (Div/Int/Roy/Serv), %</label><input id="tWhtPack" value="${escapeHtml(String(bankersRound2((tx.wht?.dividends||0)*100)))};${escapeHtml(String(bankersRound2((tx.wht?.interest||0)*100)))};${escapeHtml(String(bankersRound2((tx.wht?.royalties||0)*100)))};${escapeHtml(String(bankersRound2((tx.wht?.services||0)*100)))}"/></div>
+      </div>
+
+      <div class="kv">
+        <div>
+          <label>CIT mode</label>
+          <select id="tCitMode">
+            ${["flat","threshold","twoTier","qfzp","brackets","smallProfits"].map(m=>`<option value="${m}" ${tx.cit?.mode===m?"selected":""}>${m}</option>`).join("")}
+          </select>
+        </div>
+        <div><label>Примечание</label><input id="tNote" value="${escapeHtml(String(tx.notes||""))}"/></div>
+      </div>
+
+      <div id="citFields" class="col"></div>
+
+      <div class="sep"></div>
+      <div class="title">Payroll (упрощенно, доли)</div>
+      <div class="kv">
+        <div><label>PIT</label><input id="pPit" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(payroll.pitRate||0))}"/></div>
+        <div><label>Соц.налог работодателя</label><input id="pSocTax" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(payroll.socialTaxEmployerRate||0))}"/></div>
+      </div>
+      <div class="kv">
+        <div><label>Пенсия работник</label><input id="pPenE" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(payroll.pensionEmployeeRate||0))}"/></div>
+        <div><label>Пенсия работодатель</label><input id="pPenER" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(payroll.pensionEmployerRate||0))}"/></div>
+      </div>
+
+      <div class="row" style="margin-top:16px; justify-content:space-between; border-top: 1px solid var(--stroke); padding-top: 16px;">
+        <div class="row">
+          <button class="btn" id="btnSaveZoneTax">Сохранить</button>
+          <button class="btn secondary" id="btnResetZoneTax">Сбросить</button>
+        </div>
+        <button class="btn danger" id="btnDeleteZone">Удалить зону</button>
+      </div>
+    `;
+    editor.appendChild(wrap);
+
+    const citFields = wrap.querySelector('#citFields');
+    const renderCitFields = ()=>{
+      const mode = wrap.querySelector('#tCitMode').value;
+      const cit = tx.cit || { mode:"flat", rate: 0 };
+      let html = "";
+      if (mode === "flat"){
+        html = `<div class="kv"><div><label>CIT rate (доля)</label><input id="cit_rate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.rate ?? md.citRateStandard ?? 0))}"/></div><div></div></div>`;
+      } else if (mode === "threshold"){
+        html = `<div class="kv">
+          <div><label>0% up to (amount)</label><input id="cit_zeroUpTo" type="number" step="1" min="0" value="${escapeHtml(String(cit.zeroUpTo ?? 0))}"/></div>
+          <div><label>Main rate (доля)</label><input id="cit_mainRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.mainRate ?? 0))}"/></div>
+        </div>`;
+      } else if (mode === "twoTier"){
+        html = `<div class="kv">
+          <div><label>Small rate (доля)</label><input id="cit_smallRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.smallRate ?? 0))}"/></div>
+          <div><label>Small limit (amount)</label><input id="cit_smallLimit" type="number" step="1" min="0" value="${escapeHtml(String(cit.smallLimit ?? 0))}"/></div>
+        </div>
+        <div class="kv">
+          <div><label>Main rate (доля)</label><input id="cit_mainRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.mainRate ?? 0))}"/></div>
+          <div></div>
+        </div>`;
+      } else if (mode === "qfzp"){
+        html = `<div class="kv">
+          <div><label>Qualifying rate (доля)</label><input id="cit_qRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.qualifyingRate ?? 0))}"/></div>
+          <div><label>Non-qualifying rate (доля)</label><input id="cit_nqRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.nonQualifyingRate ?? 0))}"/></div>
+        </div>`;
+      } else if (mode === "brackets"){
+        const b1 = (cit.brackets && cit.brackets[0]) ? cit.brackets[0] : {upTo:0, rate:0};
+        const b2 = (cit.brackets && cit.brackets[1]) ? cit.brackets[1] : {upTo:null, rate:0};
+        html = `<div class="kv">
+          <div><label>Up to (amount)</label><input id="cit_b1_up" type="number" step="1" min="0" value="${escapeHtml(String(b1.upTo ?? 0))}"/></div>
+          <div><label>Rate 1 (доля)</label><input id="cit_b1_r" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(b1.rate ?? 0))}"/></div>
+        </div>
+        <div class="kv">
+          <div><label>Rate 2 (доля)</label><input id="cit_b2_r" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(b2.rate ?? 0))}"/></div>
+          <div></div>
+        </div>`;
+      } else if (mode === "smallProfits"){
+        html = `<div class="kv">
+          <div><label>Small rate (доля)</label><input id="cit_smallRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.smallRate ?? 0))}"/></div>
+          <div><label>Small limit</label><input id="cit_smallLimit" type="number" step="1" min="0" value="${escapeHtml(String(cit.smallLimit ?? 0))}"/></div>
+        </div>
+        <div class="kv">
+          <div><label>Main rate (доля)</label><input id="cit_mainRate" type="number" step="0.0001" min="0" max="1" value="${escapeHtml(String(cit.mainRate ?? 0))}"/></div>
+          <div><label>Main limit</label><input id="cit_mainLimit" type="number" step="1" min="0" value="${escapeHtml(String(cit.mainLimit ?? 0))}"/></div>
+        </div>`;
+      }
+      citFields.innerHTML = html;
+    };
+    renderCitFields();
+    wrap.querySelector('#tCitMode').onchange = ()=>{ renderCitFields(); };
+
+    wrap.querySelector('#btnResetZoneTax').onclick = ()=>{
+      if (project.readOnly) return toast("Read-only: изменения запрещены");
+      const before = JSON.parse(JSON.stringify(z));
+      z.tax = {};
+      auditAppend(project, 'MASTERDATA_OVERRIDE', { entityType:'ZONE', entityId: z.id }, [
+        {op:'replace', path:`/zones`, value: project.zones}
+      ]);
+      save();
+      toast("Переопределения сброшены");
+      render();
+    };
+
+    wrap.querySelector('#btnSaveZoneTax').onclick = ()=>{
+      if (project.readOnly) return toast("Read-only: изменения запрещены");
+      z.name = String(wrap.querySelector('#zName').value || z.name).trim() || z.name;
+      z.code = String(wrap.querySelector('#zCode').value || z.code).trim().toUpperCase().replace(/\s+/g,'_') || z.code;
+      z.currency = String(wrap.querySelector('#zCcy').value || z.currency).trim().toUpperCase() || z.currency;
+      z.zIndex = Math.max(0, Math.floor(Number(wrap.querySelector('#zZI').value || z.zIndex || 0)));
+
+      z.tax = z.tax || {};
+      z.tax.vatRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#tVat').value || 0)));
+
+      const pack = String(wrap.querySelector('#tWhtPack').value || "").split(';').map(s=>Number(String(s).trim()||0));
+      const wht = { dividends: (pack[0]||0)/100, interest:(pack[1]||0)/100, royalties:(pack[2]||0)/100, services:(pack[3]||0)/100 };
+      z.tax.wht = wht;
+
+      const mode = wrap.querySelector('#tCitMode').value;
+      const cit = { mode };
+      if (mode === "flat"){
+        cit.rate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_rate').value || 0)));
+      } else if (mode === "threshold"){
+        cit.zeroUpTo = Math.max(0, Number(wrap.querySelector('#cit_zeroUpTo').value || 0));
+        cit.zeroRate = 0.00;
+        cit.mainRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_mainRate').value || 0)));
+      } else if (mode === "twoTier"){
+        cit.smallRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_smallRate').value || 0)));
+        cit.smallLimit = Math.max(0, Number(wrap.querySelector('#cit_smallLimit').value || 0));
+        cit.mainRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_mainRate').value || 0)));
+      } else if (mode === "qfzp"){
+        cit.qualifyingRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_qRate').value || 0)));
+        cit.nonQualifyingRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_nqRate').value || 0)));
+      } else if (mode === "brackets"){
+        const up = Math.max(0, Number(wrap.querySelector('#cit_b1_up').value || 0));
+        const r1 = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_b1_r').value || 0)));
+        const r2 = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_b2_r').value || 0)));
+        cit.brackets = [{ upTo: up, rate: r1 }, { upTo: null, rate: r2 }];
+      } else if (mode === "smallProfits"){
+        cit.smallRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_smallRate').value || 0)));
+        cit.smallLimit = Math.max(0, Number(wrap.querySelector('#cit_smallLimit').value || 0));
+        cit.mainRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#cit_mainRate').value || 0)));
+        cit.mainLimit = Math.max(0, Number(wrap.querySelector('#cit_mainLimit').value || 0));
+      }
+      z.tax.cit = cit;
+      z.tax.notes = String(wrap.querySelector('#tNote').value || "").trim();
+
+      z.tax.payroll = z.tax.payroll || {};
+      z.tax.payroll.pitRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#pPit').value || 0)));
+      z.tax.payroll.socialTaxEmployerRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#pSocTax').value || 0)));
+      z.tax.payroll.pensionEmployeeRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#pPenE').value || 0)));
+      z.tax.payroll.pensionEmployerRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#pPenER').value || 0)));
+
+      project.fx = project.fx || { fxDate:"2026-01-15", rateToKZT:{KZT:1}, source:"manual" };
+      project.fx.rateToKZT = project.fx.rateToKZT || { KZT:1 };
+      if (!project.fx.rateToKZT[z.currency]){
+        const rStr = prompt(`Нет курса для ${z.currency} → KZT. Введите курс (число > 0):`, "1");
+        const r = Number(rStr);
+        if (!isFinite(r) || r<=0) return toast("Неверный курс");
+        project.fx.rateToKZT[z.currency] = r;
+      }
+
+      syncTXANodes(project);
+      bootstrapNormalizeZones(project);
+      recomputeRisks(project);
+      recomputeFrozen(project);
+
+      auditAppend(project, 'MASTERDATA_OVERRIDE', { entityType:'ZONE', entityId: z.id }, [
+        {op:'replace', path:`/zones`, value: project.zones},
+        {op:'replace', path:`/fx/rateToKZT`, value: project.fx.rateToKZT},
+        {op:'replace', path:`/nodes`, value: project.nodes}
+      ]);
+      save();
+      toast("Режим сохранён");
+      render();
+    };
+
+    // ЛОГИКА УДАЛЕНИЯ ЗОНЫ
+    wrap.querySelector('#btnDeleteZone').onclick = async () => {
+      if (project.readOnly) return toast("Read-only: изменения запрещены");
+      if (!confirm(`Точно удалить режим "${z.name}"? Все узлы, находящиеся внутри, останутся на канвасе, но потеряют налоговую привязку.`)) return;
+
+      const before = JSON.parse(JSON.stringify({ zones: project.zones, nodes: project.nodes }));
+
+      // Удаляем саму зону
+      project.zones = project.zones.filter(x => x.id !== z.id);
+      
+      // Удаляем TXA-ноду этой зоны (сборщик налогов)
+      project.nodes = project.nodes.filter(n => n.id !== 'txa_' + z.id);
+      
+      // Открепляем узлы, которые были в этой зоне
+      project.nodes.forEach(n => {
+        if (n.zoneId === z.id) n.zoneId = null;
+      });
+
+      uiState.settingsSelectedZoneId = null;
+
+      await auditAppend(project, 'ZONE_DELETE', { entityType:'ZONE', entityId: z.id }, before, { zones: project.zones, nodes: project.nodes }, { note: 'Zone deleted by user' });
+
+      syncTXANodes(project);
+      bootstrapNormalizeZones(project);
+      recomputeRisks(project);
+      save();
+      toast("Режим удален");
+      render();
+    };
+  }
 
   c.querySelector('#btnAddCountry').onclick = async ()=>{
     if (project.readOnly) return toast("Read-only: изменения запрещены");
@@ -1760,7 +1760,8 @@ function renderFlows(panel){
       </div>
     </div>
     
-        <div style="margin-top:8px; padding: 12px; background: var(--panel2); border-radius: 8px; border: 1px solid var(--stroke);">      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+    <div style="margin-top:8px; padding: 12px; background: rgba(255,255,255,0.6); border-radius: 8px; border: 1px solid var(--stroke);">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
         <label style="margin:0; font-weight: 600;">Сумма платежа (Amount)</label>
         <label style="font-size: 0.9em; display:flex; align-items:center; gap:6px; cursor: pointer; color: #a855f7; font-weight: 600;">
           <input type="checkbox" id="isNet" style="width:16px; height:16px; margin:0;">
@@ -2115,17 +2116,17 @@ export function showYearEndWizard() {
 
   const overlay = document.createElement('div');
   overlay.id = 'wizardModal';
-  overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(224, 229, 236, 0.85); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; z-index:9999;";
+  overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.4); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; z-index:9999;";
 
   const isClosed = project.periods?.closedYears?.includes(year);
   if (isClosed) {
       overlay.innerHTML = `
-          <div style="background: #e0e5ec; padding: 30px; border-radius: 16px; width: 450px; text-align: center; box-shadow: 12px 12px 24px rgb(163,177,198,0.7), -12px -12px 24px rgba(255,255,255, 0.6);">
-              <h2 style="color: #e74c3c; margin-top:0;">Период ${year} закрыт 🔒</h2>
-              <p style="color: #555;">Внесение изменений, проводка платежей и генерация налогов за этот год заблокированы для защиты Audit Log.</p>
+          <div style="background: var(--panel); padding: 30px; border-radius: 16px; width: 450px; text-align: center; border: 1px solid var(--stroke); box-shadow: var(--shadow); color: var(--text);">
+              <h2 style="color: var(--danger); margin-top:0;">Период ${year} закрыт 🔒</h2>
+              <p style="color: var(--muted);">Внесение изменений, проводка платежей и генерация налогов за этот год заблокированы для защиты Audit Log.</p>
               <div style="display: flex; gap: 12px; justify-content: center; margin-top: 25px;">
                   <button class="btn secondary" id="btnWzCancel">Отмена</button>
-                  <button class="btn" id="btnWzUnlock" style="background: #e74c3c; color: white; border:none; padding:10px 20px;">🔓 Открыть период</button>
+                  <button class="btn" id="btnWzUnlock" style="background: var(--danger); color: white; border:none; padding:10px 20px;">🔓 Открыть период</button>
               </div>
           </div>
       `;
@@ -2155,7 +2156,7 @@ export function showYearEndWizard() {
       }
   });
   const netVat = bankersRound2(outputVat - inputVat);
-  let netVatText = netVat > 0 ? `К уплате: <b style="color:#e74c3c;">${formatMoney(netVat)} KZT</b>` : (netVat < 0 ? `Переплата: <b style="color:#2ecc71;">${formatMoney(Math.abs(netVat))} KZT</b>` : `<b>0 KZT</b>`);
+  let netVatText = netVat > 0 ? `К уплате: <b style="color:var(--danger);">${formatMoney(netVat)} KZT</b>` : (netVat < 0 ? `Переплата: <b style="color:var(--ok);">${formatMoney(Math.abs(netVat))} KZT</b>` : `<b>0 KZT</b>`);
   let totalLosses = 0; kzCompanies.forEach(c => { if (c.accountingYears && c.accountingYears[year - 1]) totalLosses += (c.accountingYears[year - 1].accumulatedLosses || 0); });
   if (totalLosses === 0) totalLosses = 5000000;
 
@@ -2165,34 +2166,34 @@ export function showYearEndWizard() {
   const etr = totalGross > 0 ? ((totalTaxes / totalGross) * 100).toFixed(1) : 0;
 
   overlay.innerHTML = `
-      <div style="background: var(--bg, #e0e5ec); padding: 30px; border-radius: 16px; width: 680px; max-width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 12px 12px 24px rgb(163,177,198,0.7), -12px -12px 24px rgba(255,255,255, 0.6);">
+      <div style="background: var(--panel); padding: 30px; border-radius: 16px; width: 680px; max-width: 95%; max-height: 90vh; overflow-y: auto; border: 1px solid var(--stroke); box-shadow: var(--shadow); color: var(--text);">
           
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-              <h2 style="margin:0; color: #333; font-size: 1.5em;">Закрытие ${year} года</h2>
+              <h2 style="margin:0; font-size: 1.5em;">Закрытие ${year} года</h2>
               <div class="pill ok" style="font-size: 14px; padding: 6px 12px;">Group ETR: ${etr}%</div>
           </div>
-          <div style="font-size: 0.95em; color: #666; margin-bottom: 25px;">Математическая модель рассчитана на базе ${executedFlows.length} транзакций.</div>
+          <div style="font-size: 0.95em; color: var(--muted); margin-bottom: 25px;">Математическая модель рассчитана на базе ${executedFlows.length} транзакций.</div>
 
           <div class="item" style="margin-bottom: 15px; cursor: default;">
-              <h4 style="margin: 0 0 8px 0; color: var(--accent, #4F8CFF);">1. Перенос убытков (Loss Carryforward)</h4>
-              <p style="margin: 0 0 10px 0; font-size: 0.9em; color: #555;">Доступный убыток: <b style="color:#e74c3c;">- ${formatMoney(totalLosses)} KZT</b></p>
+              <h4 style="margin: 0 0 8px 0; color: var(--accent);">1. Перенос убытков (Loss Carryforward)</h4>
+              <p style="margin: 0 0 10px 0; font-size: 0.9em; color: var(--text);">Доступный убыток: <b style="color:var(--danger);">- ${formatMoney(totalLosses)} KZT</b></p>
               <label style="font-size: 0.9em; display:flex; align-items:center; gap:10px; cursor: pointer; font-weight: 500;">
                   <input type="checkbox" checked id="wz_loss" style="width:16px; height:16px;"> Уменьшить НОД текущего года
               </label>
           </div>
 
           <div class="item" style="margin-bottom: 15px; cursor: default;">
-              <h4 style="margin: 0 0 8px 0; color: var(--accent, #4F8CFF);">2. Взаимозачет НДС (VAT Netting)</h4>
-              <p style="margin: 0 0 10px 0; font-size: 0.9em; color: #555;">Сальдо: ${netVatText}</p>
+              <h4 style="margin: 0 0 8px 0; color: var(--accent);">2. Взаимозачет НДС (VAT Netting)</h4>
+              <p style="margin: 0 0 10px 0; font-size: 0.9em; color: var(--text);">Сальдо: ${netVatText}</p>
               ${netVat > 0 ? `
               <label style="font-size: 0.9em; display:flex; align-items:center; gap:10px; cursor: pointer; font-weight: 500;">
                   <input type="checkbox" checked id="wz_vat" style="width:16px; height:16px;"> Сгенерировать единый налоговый платеж
-              </label>` : '<div style="font-size: 0.85em; color: #888;">Действия не требуются.</div>'}
+              </label>` : '<div style="font-size: 0.85em; color: var(--muted);">Действия не требуются.</div>'}
           </div>
 
           <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top:25px;">
               <button class="btn secondary" id="btnWzCancel">Отмена</button>
-              <button class="btn" id="btnWzApply" style="background: #a855f7; color: white;">Применить и Закрыть год</button>
+              <button class="btn" id="btnWzApply" style="background: var(--accent); color: white;">Применить и Закрыть год</button>
           </div>
       </div>
   `;
