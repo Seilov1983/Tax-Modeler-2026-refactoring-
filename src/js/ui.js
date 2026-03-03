@@ -10,8 +10,7 @@ import {
   makeNode, frozenThresholdFunctional, nodeDebtToTXA, yearOf, isYearClosed, 
   ensurePeriods, ensureAccounting, ensureAccountingYear, createSnapshot, 
   runPipeline, recomputeFrozen, recomputeRisks, applyTaxAdjustment, convert, 
-  bootstrapNormalizeZones, defaultCatalogs,
-  makeTXA, makeFlowDraft
+  bootstrapNormalizeZones, defaultCatalogs, makeTXA, makeFlowDraft
 } from './engine.js';
 import { renderCanvas, syncTXANodes, normalizeZoneCascade } from './canvas.js';
 
