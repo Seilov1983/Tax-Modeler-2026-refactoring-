@@ -3,6 +3,84 @@ import { state, uiState, save, auditAppend } from './state.js';
 import { getZone, getNode, isZoneEnabled, detectZoneId, clampToZoneExclusive, zoneArea, recomputeRisks } from './engine.js';
 import { render } from './ui.js';
 
+// Глобальное состояние виртуальной камеры
+export const boardState = {
+    x: -1500,
+    y: -1500,
+    scale: 1,
+    isPanning: false,
+    startX: 0,
+    startY: 0
+};
+
+// Применить текущий transform к доске
+export function updateBoardTransform() {
+    const board = document.getElementById('canvas-board');
+    if (board) {
+        board.style.transform = `translate(${boardState.x}px, ${boardState.y}px) scale(${boardState.scale})`;
+    }
+}
+
+// Инициализация движка навигации (pan & zoom)
+export function initBoardInteractions() {
+    const viewport = document.getElementById('viewport');
+    const board = document.getElementById('canvas-board');
+    if (!viewport || !board) return;
+
+    // Pan: хватаем полотно (клик по пустому месту)
+    viewport.addEventListener('mousedown', (e) => {
+        if (e.target.closest('.node') || e.target.closest('.zone')) return;
+        e.preventDefault();
+        boardState.isPanning = true;
+        boardState.startX = e.clientX - boardState.x;
+        boardState.startY = e.clientY - boardState.y;
+        viewport.style.cursor = 'grabbing';
+    });
+
+    // Pan: тащим полотно
+    window.addEventListener('mousemove', (e) => {
+        if (!boardState.isPanning) return;
+        boardState.x = e.clientX - boardState.startX;
+        boardState.y = e.clientY - boardState.startY;
+        updateBoardTransform();
+    });
+
+    // Pan: отпускаем полотно
+    window.addEventListener('mouseup', () => {
+        if (boardState.isPanning) {
+            boardState.isPanning = false;
+            viewport.style.cursor = 'grab';
+        }
+    });
+
+    // Zoom: Ctrl/Cmd + колесико (зум к курсору)
+    viewport.addEventListener('wheel', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            const rect = viewport.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            // Точка на доске под курсором ДО зума
+            const bx = (mx - boardState.x) / boardState.scale;
+            const by = (my - boardState.y) / boardState.scale;
+
+            const delta = e.deltaY > 0 ? -0.05 : 0.05;
+            const newScale = Math.max(0.2, Math.min(boardState.scale + delta, 3));
+
+            // Сдвигаем так, чтобы точка под курсором осталась на месте
+            boardState.x = mx - bx * newScale;
+            boardState.y = my - by * newScale;
+            boardState.scale = newScale;
+
+            updateBoardTransform();
+        }
+    }, { passive: false });
+
+    // Применяем стартовую позицию
+    updateBoardTransform();
+}
+
 export function calculateOrthogonalPath(a, b, totalFlows, flowIdx, allNodes) {
     const pad = 20; 
     const spread = (flowIdx - (totalFlows - 1) / 2) * 14; 
@@ -52,26 +130,23 @@ export function isNodeVisible(n){
 
 export function updateCanvasArrows() {
     const project = state.project;
-    const canvas = document.getElementById('canvas');
-    if (!canvas) return;
-    let svg = document.getElementById('flowSvg');
-    const W = canvas.dataset.w || 1400, H = canvas.dataset.h || 1000;
+    const svg = document.getElementById('arrows-layer');
+    if (!svg) return;
+    const board = document.getElementById('canvas-board');
+    const W = board?.dataset?.w || 5000, H = board?.dataset?.h || 5000;
     const svgNS = "http://www.w3.org/2000/svg";
 
-    if (!svg) {
-        svg = document.createElementNS(svgNS, "svg");
-        svg.id = "flowSvg";
-        svg.style.position = "absolute"; svg.style.left = "0"; svg.style.top = "0";
-        svg.style.pointerEvents = "none"; svg.style.zIndex = "0";
+    // Очищаем старые линии, но сохраняем defs
+    svg.querySelectorAll('.flowLine').forEach(p => p.remove());
+
+    // Создаем defs с маркером-стрелкой если ещё нет
+    if (!svg.querySelector('defs')) {
         const defs = document.createElementNS(svgNS, "defs");
         const marker = document.createElementNS(svgNS, "marker");
         marker.setAttribute("id", "arrow"); marker.setAttribute("markerWidth", "10"); marker.setAttribute("markerHeight", "10");
         marker.setAttribute("refX", "9"); marker.setAttribute("refY", "3"); marker.setAttribute("orient", "auto");
         const mpath = document.createElementNS(svgNS, "path"); mpath.setAttribute("d", "M0,0 L9,3 L0,6 Z");
         mpath.setAttribute("fill", "rgba(160,180,255,.9)"); marker.appendChild(mpath); defs.appendChild(marker); svg.appendChild(defs);
-        canvas.insertBefore(svg, canvas.firstChild);
-    } else {
-        svg.querySelectorAll('.flowLine').forEach(p => p.remove());
     }
     svg.setAttribute("width", String(W)); svg.setAttribute("height", String(H));
 
@@ -116,11 +191,14 @@ export function updateCanvasArrows() {
 }
 
 export function pointerToCanvas(ev){
-  const wrap = document.querySelector('.canvasWrap');
-  const rect = wrap.getBoundingClientRect();
-  return { x: ev.clientX - rect.left + wrap.scrollLeft, y: ev.clientY - rect.top + wrap.scrollTop };
+  const viewport = document.getElementById('viewport');
+  const rect = viewport.getBoundingClientRect();
+  return {
+    x: (ev.clientX - rect.left - boardState.x) / boardState.scale,
+    y: (ev.clientY - rect.top - boardState.y) / boardState.scale
+  };
 }
-export function getCanvasBounds(){ return { W: Number(document.getElementById("canvas")?.dataset?.w || 1400), H: Number(document.getElementById("canvas")?.dataset?.h || 1000) }; }
+export function getCanvasBounds(){ return { W: Number(document.getElementById("canvas-board")?.dataset?.w || 5000), H: Number(document.getElementById("canvas-board")?.dataset?.h || 5000) }; }
 export function findParentZoneId(p, z){
   if (!z) return null;
   let pid = (z.parentId || null);
@@ -180,7 +258,7 @@ export function onZonePointerDown(ev, zoneId, mode, handle){
   uiState.dragZone.active = true; uiState.dragZone.zoneId = zoneId; uiState.dragZone.mode = mode; uiState.dragZone.handle = handle || null;
   uiState.dragZone.orig = { x:z.x, y:z.y, w:z.w, h:z.h }; uiState.dragZone.parentId = findParentZoneId(project, z);
   const pt = pointerToCanvas(ev); uiState.dragZone.startX = pt.x; uiState.dragZone.startY = pt.y;
-  document.getElementById('canvas').setPointerCapture(ev.pointerId); ev.preventDefault(); ev.stopPropagation();
+  document.getElementById('canvas-board').setPointerCapture(ev.pointerId); ev.preventDefault(); ev.stopPropagation();
 }
 
 export function onPointerDown(ev, nodeId){
@@ -191,14 +269,14 @@ export function onPointerDown(ev, nodeId){
   uiState.drag.lockZoneId = uiState.drag.lockZone ? (n.zoneId || (String(n.id||"").startsWith("txa_") ? String(n.id).slice(4) : null) || null) : null;
   if (uiState.drag.lockZone){ uiState.drag.lastValidX = n.x; uiState.drag.lastValidY = n.y; }
   const pt = pointerToCanvas(ev); uiState.drag.offX = pt.x - n.x; uiState.drag.offY = pt.y - n.y;
-  document.getElementById('canvas').setPointerCapture(ev.pointerId); ev.preventDefault();
+  document.getElementById('canvas-board').setPointerCapture(ev.pointerId); ev.preventDefault();
 }
 
 export function onPointerMove(ev){
   const project = state.project;
-  const canvas = document.getElementById("canvas");
-  const W = Number(canvas?.dataset?.w || 1400);
-  const H = Number(canvas?.dataset?.h || 1000);
+  const board = document.getElementById("canvas-board");
+  const W = Number(board?.dataset?.w || 5000);
+  const H = Number(board?.dataset?.h || 5000);
   const pt = pointerToCanvas(ev);
   
   if (uiState.dragZone.active){
@@ -277,30 +355,36 @@ export function onPointerMove(ev){
 
 export async function onPointerUp(ev){
   const project = state.project;
-  const canvas = document.getElementById('canvas');
+  const board = document.getElementById('canvas-board');
   if (uiState.dragZone.active){
     const z = getZone(project, uiState.dragZone.zoneId); uiState.dragZone.active = false;
     if (z) { normalizeZoneCascade(project, z.id); syncTXANodes(project); save(); render(); }
-    try { canvas.releasePointerCapture(ev.pointerId); } catch(e){} return;
+    try { board.releasePointerCapture(ev.pointerId); } catch(e){} return;
   }
   if (!uiState.drag.active) return;
   const n = getNode(project, uiState.drag.nodeId); uiState.drag.active = false;
   if (n) { n.zoneId = detectZoneId(project, n); save(); render(); }
-  try { canvas.releasePointerCapture(ev.pointerId); } catch(e){}
+  try { board.releasePointerCapture(ev.pointerId); } catch(e){}
 }
 
 export function onPointerCancel(ev){
-  uiState.drag.active = false; uiState.dragZone.active = false; uiState.hoverZoneId = null; render();
+  uiState.drag.active = false; uiState.dragZone.active = false; uiState.hoverZoneId = null; boardState.isPanning = false; render();
 }
 
 export function renderCanvas(){
   const project = state.project;
-  const canvas = document.getElementById('canvas');
-  canvas.innerHTML = "";
-  const W = Math.max(1000, Math.min(4000, Number(project?.ui?.canvasW || 1400)));
-  const H = Math.max(700, Math.min(3000, Number(project?.ui?.canvasH || 1000)));
-  canvas.dataset.w = String(W); canvas.dataset.h = String(H);
-  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  const board = document.getElementById('canvas-board');
+  const zonesLayer = document.getElementById('zones-layer');
+  const nodesLayer = document.getElementById('nodes-layer');
+  if (!board || !zonesLayer || !nodesLayer) return;
+
+  zonesLayer.innerHTML = "";
+  nodesLayer.innerHTML = "";
+
+  const W = Math.max(1000, Math.min(5000, Number(project?.ui?.canvasW || 5000)));
+  const H = Math.max(700, Math.min(5000, Number(project?.ui?.canvasH || 5000)));
+  board.dataset.w = String(W); board.dataset.h = String(H);
+  board.style.width = W + "px"; board.style.height = H + "px";
   const editMode = (project.ui?.editMode || "nodes");
 
   project.zones.filter(z=>isZoneEnabled(project,z)).forEach(z=>{
@@ -321,7 +405,7 @@ export function renderCanvas(){
         hd.dataset.handle = h; hd.title = 'Resize'; hd.addEventListener('pointerdown', (ev)=>onZonePointerDown(ev, z.id, 'resize', h)); el.appendChild(hd);
       });
     }
-    canvas.appendChild(el);
+    zonesLayer.appendChild(el);
   });
 
   updateCanvasArrows();
@@ -470,13 +554,16 @@ project.nodes.forEach(n=>{
       icon.addEventListener('pointerdown', openSettingsModal);
       el.addEventListener('dblclick', openSettingsModal);
 
-      canvas.appendChild(el);
+      nodesLayer.appendChild(el);
     });
-  
-  canvas.onpointermove = (ev) => {
+
+  board.onpointermove = (ev) => {
       onPointerMove(ev);
       if (uiState.drag.active || uiState.dragZone.active) updateCanvasArrows();
   };
-  canvas.onpointerup = onPointerUp;
-  canvas.onpointercancel = onPointerCancel;
+  board.onpointerup = onPointerUp;
+  board.onpointercancel = onPointerCancel;
+
+  // Переприменяем transform доски после рендера
+  updateBoardTransform();
 }

@@ -12,7 +12,7 @@ import {
   runPipeline, recomputeFrozen, recomputeRisks, applyTaxAdjustment, convert, 
   bootstrapNormalizeZones, defaultCatalogs, makeTXA, makeFlowDraft
 } from './engine.js';
-import { renderCanvas, syncTXANodes, normalizeZoneCascade } from './canvas.js';
+import { renderCanvas, syncTXANodes, normalizeZoneCascade, boardState, updateBoardTransform } from './canvas.js';
 
 // Новая 3-звенная Enterprise архитектура навигации
 const tabs = [
@@ -1540,10 +1540,14 @@ function renderPipeline(panel){
 }
 
 export function scrollToZone(z){
-  const wrap = document.querySelector('.canvasWrap');
-  if (!wrap || !z) return;
-  wrap.scrollLeft = Math.max(0, z.x - 60);
-  wrap.scrollTop = Math.max(0, z.y - 60);
+  if (!z) return;
+  const viewport = document.getElementById('viewport');
+  if (!viewport) return;
+  // Центрируем зону в окне просмотра
+  const rect = viewport.getBoundingClientRect();
+  boardState.x = rect.width / 2 - (z.x + z.w / 2) * boardState.scale;
+  boardState.y = rect.height / 2 - (z.y + z.h / 2) * boardState.scale;
+  updateBoardTransform();
 }
 
 function renderCatalogs(panel){
