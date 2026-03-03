@@ -14,14 +14,11 @@ import {
 } from './engine.js';
 import { renderCanvas, syncTXANodes, normalizeZoneCascade } from './canvas.js';
 
+// Новая 3-звенная Enterprise архитектура навигации
 const tabs = [
-  { id:"flows", name:"Потоки и налоги" },
-  { id:"ownership", name:"Владение" },
-  { id:"risks", name:"Риски" },
-  { id:"pipeline", name:"Лог расчетов" },
-  { id:"catalogs", name:"Канвас и элементы" },
-  { id:"settings", name:"Настройки" },
-  { id:"audit", name:"Audit Log" },
+  { id:"master", name:"📚 Мастер-данные" },
+  { id:"modeling", name:"🛠 Моделирование" },
+  { id:"analytics", name:"📊 Аналитика и Отчеты" }
 ];
 
 export function render(){
@@ -31,10 +28,15 @@ export function render(){
   document.getElementById('projTitle').textContent = project.title || "Project";
   document.getElementById('metaLine').textContent =
     `schema ${SCHEMA_VERSION} · engine ${project.engineVersion} · ${project.readOnly ? 'read-only' : 'editable'} · audit ${project.audit.entries.length}`;
-  
+
   const roBadge = document.getElementById('roBadge');
   if (roBadge) roBadge.style.display = project.readOnly ? "block" : "none";
-  
+
+  // Если активная вкладка не задана или осталась старая, сбрасываем на Моделирование
+  if (!uiState.activeTab || !tabs.find(t=>t.id === uiState.activeTab)) {
+      uiState.activeTab = "modeling";
+  }
+
   const tabsEl = document.getElementById('tabs');
   tabsEl.innerHTML = "";
   tabs.forEach(t=>{
@@ -52,14 +54,74 @@ export function renderPanel(){
   const panel = document.getElementById('panel');
   if (!panel) return;
   panel.innerHTML = "";
-  
-  if (uiState.activeTab === "settings" || uiState.activeTab === "rates") renderSettings(panel);
-  else if (uiState.activeTab === "audit") renderAudit(panel);
-  else if (uiState.activeTab === "ownership") renderOwnership(panel);
-  else if (uiState.activeTab === "risks") renderRisks(panel);
-  else if (uiState.activeTab === "pipeline") renderPipeline(panel);
-  else if (uiState.activeTab === "catalogs") renderCatalogs(panel);
-  else renderFlows(panel);
+
+  if (uiState.activeTab === "master") {
+      // Раздел 1: Мастер-данные (переиспользуем старый компонент Настроек)
+      uiState.settingsSubTab = uiState.settingsSubTab || "jurisdictions";
+      renderSettings(panel);
+  }
+  else if (uiState.activeTab === "analytics") {
+      // Раздел 3: Аналитика и Отчеты (создаем под-навигацию)
+      uiState.analyticsTab = uiState.analyticsTab || "dashboard";
+
+      const c = document.createElement('div');
+      c.innerHTML = `
+        <div class="row" style="margin-bottom:16px; gap:8px; border-bottom:1px solid var(--stroke); padding-bottom:10px;">
+          <button class="tab ${uiState.analyticsTab==='dashboard'?'active':''}" id="tDash">Executive Dashboard</button>
+          <button class="tab ${uiState.analyticsTab==='risks'?'active':''}" id="tRisks">Риски (D-MACE)</button>
+          <button class="tab ${uiState.analyticsTab==='audit'?'active':''}" id="tAudit">Системные Журналы</button>
+        </div>
+        <div id="analyticsBody"></div>
+      `;
+      panel.appendChild(c);
+
+      c.querySelector('#tDash').onclick = () => { uiState.analyticsTab='dashboard'; renderPanel(); };
+      c.querySelector('#tRisks').onclick = () => { uiState.analyticsTab='risks'; renderPanel(); };
+      c.querySelector('#tAudit').onclick = () => { uiState.analyticsTab='audit'; renderPanel(); };
+
+      const body = c.querySelector('#analyticsBody');
+      if (uiState.analyticsTab === 'risks') renderRisks(body);
+      else if (uiState.analyticsTab === 'audit') {
+          renderPipeline(body);
+          const sep = document.createElement('div'); sep.className = 'sep'; body.appendChild(sep);
+          renderAudit(body);
+      }
+      else {
+          // Заглушка для будущего Дашборда (Шаг 3)
+          body.innerHTML = `
+            <div class="item" style="text-align:center; padding: 40px 20px;">
+                <h3 style="margin-top:0; color:var(--accent);">Здесь будет Executive Dashboard 📊</h3>
+                <p class="small" style="color:var(--muted); font-size:13px; max-width: 300px; margin: 0 auto;">
+                    Мы готовим виджеты для расчета Net Cash to UBO, Global ETR, Trapped Cash и оцифровки рисков.
+                </p>
+            </div>
+          `;
+      }
+  }
+  else {
+      // Раздел 2: Моделирование (создаем под-навигацию)
+      uiState.modelingTab = uiState.modelingTab || "flows";
+
+      const c = document.createElement('div');
+      c.innerHTML = `
+        <div class="row" style="margin-bottom:16px; gap:8px; border-bottom:1px solid var(--stroke); padding-bottom:10px;">
+          <button class="tab ${uiState.modelingTab==='flows'?'active':''}" id="tFlows">Потоки</button>
+          <button class="tab ${uiState.modelingTab==='ownership'?'active':''}" id="tOwn">Владение</button>
+          <button class="tab ${uiState.modelingTab==='canvas'?'active':''}" id="tCanv">Структура Холста</button>
+        </div>
+        <div id="modelingBody"></div>
+      `;
+      panel.appendChild(c);
+
+      c.querySelector('#tFlows').onclick = () => { uiState.modelingTab='flows'; renderPanel(); };
+      c.querySelector('#tOwn').onclick = () => { uiState.modelingTab='ownership'; renderPanel(); };
+      c.querySelector('#tCanv').onclick = () => { uiState.modelingTab='canvas'; renderPanel(); };
+
+      const body = c.querySelector('#modelingBody');
+      if (uiState.modelingTab === 'ownership') renderOwnership(body);
+      else if (uiState.modelingTab === 'canvas') renderCatalogs(body);
+      else renderFlows(body);
+  }
 }
 
 function renderSettings(panel){

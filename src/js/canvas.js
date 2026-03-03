@@ -360,12 +360,12 @@ project.nodes.forEach(n=>{
 
       el.addEventListener('pointerdown', (ev)=>onPointerDown(ev, n.id));
 
-      // КРАСИВОЕ ВСПЛЫВАЮЩЕЕ ОКНО (МОДАЛКА) ДЛЯ НАСТРОЕК И УДАЛЕНИЯ
+      // КРАСИВОЕ ВСПЛЫВАЮЩЕЕ ОКНО (МОДАЛКА) ДЛЯ НАСТРОЕК
       const openSettingsModal = (ev) => {
           if (project.readOnly) return toast("Read-only: изменения запрещены");
           ev.stopPropagation();
           if (n.type === "txa") return toast("TXA редактируется через настройки режима");
-          
+
           if (document.getElementById('nodeModal')) document.getElementById('nodeModal').remove();
 
           const overlay = document.createElement('div');
@@ -375,27 +375,46 @@ project.nodes.forEach(n=>{
           const zonesList = project.zones.filter(z=>isZoneEnabled(project, z)).map(z=>`<option value="${z.id}" ${z.id===n.zoneId?'selected':''}>${escapeHtml(z.name)} (${escapeHtml(z.code)})</option>`).join('');
 
           overlay.innerHTML = `
-              <div style="background: var(--panel); padding: 24px; border-radius: 16px; width: 420px; border: 1px solid var(--stroke); box-shadow: var(--shadow); color: var(--text);">
+              <div style="background: var(--panel); padding: 24px; border-radius: 16px; width: 440px; border: 1px solid var(--stroke); box-shadow: var(--shadow); color: var(--text);">
                   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                      <h3 style="margin:0; font-weight: 800; font-size: 16px;">Настройки узла</h3>
+                      <h3 style="margin:0; font-weight: 800; font-size: 16px;">Настройки: ${escapeHtml(n.name)}</h3>
                       <span class="badge ${n.type === 'company' ? 'ok' : ''}">${escapeHtml(n.type)}</span>
                   </div>
+
+                  <div class="sep" style="margin-bottom: 16px;"></div>
+
                   <div style="margin-bottom: 14px;">
-                      <label>Название</label>
-                      <input id="editNodeName" value="${escapeHtml(n.name)}" placeholder="HoldCo" />
+                      <label>Название элемента</label>
+                      <input id="editNodeName" value="${escapeHtml(n.name)}" placeholder="Например: HoldCo" />
                   </div>
+
                   <div style="margin-bottom: 14px;">
-                      <label>Годовой доход (KZT)</label>
-                      <input id="editNodeIncome" type="number" value="${Number(n.annualIncome||0)}" />
-                  </div>
-                  <div style="margin-bottom: 24px;">
-                      <label>Юрисдикция (Режим)</label>
+                      <label>Юрисдикция (Налоговый режим)</label>
                       <select id="editNodeZone">
                           <option value="">(Вне зоны / Независимый)</option>
                           ${zonesList}
                       </select>
                   </div>
+
+                  <div style="background: var(--bg-grid); padding: 12px; border-radius: 8px; border: 1px solid var(--stroke); margin-bottom: 24px;">
+                      <div style="font-weight: 700; font-size: 12px; margin-bottom: 10px; color: var(--accent);">ОПЕРАЦИОННАЯ ДЕЯТЕЛЬНОСТЬ</div>
+
+                      <div style="margin-bottom: 10px;">
+                          <label>Внешняя выручка (Gross Revenue, KZT)</label>
+                          <input id="editNodeGross" type="number" value="${Number(n.grossRevenue||0)}" placeholder="0" />
+                      </div>
+
+                      <div style="margin-bottom: 4px;">
+                          <label>Фикс. операционные расходы (Lump-sum OPEX, KZT)</label>
+                          <input id="editNodeOpex" type="number" value="${Number(n.lumpOpex||0)}" placeholder="0" />
+                      </div>
+                      <div class="small" style="color: var(--muted); line-height: 1.3;">
+                          * База для корпоративного налога (CIT) будет рассчитана как (Выручка - OPEX) + все входящие финансовые потоки.
+                      </div>
+                  </div>
+
                   <div class="sep" style="margin-bottom: 16px;"></div>
+
                   <div style="display: flex; justify-content: space-between; align-items: center;">
                       <button class="btn danger" id="btnDeleteNode">Удалить узел</button>
                       <div style="display: flex; gap: 8px;">
@@ -412,7 +431,14 @@ project.nodes.forEach(n=>{
 
           document.getElementById('btnSaveNode').onclick = () => {
               n.name = document.getElementById('editNodeName').value.trim() || n.name;
-              n.annualIncome = Number(document.getElementById('editNodeIncome').value) || 0;
+
+              // Сохраняем новые бизнес-метрики
+              n.grossRevenue = Number(document.getElementById('editNodeGross').value) || 0;
+              n.lumpOpex = Math.abs(Number(document.getElementById('editNodeOpex').value)) || 0;
+
+              // Для обратной совместимости с текущим ядром до обновления:
+              n.annualIncome = Math.max(0, n.grossRevenue - n.lumpOpex);
+
               const newZ = document.getElementById('editNodeZone').value;
               if (newZ !== n.zoneId) {
                   n.zoneId = newZ || null;
@@ -427,11 +453,7 @@ project.nodes.forEach(n=>{
           document.getElementById('btnDeleteNode').onclick = () => {
               if (!confirm(`Удалить узел "${n.name}"? Все связанные финансовые потоки и структуры владения будут безвозвратно удалены.`)) return;
               overlay.remove();
-              
-              // CSS-анимация растворения
               el.classList.add('dissolving');
-
-              // Удаление данных через 1.5 секунды
               setTimeout(async () => {
                   const before = JSON.parse(JSON.stringify({ nodes: project.nodes, flows: project.flows, ownership: project.ownership }));
                   project.nodes = project.nodes.filter(x => x.id !== n.id);
