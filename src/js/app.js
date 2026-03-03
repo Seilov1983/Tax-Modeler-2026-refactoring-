@@ -1,6 +1,6 @@
 import { load, save, state, STORAGE_KEY } from './state.js';
 import { defaultProject, emptyProject, ensureMasterData, ensureZoneTaxDefaults, updateFlowCompliance, recomputeFrozen, recomputeRisks, defaultCatalogs } from './engine.js';
-import { render, exportJson, importJson } from './ui.js';
+import { render, exportJson, importJson, initCreation } from './ui.js';
 import { toast } from './utils.js';
 import { onPointerCancel, initBoardInteractions } from './canvas.js';
 
@@ -58,6 +58,7 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
   document.addEventListener('visibilitychange', ()=>{ if (document.hidden) onPointerCancel(); });
 
   initBoardInteractions(); // Включаем камеру viewport
+  initCreation(); // Логика создания элементов (двойной клик + кнопка +)
 
   if (project.readOnly) toast("Audit log нарушен. Режим read-only.");
   // --- Переключение темной/светлой темы ---

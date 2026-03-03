@@ -12,7 +12,7 @@ import {
   runPipeline, recomputeFrozen, recomputeRisks, applyTaxAdjustment, convert, 
   bootstrapNormalizeZones, defaultCatalogs, makeTXA, makeFlowDraft
 } from './engine.js';
-import { renderCanvas, syncTXANodes, normalizeZoneCascade, boardState, updateBoardTransform } from './canvas.js';
+import { renderCanvas, syncTXANodes, normalizeZoneCascade, boardState, updateBoardTransform, pointerToCanvas } from './canvas.js';
 
 // Новая 3-звенная Enterprise архитектура навигации
 const tabs = [
@@ -2280,6 +2280,65 @@ export function showYearEndWizard() {
       await auditAppend(project, "YEAR_CLOSE", {entityType:"PROJECT", entityId:project.projectId}, null, null, {note: `Year ${year} closed`});
       overlay.remove(); save(); toast(`Год ${year} закрыт!`); render();
   };
+}
+
+// --- ЛОГИКА СОЗДАНИЯ (Двойной клик и кнопка +) ---
+export function initCreation() {
+  const project = state.project;
+
+  const showCreationModal = (x, y) => {
+      if (project.readOnly) return toast("Read-only: изменения запрещены");
+      if (document.getElementById('createModal')) document.getElementById('createModal').remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'createModal';
+      overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.4); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; z-index:9999;";
+
+      overlay.innerHTML = `
+          <div style="background: var(--panel); padding: 24px; border-radius: 16px; width: 340px; border: 1px solid var(--stroke); box-shadow: var(--shadow); color: var(--text);">
+              <h3 style="margin-top:0; color: var(--accent);">Добавить элемент</h3>
+              <div class="row" style="flex-direction: column; gap: 8px;">
+                  <button class="btn secondary" id="btnCrCo" style="width:100%; justify-content:flex-start;">🏢 Компания (Legal Entity)</button>
+                  <button class="btn secondary" id="btnCrPe" style="width:100%; justify-content:flex-start;">👤 Физлицо (Person)</button>
+              </div>
+              <div class="sep" style="margin: 16px 0;"></div>
+              <button class="btn" id="btnCrCancel" style="width:100%;">Отмена</button>
+          </div>
+      `;
+      document.body.appendChild(overlay);
+      document.getElementById('btnCrCancel').onclick = () => overlay.remove();
+
+      const makeAction = async (type) => {
+          const name = prompt("Название:", type === "company" ? "New Company" : "New Person");
+          if (!name) return;
+          const n = makeNode(name, type, x, y);
+          n.zoneId = detectZoneId(project, n); // Авто-привязка к зоне, если кликнули внутри неё
+          project.nodes.push(n);
+          await auditAppend(project, 'NODE_CREATE', {entityType:'NODE', entityId:n.id}, {nodes:[]}, {nodes:[n]});
+          save(); render(); overlay.remove();
+      };
+
+      document.getElementById('btnCrCo').onclick = () => makeAction('company');
+      document.getElementById('btnCrPe').onclick = () => makeAction('person');
+  };
+
+  // Слушаем двойной клик от Канваса
+  window.addEventListener('open-creation-menu', (e) => {
+      showCreationModal(e.detail.x, e.detail.y);
+  });
+
+  // Слушаем плавающую кнопку "+"
+  const fab = document.getElementById('fabCreate');
+  if (fab) {
+      fab.onclick = () => {
+          // Создаем элемент в центре текущего экрана
+          const viewport = document.getElementById('viewport');
+          const rect = viewport.getBoundingClientRect();
+          const pseudoEvent = { clientX: rect.left + rect.width/2, clientY: rect.top + rect.height/2 };
+          const pt = pointerToCanvas(pseudoEvent);
+          showCreationModal(pt.x, pt.y);
+      };
+  }
 }
 
 export function exportJson(){

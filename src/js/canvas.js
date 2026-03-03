@@ -5,8 +5,8 @@ import { render } from './ui.js';
 
 // Глобальное состояние виртуальной камеры
 export const boardState = {
-    x: -1500,
-    y: -1500,
+    x: -2000, // Смотрим в центр!
+    y: -2000,
     scale: 1,
     isPanning: false,
     startX: 0,
@@ -76,6 +76,17 @@ export function initBoardInteractions() {
             updateBoardTransform();
         }
     }, { passive: false });
+
+    // Двойной клик по пустому месту — создать элемент
+    viewport.addEventListener('dblclick', (e) => {
+        // Если кликнули по существующему узлу или зоне - игнорируем
+        if (e.target.closest('.node') || e.target.closest('.zone')) return;
+
+        // Вычисляем координаты клика на бесконечном холсте
+        const pt = pointerToCanvas(e);
+        // Отправляем сигнал в UI для открытия меню
+        window.dispatchEvent(new CustomEvent('open-creation-menu', { detail: { x: pt.x, y: pt.y } }));
+    });
 
     // Применяем стартовую позицию
     updateBoardTransform();
