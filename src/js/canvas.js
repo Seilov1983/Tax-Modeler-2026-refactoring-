@@ -1,5 +1,5 @@
 import { escapeHtml, fmtMoney, toast } from './utils.js';
-import { state, uiState, save } from './state.js';
+import { state, uiState, save, auditAppend } from './state.js';
 import { getZone, getNode, isZoneEnabled, detectZoneId, clampToZoneExclusive, zoneArea, recomputeRisks } from './engine.js';
 import { render } from './ui.js';
 
@@ -350,33 +350,57 @@ export function renderCanvas(){
     
     el.addEventListener('pointerdown', (ev)=>onPointerDown(ev, n.id));
 
-    el.addEventListener('dblclick', (ev)=>{
-        if (project.readOnly) return toast("Read-only: изменения запрещены");
-        ev.stopPropagation();
-        if (n.type === "txa") return toast("TXA редактируется через настройки режима");
-        
-        const action = prompt(`Редактирование: ${n.name}\n1 - Изменить название\n2 - Установить годовой доход (Annual Income)\n3 - Сменить юрисдикцию (режим)`, "1");
-        if (action === "1"){
-            const nn = prompt("Новое имя узла:", n.name);
-            if (nn && nn.trim()) { n.name = nn.trim(); save(); render(); }
-        } else if (action === "2"){
-            const inc = prompt("Годовой доход (указывать в KZT):", n.annualIncome);
-            if (inc != null && !isNaN(Number(inc))) { n.annualIncome = Number(inc); recomputeRisks(project); save(); render(); }
-        } else if (action === "3"){
-            const zonesList = project.zones.filter(z=>isZoneEnabled(project, z)).map(z=>z.id).join("\n");
-            const newZ = prompt("Введите ID режима из списка ниже:\n\n" + zonesList, n.zoneId);
-            if (newZ) {
-                const zTarget = getZone(project, newZ.trim());
-                if (zTarget) { 
-                    n.zoneId = zTarget.id; 
-                    n.x = Math.round(zTarget.x + zTarget.w/2 - n.w/2);
-                    n.y = Math.round(zTarget.y + zTarget.h/2 - n.h/2);
-                    recomputeRisks(project); save(); render(); 
-                } else { toast("Режим не найден"); }
-            }
-        }
-    });
+   el.addEventListener('dblclick', (ev)=>{
+          if (project.readOnly) return toast("Read-only: изменения запрещены");
+          ev.stopPropagation();
+          if (n.type === "txa") return toast("TXA редактируется через настройки режима");
+          
+          const action = prompt(`Редактирование: ${n.name}\n1 - Изменить название\n2 - Установить годовой доход (Annual Income)\n3 - Сменить юрисдикцию (режим)\n4 - Удалить элемент 💥`, "1");
+          
+          if (action === "1"){
+              const nn = prompt("Новое имя узла:", n.name);
+              if (nn && nn.trim()) { n.name = nn.trim(); save(); render(); }
+          } else if (action === "2"){
+              const inc = prompt("Годовой доход (указывать в KZT):", n.annualIncome);
+              if (inc != null && !isNaN(Number(inc))) { n.annualIncome = Number(inc); recomputeRisks(project); save(); render(); }
+          } else if (action === "3"){
+              const zonesList = project.zones.filter(z=>isZoneEnabled(project, z)).map(z=>z.id).join("\n");
+              const newZ = prompt("Введите ID режима из списка ниже:\n\n" + zonesList, n.zoneId);
+              if (newZ) {
+                  const zTarget = getZone(project, newZ.trim());
+                  if (zTarget) { 
+                      n.zoneId = zTarget.id; 
+                      n.x = Math.round(zTarget.x + zTarget.w/2 - n.w/2);
+                      n.y = Math.round(zTarget.y + zTarget.h/2 - n.h/2);
+                      recomputeRisks(project); save(); render(); 
+                  } else { toast("Режим не найден"); }
+              }
+          } else if (action === "4"){
+              if (!confirm(`Точно удалить "${n.name}"? Все транзакции и права владения, связанные с этим узлом, тоже исчезнут.`)) return;
 
+              // 1. Запускаем ту самую визуальную CSS-магию
+              el.classList.add('dissolving');
+
+              // 2. Ждем 1.5 секунды окончания анимации, затем удаляем данные "под капотом"
+              setTimeout(async () => {
+                  const before = JSON.parse(JSON.stringify({ nodes: project.nodes, flows: project.flows, ownership: project.ownership }));
+
+                  // Удаляем узел из базы
+                  project.nodes = project.nodes.filter(x => x.id !== n.id);
+                  // Очищаем все потоки (входящие и исходящие)
+                  project.flows = project.flows.filter(f => f.fromId !== n.id && f.toId !== n.id);
+                  // Очищаем доли владения
+                  project.ownership = project.ownership.filter(o => o.fromId !== n.id && o.toId !== n.id);
+
+                  await auditAppend(project, 'NODE_DELETE', { entityType:'NODE', entityId:n.id }, before, { nodes: project.nodes }, {note:'Deleted with dissolving animation'});
+                  recomputeRisks(project);
+                  save();
+                  render();
+                  toast("Узел стерт из системы");
+              }, 1500);
+          }
+      });
+      
     canvas.appendChild(el);
   });
   
