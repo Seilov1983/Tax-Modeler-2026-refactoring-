@@ -1,5 +1,5 @@
 import { 
-  escapeHtml, fmtMoney, toast, uid, isoDate, nowIso, bankersRound2, 
+  escapeHtml, fmtMoney, formatMoney, toast, uid, isoDate, nowIso, bankersRound2, 
   numOrNull, toLocalDateTimeInput, fromLocalDateTimeInput 
 } from './utils.js';
 import { state, uiState, save, auditAppend, verifyAudit, SCHEMA_VERSION } from './state.js';
