@@ -350,55 +350,114 @@ export function renderCanvas(){
     
     el.addEventListener('pointerdown', (ev)=>onPointerDown(ev, n.id));
 
-   el.addEventListener('dblclick', (ev)=>{
+el.addEventListener('dblclick', (ev) => {
           if (project.readOnly) return toast("Read-only: изменения запрещены");
           ev.stopPropagation();
           if (n.type === "txa") return toast("TXA редактируется через настройки режима");
           
-          const action = prompt(`Редактирование: ${n.name}\n1 - Изменить название\n2 - Установить годовой доход (Annual Income)\n3 - Сменить юрисдикцию (режим)\n4 - Удалить элемент 💥`, "1");
-          
-          if (action === "1"){
-              const nn = prompt("Новое имя узла:", n.name);
-              if (nn && nn.trim()) { n.name = nn.trim(); save(); render(); }
-          } else if (action === "2"){
-              const inc = prompt("Годовой доход (указывать в KZT):", n.annualIncome);
-              if (inc != null && !isNaN(Number(inc))) { n.annualIncome = Number(inc); recomputeRisks(project); save(); render(); }
-          } else if (action === "3"){
-              const zonesList = project.zones.filter(z=>isZoneEnabled(project, z)).map(z=>z.id).join("\n");
-              const newZ = prompt("Введите ID режима из списка ниже:\n\n" + zonesList, n.zoneId);
-              if (newZ) {
-                  const zTarget = getZone(project, newZ.trim());
-                  if (zTarget) { 
-                      n.zoneId = zTarget.id; 
-                      n.x = Math.round(zTarget.x + zTarget.w/2 - n.w/2);
-                      n.y = Math.round(zTarget.y + zTarget.h/2 - n.h/2);
-                      recomputeRisks(project); save(); render(); 
-                  } else { toast("Режим не найден"); }
-              }
-          } else if (action === "4"){
-              if (!confirm(`Точно удалить "${n.name}"? Все транзакции и права владения, связанные с этим узлом, тоже исчезнут.`)) return;
+          // Удаляем старое модальное окно, если оно зависло
+          if (document.getElementById('nodeModal')) document.getElementById('nodeModal').remove();
 
-              // 1. Запускаем ту самую визуальную CSS-магию
+          // Создаем красивую подложку с блюром (Glassmorphism)
+          const overlay = document.createElement('div');
+          overlay.id = 'nodeModal';
+          overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.4); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; z-index:9999;";
+
+          // Генерируем список доступных зон
+          const zonesList = project.zones.filter(z=>isZoneEnabled(project, z)).map(z=>`<option value="${z.id}" ${z.id===n.zoneId?'selected':''}>${escapeHtml(z.name)} (${escapeHtml(z.code)})</option>`).join('');
+
+          // Верстка самого окна
+          overlay.innerHTML = `
+              <div style="background: var(--panel); padding: 24px; border-radius: 16px; width: 420px; border: 1px solid var(--stroke); box-shadow: var(--shadow); color: var(--text);">
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                      <h3 style="margin:0; font-weight: 800; font-size: 16px;">Настройки узла</h3>
+                      <span class="badge ${n.type === 'company' ? 'ok' : ''}">${escapeHtml(n.type)}</span>
+                  </div>
+
+                  <div style="margin-bottom: 14px;">
+                      <label>Название</label>
+                      <input id="editNodeName" value="${escapeHtml(n.name)}" placeholder="Например: HoldCo" />
+                  </div>
+
+                  <div style="margin-bottom: 14px;">
+                      <label>Годовой доход (KZT)</label>
+                      <input id="editNodeIncome" type="number" value="${Number(n.annualIncome||0)}" />
+                  </div>
+
+                  <div style="margin-bottom: 24px;">
+                      <label>Юрисдикция (Режим)</label>
+                      <select id="editNodeZone">
+                          <option value="">(Вне зоны / Независимый)</option>
+                          ${zonesList}
+                      </select>
+                  </div>
+
+                  <div class="sep" style="margin-bottom: 16px;"></div>
+
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                      <button class="btn danger" id="btnDeleteNode">Удалить узел</button>
+                      <div style="display: flex; gap: 8px;">
+                          <button class="btn secondary" id="btnCancelNode">Отмена</button>
+                          <button class="btn" id="btnSaveNode">Сохранить</button>
+                      </div>
+                  </div>
+              </div>
+          `;
+
+          document.body.appendChild(overlay);
+
+          // Логика кнопок внутри модального окна
+          document.getElementById('btnCancelNode').onclick = () => overlay.remove();
+
+          document.getElementById('btnSaveNode').onclick = () => {
+              n.name = document.getElementById('editNodeName').value.trim() || n.name;
+              n.annualIncome = Number(document.getElementById('editNodeIncome').value) || 0;
+              const newZ = document.getElementById('editNodeZone').value;
+              
+              // Если сменили зону — переносим узел геометрически
+              if (newZ !== n.zoneId) {
+                  n.zoneId = newZ || null;
+                  if (newZ) {
+                      const zTarget = getZone(project, newZ);
+                      if (zTarget) {
+                          n.x = Math.round(zTarget.x + zTarget.w/2 - n.w/2);
+                          n.y = Math.round(zTarget.y + zTarget.h/2 - n.h/2);
+                      }
+                  }
+              }
+              recomputeRisks(project);
+              save(); 
+              render();
+              overlay.remove();
+          };
+
+          document.getElementById('btnDeleteNode').onclick = () => {
+              if (!confirm(`Вы уверены, что хотите удалить узел "${n.name}"? Все связанные финансовые потоки и структуры владения будут безвозвратно удалены.`)) return;
+              
+              overlay.remove(); // Закрываем окно
+
+              // 1. Применяем класс с анимацией растворения
               el.classList.add('dissolving');
 
-              // 2. Ждем 1.5 секунды окончания анимации, затем удаляем данные "под капотом"
+              // 2. Ждем 1.5 секунды (пока идет анимация), затем стираем данные "под капотом"
               setTimeout(async () => {
                   const before = JSON.parse(JSON.stringify({ nodes: project.nodes, flows: project.flows, ownership: project.ownership }));
 
-                  // Удаляем узел из базы
+                  // Стираем сам узел
                   project.nodes = project.nodes.filter(x => x.id !== n.id);
-                  // Очищаем все потоки (входящие и исходящие)
+                  // Каскадно стираем потоки
                   project.flows = project.flows.filter(f => f.fromId !== n.id && f.toId !== n.id);
-                  // Очищаем доли владения
+                  // Каскадно стираем владение
                   project.ownership = project.ownership.filter(o => o.fromId !== n.id && o.toId !== n.id);
 
-                  await auditAppend(project, 'NODE_DELETE', { entityType:'NODE', entityId:n.id }, before, { nodes: project.nodes }, {note:'Deleted with dissolving animation'});
+                  await auditAppend(project, 'NODE_DELETE', { entityType:'NODE', entityId:n.id }, before, { nodes: project.nodes }, {note:'Deleted via UI with cascade'});
+                  
                   recomputeRisks(project);
-                  save();
+                  save(); 
                   render();
-                  toast("Узел стерт из системы");
+                  toast("Узел и все связи удалены");
               }, 1500);
-          }
+          };
       });
       
     canvas.appendChild(el);
