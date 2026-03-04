@@ -424,9 +424,14 @@ export function render(){
   const project = state.project;
   if (!project) return;
 
-  document.getElementById('projTitle').textContent = project.title || "Project";
-  document.getElementById('metaLine').textContent =
-    `schema ${SCHEMA_VERSION} · engine ${project.engineVersion} · ${project.readOnly ? 'read-only' : 'editable'} · audit ${project.audit.entries.length}`;
+  // Безопасное обновление DOM (Guard-rails)
+  const titleEl = document.getElementById('projTitle');
+  if (titleEl) titleEl.textContent = project.title || "Project";
+
+  const metaEl = document.getElementById('metaLine');
+  if (metaEl) {
+      metaEl.textContent = `schema ${SCHEMA_VERSION} · engine ${project.engineVersion} · ${project.readOnly ? 'read-only' : 'editable'} · audit ${project.audit.entries.length}`;
+  }
 
   const roBadge = document.getElementById('roBadge');
   if (roBadge) roBadge.style.display = project.readOnly ? "block" : "none";
@@ -2586,137 +2591,82 @@ function renderFlows(panel){
 }
 
 // --- АНАЛИТИЧЕСКИЙ ДАШБОРД (Vanilla SVG) ---
-function renderDashboard(panel) {
+export function renderDashboard(panel) {
     const project = state.project;
     if (!project) return;
 
-    // 1. Агрегация данных
     let totalIncomeKZT = 0;
     const incomeByZone = {};
 
     listCompanies(project).forEach(co => {
         const incomeKZT = Number(co.annualIncome || 0);
         totalIncomeKZT += incomeKZT;
-
         const z = getZone(project, co.zoneId);
         const jur = z ? z.jurisdiction : 'Вне юрисдикции';
         incomeByZone[jur] = (incomeByZone[jur] || 0) + incomeKZT;
     });
 
     let totalTaxKZT = 0;
-    const taxesByType = { 'CIT': 0, 'WHT': 0, 'VAT': 0, 'PAYROLL': 0 };
+    const taxesByType = { 'CIT (Корпоративный)': 0, 'WHT (У источника)': 0, 'VAT (НДС)': 0, 'Payroll (Зарплатные)': 0 };
 
     (project.taxes || []).forEach(t => {
-        if (t.status === 'written_off' || t.status === 'exempted') return;
+        if (['written_off', 'exempted', 'offset_cleared'].includes(t.status)) return;
         const taxKZT = convert(project, t.amountFunctional, t.functionalCurrency, 'KZT') || 0;
         totalTaxKZT += taxKZT;
 
-        // Группировка
-        if (t.taxType.includes('CIT')) taxesByType['CIT'] += taxKZT;
-        else if (t.taxType.includes('WHT')) taxesByType['WHT'] += taxKZT;
-        else if (t.taxType.includes('VAT')) taxesByType['VAT'] += taxKZT;
-        else taxesByType['PAYROLL'] += taxKZT; // фоллбэк
+        if (t.taxType.includes('CIT')) taxesByType['CIT (Корпоративный)'] += taxKZT;
+        else if (t.taxType.includes('WHT')) taxesByType['WHT (У источника)'] += taxKZT;
+        else if (t.taxType.includes('VAT')) taxesByType['VAT (НДС)'] += taxKZT;
+        else taxesByType['Payroll (Зарплатные)'] += taxKZT;
     });
 
     const globalEtr = totalIncomeKZT > 0 ? (totalTaxKZT / totalIncomeKZT) * 100 : 0;
 
-    // 2. Вспомогательные функции для SVG
-    const createDonutChart = (data, size = 220) => {
-        const center = size / 2;
-        const strokeW = 30;
-        const radius = center - strokeW / 2;
-        const circ = 2 * Math.PI * radius;
+    const createDonutChart = (dataObj, size = 240) => {
+        const data = Object.entries(dataObj).filter(([_, val]) => val > 0).map(([label, value], i) => ({ label, value, color: ['accent', 'warn', 'ok', 'danger'][i % 4] }));
+        const center = size / 2, strokeW = 35, radius = center - strokeW / 2, circ = 2 * Math.PI * radius;
         const total = data.reduce((s, d) => s + d.value, 0);
 
-        if (total === 0) return `<svg width="${size}" height="${size}"><circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--stroke)" stroke-width="${strokeW}"/></svg>`;
+        if (total === 0) return `<svg width="${size}" height="${size}"><circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--stroke)" stroke-width="${strokeW}"/></svg><div class="small" style="text-align:center; margin-top:10px;">Нет налогов</div>`;
 
         let offset = 0;
         const circles = data.map(d => {
-            const fraction = d.value / total;
-            const dashArray = `${fraction * circ} ${circ}`;
-            const dashOffset = -offset;
+            const fraction = d.value / total, dashArray = `${fraction * circ} ${circ}`, dashOffset = -offset;
             offset += fraction * circ;
-            return `<circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--${d.color})" stroke-width="${strokeW}" stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" transform="rotate(-90 ${center} ${center})" style="transition: all 0.5s ease;"></circle>`;
+            return `<circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--${d.color})" stroke-width="${strokeW}" stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" transform="rotate(-90 ${center} ${center})" style="transition: all 0.5s ease;"><title>${d.label}: ${formatMoney(d.value)} KZT</title></circle>`;
         }).join('');
 
-        return `
-        <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-            ${circles}
-            <text x="${center}" y="${center - 5}" text-anchor="middle" dominant-baseline="middle" fill="var(--text)" font-size="18" font-weight="800">${formatMoney(total)}</text>
-            <text x="${center}" y="${center + 15}" text-anchor="middle" dominant-baseline="middle" fill="var(--muted)" font-size="11">Всего налогов (KZT)</text>
-        </svg>`;
+        const legend = data.map(d => `<div style="display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:600; margin-bottom:6px;"><div style="display:flex; align-items:center; gap:6px;"><div style="width:10px; height:10px; border-radius:50%; background:var(--${d.color})"></div>${d.label}</div><span>${formatMoney(d.value)}</span></div>`).join('');
+
+        return `<div style="display:flex; gap: 30px; align-items: center; justify-content: center; flex-wrap: wrap;"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${circles}<text x="${center}" y="${center - 5}" text-anchor="middle" dominant-baseline="middle" fill="var(--text)" font-size="16" font-weight="800">${formatMoney(total)}</text><text x="${center}" y="${center + 15}" text-anchor="middle" dominant-baseline="middle" fill="var(--muted)" font-size="10">Всего налогов (KZT)</text></svg><div style="min-width: 200px;">${legend}</div></div>`;
     };
 
-    const createBarChart = (dataObj, height = 220) => {
-        const entries = Object.entries(dataObj).sort((a, b) => b[1] - a[1]);
-        if (!entries.length || entries[0][1] === 0) return `<div class="small" style="text-align:center; padding: 40px;">Нет данных</div>`;
-
+    const createBarChart = (dataObj) => {
+        const entries = Object.entries(dataObj).filter(([_, val]) => val > 0).sort((a, b) => b[1] - a[1]);
+        if (!entries.length) return `<div class="small" style="text-align:center; padding: 20px;">Нет доходов</div>`;
         const maxVal = entries[0][1];
-        return `<div style="display:flex; flex-direction:column; gap:12px; height:${height}px; justify-content:center;">` +
-            entries.map(([label, val]) => {
-                const pct = (val / maxVal) * 100;
-                return `
-                <div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px; font-weight:600;">
-                        <span>${escapeHtml(label)}</span>
-                        <span>${formatMoney(val)}</span>
-                    </div>
-                    <div style="width:100%; height:8px; background:var(--stroke); border-radius:4px; overflow:hidden;">
-                        <div style="width:${pct}%; height:100%; background:var(--accent); border-radius:4px; transition: width 0.5s ease;"></div>
-                    </div>
-                </div>`;
-            }).join('') + `</div>`;
+        return `<div class="col" style="gap:12px; justify-content:center; margin-top: 10px;">` + entries.map(([label, val]) => `<div style="margin-bottom: 8px;"><div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px; font-weight:600;"><span>${escapeHtml(label)}</span><span>${formatMoney(val)} KZT</span></div><div style="width:100%; height:10px; background:var(--stroke); border-radius:5px; overflow:hidden;"><div style="width:${(val / maxVal) * 100}%; height:100%; background:var(--accent); border-radius:5px; transition: width 0.5s ease;"></div></div></div>`).join('') + `</div>`;
     };
 
-    // 3. Сборка UI Дашборда
     const c = document.createElement('div');
-    c.className = 'col';
-    c.style.gap = '20px';
-
-    const taxData = [
-        { label: 'CIT (Корп. налог)', value: taxesByType['CIT'], color: 'accent' },
-        { label: 'WHT (У источника)', value: taxesByType['WHT'], color: 'warn' },
-        { label: 'VAT (НДС)', value: taxesByType['VAT'], color: 'ok' },
-        { label: 'Payroll (Зарплатные)', value: taxesByType['PAYROLL'], color: 'danger' }
-    ].filter(d => d.value > 0);
-
+    c.className = 'col'; c.style.gap = '20px';
     c.innerHTML = `
-        <div class="row" style="gap: 16px; flex-wrap: nowrap;">
-            <div class="item" style="flex:1; background: var(--panel);">
-                <div class="small">Консолидированная выручка</div>
-                <div style="font-size: 24px; font-weight: 800; margin-top: 4px; color: var(--text);">${formatMoney(totalIncomeKZT)} <span style="font-size:14px; color:var(--muted)">KZT</span></div>
+        <div class="row" style="gap: 16px; flex-wrap: wrap;">
+            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid var(--ok);">
+                <div class="small">Выручка группы</div><div style="font-size: 22px; font-weight: 800; margin-top: 4px; color: var(--text);">${formatMoney(totalIncomeKZT)} <span style="font-size:12px; color:var(--muted)">KZT</span></div>
             </div>
-            <div class="item" style="flex:1; background: var(--panel);">
-                <div class="small">Общая налоговая нагрузка</div>
-                <div style="font-size: 24px; font-weight: 800; margin-top: 4px; color: var(--danger);">${formatMoney(totalTaxKZT)} <span style="font-size:14px; color:var(--muted)">KZT</span></div>
+            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid var(--danger);">
+                <div class="small">Налоговая нагрузка</div><div style="font-size: 22px; font-weight: 800; margin-top: 4px; color: var(--danger);">${formatMoney(totalTaxKZT)} <span style="font-size:12px; color:var(--muted)">KZT</span></div>
             </div>
-            <div class="item" style="flex:1; background: var(--panel);">
-                <div class="small">Global ETR (Эффективная ставка)</div>
-                <div style="font-size: 24px; font-weight: 800; margin-top: 4px; color: ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};">${bankersRound2(globalEtr)}%</div>
+            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};">
+                <div class="small">Global ETR</div><div style="display: flex; align-items: baseline; gap: 8px;"><div style="font-size: 22px; font-weight: 800; margin-top: 4px; color: ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};">${bankersRound2(globalEtr)}%</div>${globalEtr < 15 ? '<span class="badge danger" style="font-size:10px;">Pillar 2 Risk</span>' : '<span class="badge ok" style="font-size:10px;">Safe Harbor</span>'}</div>
             </div>
         </div>
-
-        <div class="row" style="gap: 16px; align-items: stretch;">
-            <div class="item" style="flex: 1; min-width: 300px; display:flex; flex-direction:column; align-items:center;">
-                <div class="title" style="align-self: flex-start;">Структура налогов</div>
-                <div style="margin-top: 10px;">${createDonutChart(taxData)}</div>
-                <div style="display:flex; flex-wrap:wrap; gap:12px; margin-top:20px; justify-content:center;">
-                    ${taxData.map(d => `
-                        <div style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600;">
-                            <div style="width:10px; height:10px; border-radius:50%; background:var(--${d.color})"></div>
-                            ${d.label}
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-
-            <div class="item" style="flex: 1; min-width: 300px;">
-                <div class="title">Выручка по юрисдикциям (KZT)</div>
-                <div style="margin-top: 16px;">${createBarChart(incomeByZone)}</div>
-            </div>
+        <div class="row" style="gap: 20px; align-items: stretch; flex-wrap: wrap;">
+            <div class="item" style="flex: 2; min-width: 350px;"><div class="title" style="margin-bottom: 20px;">Структура налогов (Consolidated)</div>${createDonutChart(taxesByType)}</div>
+            <div class="item" style="flex: 1; min-width: 300px;"><div class="title">Концентрация выручки</div>${createBarChart(incomeByZone)}</div>
         </div>
     `;
-
     panel.appendChild(c);
 }
 
