@@ -2805,3 +2805,229 @@ export async function importJson(){
   };
   input.click();
 }
+
+// ── SPA Router: переключение полноэкранных вкладок ──
+export function initRouter() {
+    const navButtons = document.querySelectorAll('.nav-btn');
+    const screens = document.querySelectorAll('.app-screen');
+    const sidebarPanelWrap = document.getElementById('sidebarPanelWrap');
+    const tabsEl = document.getElementById('tabs');
+
+    navButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const targetId = e.currentTarget.getAttribute('data-target');
+
+            // 1. Обновляем активную кнопку в меню
+            navButtons.forEach(b => {
+                b.classList.remove('primary');
+                b.classList.add('secondary');
+            });
+            e.currentTarget.classList.remove('secondary');
+            e.currentTarget.classList.add('primary');
+
+            // 2. Скрываем все экраны и показываем нужный
+            screens.forEach(screen => {
+                screen.style.display = 'none';
+            });
+            const activeScreen = document.getElementById(targetId);
+            if (activeScreen) activeScreen.style.display = 'block';
+
+            // 3. Показываем/скрываем боковую панель с табами для моделирования
+            if (targetId === 'screen-modeling') {
+                if (sidebarPanelWrap) sidebarPanelWrap.style.display = 'block';
+                if (tabsEl) tabsEl.style.display = 'flex';
+            } else {
+                if (sidebarPanelWrap) sidebarPanelWrap.style.display = 'none';
+                if (tabsEl) tabsEl.style.display = 'none';
+            }
+
+            // 4. Guard-rails
+            if (targetId === 'screen-analytics') {
+                window.dispatchEvent(new Event('resize'));
+            }
+            if (targetId === 'screen-master') {
+                renderMasterDataTables();
+            }
+            if (targetId === 'screen-modeling') {
+                renderCanvas();
+            }
+        });
+    });
+
+    // По умолчанию: моделирование активно
+    if (sidebarPanelWrap) sidebarPanelWrap.style.display = 'block';
+    if (tabsEl) tabsEl.style.display = 'flex';
+}
+
+// ── Рендер таблиц Master Data (экран Мастер-данные) ──
+export function renderMasterDataTables() {
+    const project = state.project;
+    if (!project) return;
+    const container = document.getElementById('masterDataContainer');
+    if (!container) return;
+
+    const jurisdictions = project.catalogs?.jurisdictions || [];
+    const masterData = project.masterData || {};
+
+    if (jurisdictions.length === 0) {
+        container.innerHTML = '<p style="color: var(--muted);">Нет загруженных данных. Используйте кнопку «Загрузить Страны (CSV)» для импорта.</p>';
+        return;
+    }
+
+    let html = '<h3 style="margin-top: 0;">Юрисдикции (' + jurisdictions.length + ')</h3>';
+    html += '<table class="master-table"><thead><tr>';
+    html += '<th>Код</th><th>Название</th><th>Флаг</th><th>Валюта</th><th>Срок давности</th><th>CFC</th><th>Pillar Two</th><th>MCI</th><th>Мин. зарплата</th><th>Порог НДС</th>';
+    html += '</tr></thead><tbody>';
+
+    jurisdictions.forEach(j => {
+        const md = masterData[j.id] || {};
+        const mc = md.macroConstants || {};
+        const th = md.thresholds || {};
+        html += '<tr>';
+        html += '<td><strong>' + escapeHtml(j.id) + '</strong></td>';
+        html += '<td>' + escapeHtml(j.name || '') + '</td>';
+        html += '<td>' + escapeHtml(j.flag || '') + '</td>';
+        html += '<td>' + escapeHtml(md.baseCurrency || '—') + '</td>';
+        html += '<td>' + (md.statuteOfLimitationsYears || '—') + '</td>';
+        html += '<td>' + (md.cfcRulesActive ? '✅' : '—') + '</td>';
+        html += '<td>' + (md.pillarTwoActive ? '✅' : '—') + '</td>';
+        html += '<td>' + (mc.mciValue != null ? mc.mciValue.toLocaleString() : '—') + '</td>';
+        html += '<td>' + (mc.minWage != null ? mc.minWage.toLocaleString() : '—') + '</td>';
+        html += '<td>' + (th.vatRegistrationBaseCurrency != null ? th.vatRegistrationBaseCurrency.toLocaleString() : '—') + '</td>';
+        html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+// ── CSV Импортеры для Master Data ──
+export function initCsvImporters() {
+    const project = state.project;
+    const btnImportCountries = document.getElementById('btnImportCountries');
+    if (btnImportCountries) {
+        btnImportCountries.onclick = () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const project = state.project;
+                    const lines = event.target.result.split('\n').map(l => l.trim()).filter(l => l);
+                    const dataLines = lines.slice(1); // Пропускаем шапку
+                    let added = 0;
+
+                    if (!project.catalogs) project.catalogs = {};
+                    if (!project.catalogs.jurisdictions) project.catalogs.jurisdictions = [];
+                    if (!project.activeJurisdictions) project.activeJurisdictions = [];
+                    if (!project.masterData) project.masterData = {};
+
+                    dataLines.forEach(line => {
+                        // Country Code;Name;Flag;Base Currency;Statute;CFC;PillarTwo;MCI;MinWage;VatThreshold
+                        const parts = line.split(';');
+                        if (parts.length < 4) return;
+
+                        const code = parts[0].trim().toUpperCase();
+                        if (!code) return;
+
+                        // 1. Добавляем в справочник юрисдикций
+                        if (!project.catalogs.jurisdictions.find(j => j.id === code)) {
+                            project.catalogs.jurisdictions.push({
+                                id: code,
+                                name: parts[1].trim(),
+                                flag: parts[2] ? parts[2].trim() : '',
+                                enabled: true
+                            });
+                            if (!project.activeJurisdictions.includes(code)) {
+                                project.activeJurisdictions.push(code);
+                            }
+                        }
+
+                        // 2. Заполняем Master Data (налоговые макро-параметры)
+                        project.masterData[code] = project.masterData[code] || {};
+                        const md = project.masterData[code];
+
+                        md.countryCode = code;
+                        md.baseCurrency = parts[3].trim();
+                        md.statuteOfLimitationsYears = Number(parts[4]) || 5;
+                        md.cfcRulesActive = parts[5]?.trim().toLowerCase() === 'true';
+                        md.pillarTwoActive = parts[6]?.trim().toLowerCase() === 'true';
+
+                        // Парсим макро-константы с учетом null
+                        md.macroConstants = md.macroConstants || {};
+                        if (parts[7] && parts[7].trim().toLowerCase() !== 'null') md.macroConstants.mciValue = Number(parts[7]);
+                        if (parts[8] && parts[8].trim().toLowerCase() !== 'null') md.macroConstants.minWage = Number(parts[8]);
+
+                        md.thresholds = md.thresholds || {};
+                        if (parts[9] && parts[9].trim().toLowerCase() !== 'null') {
+                            const vatThresh = parts[9].replace(/[^0-9]/g, '');
+                            md.thresholds.vatRegistrationBaseCurrency = Number(vatThresh);
+                        }
+                        added++;
+                    });
+
+                    toast(`Загружено стран: ${added}`);
+                    save();
+                    renderMasterDataTables();
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        };
+    }
+
+    // Кнопка загрузки режимов (CSV)
+    const btnImportRegimes = document.getElementById('btnImportRegimes');
+    if (btnImportRegimes) {
+        btnImportRegimes.onclick = () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.csv';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const project = state.project;
+                    const lines = event.target.result.split('\n').map(l => l.trim()).filter(l => l);
+                    const dataLines = lines.slice(1);
+                    let added = 0;
+
+                    if (!project.catalogs) project.catalogs = {};
+                    if (!project.catalogs.regimes) project.catalogs.regimes = [];
+
+                    dataLines.forEach(line => {
+                        // RegimeCode;Name;JurisdictionCode;CIT%;Description
+                        const parts = line.split(';');
+                        if (parts.length < 3) return;
+
+                        const code = parts[0].trim();
+                        if (!code) return;
+
+                        if (!project.catalogs.regimes.find(r => r.code === code)) {
+                            project.catalogs.regimes.push({
+                                code: code,
+                                name: parts[1]?.trim() || code,
+                                jurisdiction: parts[2]?.trim().toUpperCase() || '',
+                                citRate: parts[3] ? Number(parts[3]) : null,
+                                description: parts[4]?.trim() || ''
+                            });
+                            added++;
+                        }
+                    });
+
+                    toast(`Загружено режимов: ${added}`);
+                    save();
+                    renderMasterDataTables();
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        };
+    }
+}

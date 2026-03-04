@@ -1,6 +1,6 @@
 import { load, save, state, STORAGE_KEY } from './state.js';
 import { defaultProject, emptyProject, ensureMasterData, ensureZoneTaxDefaults, updateFlowCompliance, recomputeFrozen, recomputeRisks, defaultCatalogs } from './engine.js';
-import { render, exportJson, importJson, initCreation } from './ui.js';
+import { render, exportJson, importJson, initCreation, initRouter, initCsvImporters } from './ui.js';
 import { toast } from './utils.js';
 import { onPointerCancel, initBoardInteractions } from './canvas.js';
 
@@ -47,7 +47,8 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
       };
   }
   
-  document.getElementById('btnClear').onclick = ()=>{
+  const btnClear = document.getElementById('btnClear');
+  if (btnClear) btnClear.onclick = ()=>{
       if(confirm("Полностью очистить кэш и создать пустой холст?")) { localStorage.removeItem(STORAGE_KEY); state.project = emptyProject(); save(); toast("Очищено"); render(); }
   };
   
@@ -59,6 +60,9 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
 
   initBoardInteractions(); // Включаем камеру viewport
   initCreation(); // Логика создания элементов (двойной клик + кнопка +)
+
+  initRouter();        // SPA-роутинг: переключение экранов
+  initCsvImporters();  // CSV-импорт стран и режимов
 
   if (project.readOnly) toast("Audit log нарушен. Режим read-only.");
   // --- Переключение темной/светлой темы ---
