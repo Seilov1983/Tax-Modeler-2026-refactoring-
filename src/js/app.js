@@ -42,8 +42,26 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
       btnNew.onclick = ()=>{ 
           if(confirm("Сбросить текущий холст и создать Демо-проект?")) { localStorage.removeItem(STORAGE_KEY); state.project = defaultProject(); save(); toast("Создан демо-проект"); render(); }
       };
-      document.getElementById('btnNewEmpty').onclick = ()=>{ 
-          if(confirm("Сбросить текущий холст и создать Пустой проект?")) { localStorage.removeItem(STORAGE_KEY); state.project = emptyProject(); save(); toast("Создан пустой проект"); render(); }
+      document.getElementById('btnNewEmpty').onclick = () => {
+          if(confirm("Очистить холст и потоки? (База стран и налоговых режимов останется нетронутой)")) {
+              // 1. Сохраняем "золотые" Мастер-данные перед очисткой
+              const savedCatalogs = state.project.catalogs;
+              const savedMD = state.project.masterData;
+              const savedActiveJurs = state.project.activeJurisdictions;
+
+              // 2. Сбрасываем проект
+              localStorage.removeItem(STORAGE_KEY);
+              state.project = emptyProject();
+
+              // 3. Возвращаем Мастер-данные обратно в пустой проект
+              state.project.catalogs = savedCatalogs;
+              state.project.masterData = savedMD;
+              state.project.activeJurisdictions = savedActiveJurs;
+
+              save();
+              toast("Проект очищен. Справочники сохранены.");
+              render();
+          }
       };
   }
   

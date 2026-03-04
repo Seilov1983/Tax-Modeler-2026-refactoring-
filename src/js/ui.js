@@ -17,13 +17,6 @@ import {
   pointerToCanvas, saveCameraState, animateCameraToZone, animateCameraRestore, findZoneAtPoint
 } from './canvas.js';
 
-// Новая 3-звенная Enterprise архитектура навигации
-const tabs = [
-  { id:"master", name:"📚 Мастер-данные" },
-  { id:"modeling", name:"🛠 Моделирование" },
-  { id:"analytics", name:"📊 Аналитика и Отчеты" }
-];
-
 // ── Smart Focus DnD: Предустановленные шаблоны режимов по юрисдикциям ──
 const REGIME_TEMPLATES = {
   KZ: [
@@ -438,74 +431,77 @@ export function render(){
   const roBadge = document.getElementById('roBadge');
   if (roBadge) roBadge.style.display = project.readOnly ? "block" : "none";
 
-  // Если активная вкладка не задана или осталась старая, сбрасываем на Моделирование
-  if (!uiState.activeTab || !tabs.find(t=>t.id === uiState.activeTab)) {
-      uiState.activeTab = "modeling";
-  }
-
+  // Скрываем старый контейнер дублирующихся табов (если он остался в HTML)
   const tabsEl = document.getElementById('tabs');
-  tabsEl.innerHTML = "";
-  tabs.forEach(t=>{
-    const b = document.createElement('button');
-    b.className = 'tab' + (uiState.activeTab===t.id ? ' active' : '');
-    b.textContent = t.name;
-    b.onclick = ()=>{ uiState.activeTab=t.id; renderPanel(); };
-    tabsEl.appendChild(b);
-  });
+  if (tabsEl) tabsEl.style.display = 'none';
+
   renderPanel();
   renderCanvas();
 }
 
 export function renderPanel(){
-  const panel = document.getElementById('panel');
-  if (!panel) return;
-  panel.innerHTML = "";
+  // Находим контейнеры нового SPA интерфейса
+  const panelModeling = document.getElementById('panel'); // Плавающая панель на канвасе
+  const containerMaster = document.getElementById('masterDataContainer'); // Экран справочников
+  const containerAnalytics = document.getElementById('dashboardContainer'); // Экран аналитики
+
+  if (panelModeling) panelModeling.innerHTML = "";
 
   if (uiState.activeTab === "master") {
-      // Раздел 1: Мастер-данные (переиспользуем старый компонент Настроек)
-      uiState.settingsSubTab = uiState.settingsSubTab || "jurisdictions";
-      renderSettings(panel);
+      // Рендерим настройки в полноэкранный контейнер
+      if (containerMaster) {
+          containerMaster.innerHTML = "";
+          uiState.settingsSubTab = uiState.settingsSubTab || "jurisdictions";
+          renderSettings(containerMaster); // Отправляем старые настройки сюда!
+
+          // Рендерим наши новые загруженные CSV таблицы ниже
+          const div = document.createElement('div');
+          div.style.marginTop = "30px";
+          containerMaster.appendChild(div);
+          // Вызов функции отрисовки CSV таблиц (напишем/вызовем её, если она есть)
+          if (typeof renderMasterDataTables === 'function') {
+               const wrap = document.createElement('div');
+               wrap.id = "csvTableWrap";
+               containerMaster.appendChild(wrap);
+               renderMasterDataTables();
+          }
+      }
   }
   else if (uiState.activeTab === "analytics") {
-      // Раздел 3: Аналитика и Отчеты (создаем под-навигацию)
-      uiState.analyticsTab = uiState.analyticsTab || "dashboard";
+      // Рендерим аналитику и D-MACE в полноэкранный контейнер
+      if (containerAnalytics) {
+          containerAnalytics.innerHTML = "";
+          uiState.analyticsTab = uiState.analyticsTab || "dashboard";
 
-      const c = document.createElement('div');
-      c.innerHTML = `
-        <div class="row" style="margin-bottom:16px; gap:8px; border-bottom:1px solid var(--stroke); padding-bottom:10px;">
-          <button class="tab ${uiState.analyticsTab==='dashboard'?'active':''}" id="tDash">Executive Dashboard</button>
-          <button class="tab ${uiState.analyticsTab==='risks'?'active':''}" id="tRisks">Риски (D-MACE)</button>
-          <button class="tab ${uiState.analyticsTab==='audit'?'active':''}" id="tAudit">Системные Журналы</button>
-        </div>
-        <div id="analyticsBody"></div>
-      `;
-      panel.appendChild(c);
-
-      c.querySelector('#tDash').onclick = () => { uiState.analyticsTab='dashboard'; renderPanel(); };
-      c.querySelector('#tRisks').onclick = () => { uiState.analyticsTab='risks'; renderPanel(); };
-      c.querySelector('#tAudit').onclick = () => { uiState.analyticsTab='audit'; renderPanel(); };
-
-      const body = c.querySelector('#analyticsBody');
-      if (uiState.analyticsTab === 'risks') renderRisks(body);
-      else if (uiState.analyticsTab === 'audit') {
-          renderPipeline(body);
-          const sep = document.createElement('div'); sep.className = 'sep'; body.appendChild(sep);
-          renderAudit(body);
-      }
-      else {
-          // Заглушка для будущего Дашборда (Шаг 3)
-          body.innerHTML = `
-            <div class="item" style="text-align:center; padding: 40px 20px;">
-                <h3 style="margin-top:0; color:var(--accent);">Здесь будет Executive Dashboard 📊</h3>
-                <p class="small" style="color:var(--muted); font-size:13px; max-width: 300px; margin: 0 auto;">
-                    Мы готовим виджеты для расчета Net Cash to UBO, Global ETR, Trapped Cash и оцифровки рисков.
-                </p>
+          const c = document.createElement('div');
+          c.innerHTML = `
+            <div class="row" style="margin-bottom:16px; gap:8px; border-bottom:1px solid var(--stroke); padding-bottom:10px;">
+              <button class="tab ${uiState.analyticsTab==='dashboard'?'active':''}" id="tDash">Executive Dashboard</button>
+              <button class="tab ${uiState.analyticsTab==='risks'?'active':''}" id="tRisks">Риски (D-MACE)</button>
+              <button class="tab ${uiState.analyticsTab==='audit'?'active':''}" id="tAudit">Системные Журналы</button>
             </div>
+            <div id="analyticsBody"></div>
           `;
+          containerAnalytics.appendChild(c);
+
+          c.querySelector('#tDash').onclick = () => { uiState.analyticsTab='dashboard'; renderPanel(); };
+          c.querySelector('#tRisks').onclick = () => { uiState.analyticsTab='risks'; renderPanel(); };
+          c.querySelector('#tAudit').onclick = () => { uiState.analyticsTab='audit'; renderPanel(); };
+
+          const body = c.querySelector('#analyticsBody');
+          if (uiState.analyticsTab === 'risks') renderRisks(body);
+          else if (uiState.analyticsTab === 'audit') {
+              renderPipeline(body);
+              const sep = document.createElement('div'); sep.className = 'sep'; body.appendChild(sep);
+              renderAudit(body);
+          } else {
+              body.innerHTML = `<div class="item" style="text-align:center; padding: 40px;"><h3 style="color:var(--accent);">Здесь будет Executive Dashboard 📊</h3></div>`;
+          }
       }
   }
   else {
-      // Раздел 2: Моделирование (создаем под-навигацию)
+      // Активна вкладка "Моделирование" - оставляем Потоки и Владение в плавающей панели
+      if (!panelModeling) return;
       uiState.modelingTab = uiState.modelingTab || "flows";
 
       const c = document.createElement('div');
@@ -513,11 +509,11 @@ export function renderPanel(){
         <div class="row" style="margin-bottom:16px; gap:8px; border-bottom:1px solid var(--stroke); padding-bottom:10px;">
           <button class="tab ${uiState.modelingTab==='flows'?'active':''}" id="tFlows">Потоки</button>
           <button class="tab ${uiState.modelingTab==='ownership'?'active':''}" id="tOwn">Владение</button>
-          <button class="tab ${uiState.modelingTab==='canvas'?'active':''}" id="tCanv">Структура Холста</button>
+          <button class="tab ${uiState.modelingTab==='canvas'?'active':''}" id="tCanv">Канвас</button>
         </div>
         <div id="modelingBody"></div>
       `;
-      panel.appendChild(c);
+      panelModeling.appendChild(c);
 
       c.querySelector('#tFlows').onclick = () => { uiState.modelingTab='flows'; renderPanel(); };
       c.querySelector('#tOwn').onclick = () => { uiState.modelingTab='ownership'; renderPanel(); };
@@ -2817,6 +2813,11 @@ export function initRouter() {
         btn.addEventListener('click', (e) => {
             const targetId = e.currentTarget.getAttribute('data-target');
 
+            // Синхронизируем старый стейт с новым левым меню
+            if (targetId === 'screen-master') uiState.activeTab = "master";
+            else if (targetId === 'screen-analytics') uiState.activeTab = "analytics";
+            else uiState.activeTab = "modeling";
+
             // 1. Обновляем активную кнопку в меню
             navButtons.forEach(b => {
                 b.classList.remove('primary');
@@ -2851,6 +2852,8 @@ export function initRouter() {
             if (targetId === 'screen-modeling') {
                 renderCanvas();
             }
+
+            renderPanel();
         });
     });
 
