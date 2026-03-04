@@ -3,16 +3,19 @@ import {
   numOrNull, toLocalDateTimeInput, fromLocalDateTimeInput 
 } from './utils.js';
 import { state, uiState, save, auditAppend, verifyAudit, SCHEMA_VERSION } from './state.js';
-import { 
-  ensureMasterData, ensureZoneTaxDefaults, effectiveZoneTax, computeWht, 
-  whtDefaultPercentForFlow, updateFlowCompliance, canCreateOutgoing, 
-  getZone, getNode, listCompanies, listPersons, isZoneEnabled, detectZoneId, 
-  makeNode, frozenThresholdFunctional, nodeDebtToTXA, yearOf, isYearClosed, 
-  ensurePeriods, ensureAccounting, ensureAccountingYear, createSnapshot, 
-  runPipeline, recomputeFrozen, recomputeRisks, applyTaxAdjustment, convert, 
-  bootstrapNormalizeZones, defaultCatalogs, makeTXA, makeFlowDraft
+import {
+  ensureMasterData, ensureZoneTaxDefaults, effectiveZoneTax, computeWht,
+  whtDefaultPercentForFlow, updateFlowCompliance, canCreateOutgoing,
+  getZone, getNode, listCompanies, listPersons, isZoneEnabled, detectZoneId,
+  makeNode, frozenThresholdFunctional, nodeDebtToTXA, yearOf, isYearClosed,
+  ensurePeriods, ensureAccounting, ensureAccountingYear, createSnapshot,
+  runPipeline, recomputeFrozen, recomputeRisks, applyTaxAdjustment, convert,
+  bootstrapNormalizeZones, defaultCatalogs, makeTXA, makeFlowDraft, pointInZone
 } from './engine.js';
-import { renderCanvas, syncTXANodes, normalizeZoneCascade, boardState, updateBoardTransform, pointerToCanvas } from './canvas.js';
+import {
+  renderCanvas, syncTXANodes, normalizeZoneCascade, boardState, updateBoardTransform,
+  pointerToCanvas, saveCameraState, animateCameraToZone, animateCameraRestore, findZoneAtPoint
+} from './canvas.js';
 
 // Новая 3-звенная Enterprise архитектура навигации
 const tabs = [
@@ -20,6 +23,409 @@ const tabs = [
   { id:"modeling", name:"🛠 Моделирование" },
   { id:"analytics", name:"📊 Аналитика и Отчеты" }
 ];
+
+// ── Smart Focus DnD: Предустановленные шаблоны режимов по юрисдикциям ──
+const REGIME_TEMPLATES = {
+  KZ: [
+    { code: 'KZ_STANDARD', name: 'Kazakhstan — Standard (KZT)', currency: 'KZT', w: 520, h: 380 },
+    { code: 'KZ_AIFC', name: 'KZ — AIFC (qualifying services) (KZT)', currency: 'KZT', w: 260, h: 190 },
+    { code: 'KZ_HUB', name: 'KZ — Astana Hub (ICT priority) (KZT)', currency: 'KZT', w: 230, h: 170 }
+  ],
+  UAE: [
+    { code: 'UAE_MAINLAND', name: 'UAE — Mainland (AED)', currency: 'AED', w: 220, h: 220 },
+    { code: 'UAE_FREEZONE_QFZP', name: 'UAE — Free Zone QFZP (AED)', currency: 'AED', w: 210, h: 105 },
+    { code: 'UAE_FREEZONE_NONQFZP', name: 'UAE — Free Zone non-QFZP (AED)', currency: 'AED', w: 210, h: 105 }
+  ],
+  HK: [
+    { code: 'HK_ONSHORE', name: 'Hong Kong — Onshore (HKD)', currency: 'HKD', w: 220, h: 210 },
+    { code: 'HK_OFFSHORE', name: 'Hong Kong — Offshore (HKD)', currency: 'HKD', w: 210, h: 210 }
+  ],
+  CY: [{ code: 'CY_STANDARD', name: 'Cyprus (EUR)', currency: 'EUR', w: 260, h: 200 }],
+  SG: [{ code: 'SG_STANDARD', name: 'Singapore (SGD)', currency: 'SGD', w: 260, h: 200 }],
+  UK: [{ code: 'UK_STANDARD', name: 'United Kingdom (GBP)', currency: 'GBP', w: 220, h: 130 }],
+  US: [{ code: 'US_DE', name: 'US — Delaware (USD)', currency: 'USD', w: 200, h: 130 }],
+  BVI: [{ code: 'BVI_STANDARD', name: 'BVI (USD)', currency: 'USD', w: 260, h: 170 }],
+  CAY: [{ code: 'CAY_STANDARD', name: 'Cayman (USD)', currency: 'USD', w: 260, h: 170 }],
+  SEY: [{ code: 'SEY_STANDARD', name: 'Seychelles (SCR)', currency: 'SCR', w: 260, h: 170 }]
+};
+
+const JURISDICTION_CURRENCIES = {
+  KZ: 'KZT', UAE: 'AED', HK: 'HKD', CY: 'EUR', SG: 'SGD',
+  UK: 'GBP', US: 'USD', BVI: 'USD', CAY: 'USD', SEY: 'SCR'
+};
+
+let drawerMode = null;
+let drawerSelectedJurisdiction = null;
+
+// ── Smart Focus DnD: Right Drawer ──
+export function openRightDrawer(mode, jurisdictionId) {
+  const project = state.project;
+  const drawer = document.getElementById('rightDrawer');
+  const rdTitle = document.getElementById('rdTitle');
+  const rdBody = document.getElementById('rdBody');
+  if (!drawer || !rdBody) return;
+
+  drawerMode = mode;
+  rdBody.innerHTML = '';
+
+  if (mode === 'COUNTRIES') {
+    rdTitle.textContent = 'Добавить страну';
+
+    const jurs = (project.catalogs?.jurisdictions || []).filter(j => j.enabled !== false);
+    // Фильтрация: исключить юрисдикции, для которых уже есть зона с kind === 'country'
+    const usedCountryJurs = new Set(
+      project.zones.filter(z => z.kind === 'country').map(z => z.jurisdiction)
+    );
+    const available = jurs.filter(j => !usedCountryJurs.has(j.id));
+
+    if (available.length === 0) {
+      rdBody.innerHTML = '<div class="small" style="padding:20px; text-align:center;">Все доступные страны уже добавлены на канвас.</div>';
+    } else {
+      available.forEach(j => {
+        const card = document.createElement('div');
+        card.className = 'draggable-card';
+        card.draggable = true;
+        card.innerHTML = `
+          <div>${escapeHtml(j.name)}</div>
+          <div class="dc-sub">${escapeHtml(j.id)} · ${escapeHtml(JURISDICTION_CURRENCIES[j.id] || 'USD')} · Перетащите на канвас</div>
+        `;
+        card.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('application/json', JSON.stringify({
+            type: 'country',
+            jurisdictionId: j.id,
+            jurisdictionName: j.name
+          }));
+          e.dataTransfer.effectAllowed = 'copy';
+        });
+        rdBody.appendChild(card);
+      });
+    }
+  }
+  else if (mode === 'REGIMES') {
+    const jurId = jurisdictionId || drawerSelectedJurisdiction;
+    drawerSelectedJurisdiction = jurId;
+    rdTitle.textContent = 'Добавить режим';
+
+    const jurs = (project.catalogs?.jurisdictions || []).filter(j => j.enabled !== false);
+
+    // Селектор юрисдикции
+    const selWrap = document.createElement('div');
+    selWrap.style.cssText = 'margin-bottom: 10px;';
+    selWrap.innerHTML = `
+      <label>Страна</label>
+      <select id="rdJurSel">${jurs.map(j =>
+        `<option value="${j.id}" ${j.id === jurId ? 'selected' : ''}>${escapeHtml(j.name)} (${escapeHtml(j.id)})</option>`
+      ).join('')}</select>
+    `;
+    rdBody.appendChild(selWrap);
+
+    const cardsContainer = document.createElement('div');
+    cardsContainer.className = 'col';
+    cardsContainer.id = 'rdRegimeCards';
+    rdBody.appendChild(cardsContainer);
+
+    const renderRegimes = (selectedJurId) => {
+      cardsContainer.innerHTML = '';
+      const templates = REGIME_TEMPLATES[selectedJurId] || [];
+
+      // Фильтрация: исключить режимы, для которых уже есть зона с kind === 'regime' внутри этой страны
+      const usedRegimeCodes = new Set(
+        project.zones
+          .filter(z => z.kind === 'regime' && z.jurisdiction === selectedJurId)
+          .map(z => z.code)
+      );
+      const available = templates.filter(t => !usedRegimeCodes.has(t.code));
+
+      if (available.length === 0) {
+        cardsContainer.innerHTML = `<div class="small" style="padding:20px; text-align:center;">${
+          templates.length === 0
+            ? 'Нет предустановленных режимов для этой страны.'
+            : 'Все режимы этой страны уже добавлены.'
+        }</div>`;
+      } else {
+        available.forEach(tmpl => {
+          const card = document.createElement('div');
+          card.className = 'draggable-card';
+          card.draggable = true;
+          card.innerHTML = `
+            <div>${escapeHtml(tmpl.name)}</div>
+            <div class="dc-sub">${escapeHtml(tmpl.code)} · ${escapeHtml(tmpl.currency)} · Перетащите на страну</div>
+          `;
+          card.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('application/json', JSON.stringify({
+              type: 'regime',
+              jurisdiction: selectedJurId,
+              code: tmpl.code,
+              name: tmpl.name,
+              currency: tmpl.currency,
+              w: tmpl.w || 260,
+              h: tmpl.h || 200
+            }));
+            e.dataTransfer.effectAllowed = 'copy';
+
+            // Анимация камеры: фокус на целевой стране
+            const countryZone = project.zones.find(z =>
+              z.jurisdiction === selectedJurId && (z.kind === 'country' || !z.kind)
+            );
+            if (countryZone) {
+              saveCameraState();
+              animateCameraToZone(countryZone);
+            }
+          });
+          cardsContainer.appendChild(card);
+        });
+      }
+    };
+
+    renderRegimes(jurId || jurs[0]?.id);
+
+    rdBody.querySelector('#rdJurSel')?.addEventListener('change', (ev) => {
+      drawerSelectedJurisdiction = ev.target.value;
+      renderRegimes(ev.target.value);
+    });
+  }
+
+  drawer.classList.add('open');
+
+  // Обработчик закрытия
+  const closeBtn = document.getElementById('rdClose');
+  if (closeBtn) closeBtn.onclick = () => closeRightDrawer();
+}
+
+export function closeRightDrawer() {
+  const drawer = document.getElementById('rightDrawer');
+  if (drawer) drawer.classList.remove('open');
+  drawerMode = null;
+}
+
+function refreshDrawerIfOpen() {
+  if (!drawerMode) return;
+  if (drawerMode === 'COUNTRIES') openRightDrawer('COUNTRIES');
+  else if (drawerMode === 'REGIMES') openRightDrawer('REGIMES', drawerSelectedJurisdiction);
+}
+
+// ── Smart Focus DnD: Инициализация обработчиков drop на канвасе ──
+export function initCanvasDrop() {
+  const viewport = document.getElementById('viewport');
+  if (!viewport) return;
+
+  viewport.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+
+    // Подсвечиваем зоны-цели
+    const pt = pointerToCanvas(e);
+    const project = state.project;
+    document.querySelectorAll('.zone.drop-target, .zone.drop-invalid').forEach(el => {
+      el.classList.remove('drop-target', 'drop-invalid');
+    });
+
+    let dataStr;
+    try { dataStr = e.dataTransfer.types.includes('application/json') ? 'has-data' : ''; } catch { dataStr = ''; }
+    if (!dataStr) return;
+
+    const hitZone = findZoneAtPoint(project, pt.x, pt.y);
+    if (hitZone) {
+      const el = document.querySelector(`.zone[data-zone-id="${hitZone.id}"]`);
+      if (el) el.classList.add('drop-target');
+    }
+  });
+
+  viewport.addEventListener('dragleave', (e) => {
+    if (!e.relatedTarget || !viewport.contains(e.relatedTarget)) {
+      document.querySelectorAll('.zone.drop-target, .zone.drop-invalid').forEach(el => {
+        el.classList.remove('drop-target', 'drop-invalid');
+      });
+    }
+  });
+
+  viewport.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    document.querySelectorAll('.zone.drop-target, .zone.drop-invalid').forEach(el => {
+      el.classList.remove('drop-target', 'drop-invalid');
+    });
+
+    const dataStr = e.dataTransfer.getData('application/json');
+    if (!dataStr) return;
+
+    let data;
+    try { data = JSON.parse(dataStr); } catch { return; }
+
+    const pt = pointerToCanvas(e);
+    const project = state.project;
+
+    if (data.type === 'country') {
+      await handleCountryDrop(project, data, pt);
+    } else if (data.type === 'regime') {
+      await handleRegimeDrop(project, data, pt);
+    } else if (data.type === 'node') {
+      await handleNodeDrop(project, data, pt);
+    }
+
+    // Возврат камеры после drop
+    animateCameraRestore();
+  });
+
+  // dragend: возврат камеры если drop не произошёл на канвасе
+  document.addEventListener('dragend', () => {
+    document.querySelectorAll('.zone.drop-target, .zone.drop-invalid').forEach(el => {
+      el.classList.remove('drop-target', 'drop-invalid');
+    });
+    animateCameraRestore();
+  });
+}
+
+// ── Строгая валидация: Обработка drop страны ──
+async function handleCountryDrop(project, data, pt) {
+  if (project.readOnly) return toast("Read-only: изменения запрещены");
+
+  const jurId = data.jurisdictionId;
+  const jurName = data.jurisdictionName;
+
+  // Создаём зону-страну в точке drop
+  const w = 500, h = 400;
+  const x = Math.max(10, Math.round(pt.x - w / 2));
+  const y = Math.max(10, Math.round(pt.y - h / 2));
+
+  let zoneId = `${jurId}_COUNTRY`;
+  let uniqueId = zoneId;
+  let k = 2;
+  while (getZone(project, uniqueId)) { uniqueId = `${zoneId}_${k++}`; }
+
+  // Убедиться что курс валюты есть
+  const currency = JURISDICTION_CURRENCIES[jurId] || 'USD';
+  project.fx = project.fx || { fxDate: "2026-01-15", rateToKZT: { KZT: 1 }, source: "manual" };
+  project.fx.rateToKZT = project.fx.rateToKZT || { KZT: 1 };
+  if (!project.fx.rateToKZT[currency] && currency !== 'KZT') {
+    const rStr = prompt(`Нет курса для ${currency} → KZT. Введите курс (число > 0):`, '500');
+    const r = Number(rStr);
+    if (!isFinite(r) || r <= 0) return toast("Неверный курс, отмена");
+    project.fx.rateToKZT[currency] = r;
+  }
+
+  const z = {
+    id: uniqueId, name: jurName, x, y, w, h,
+    jurisdiction: jurId, code: `${jurId}_COUNTRY`, currency,
+    zIndex: 1, kind: 'country', tax: {}
+  };
+  project.zones.push(z);
+
+  // Убедиться что юрисдикция включена
+  const jurSet = new Set(project.activeJurisdictions || []);
+  jurSet.add(jurId);
+  project.activeJurisdictions = Array.from(jurSet);
+  if (!(project.catalogs.jurisdictions || []).some(j => j.id === jurId)) {
+    project.catalogs.jurisdictions.push({ id: jurId, name: jurName, enabled: true });
+  }
+
+  // Создать TXA ноду
+  const txa = makeTXA(z);
+  if (!getNode(project, txa.id)) project.nodes.push(txa);
+
+  normalizeZoneCascade(project, uniqueId);
+  syncTXANodes(project);
+  bootstrapNormalizeZones(project);
+  recomputeRisks(project);
+
+  await auditAppend(project, 'ZONE_CREATE', { entityType: 'ZONE', entityId: uniqueId }, {}, { zones: [z] }, { note: 'Country zone created via Smart Focus DnD' });
+  save();
+  toast(`Страна «${jurName}» добавлена на канвас`);
+  render();
+  refreshDrawerIfOpen();
+}
+
+// ── Строгая валидация: Обработка drop режима ──
+async function handleRegimeDrop(project, data, pt) {
+  if (project.readOnly) return toast("Read-only: изменения запрещены");
+
+  // Валидация: курсор должен быть строго внутри зоны с kind === 'country' и совпадающей jurisdiction
+  const hitZones = project.zones.filter(z =>
+    isZoneEnabled(project, z) && pointInZone(pt.x, pt.y, z)
+  );
+
+  const targetCountry = hitZones.find(z =>
+    (z.kind === 'country' || !z.kind) && z.jurisdiction === data.jurisdiction
+  );
+
+  if (!targetCountry) {
+    toast("Ошибка: Режим не соответствует стране");
+    return;
+  }
+
+  // Создаём зону-режим внутри страны
+  const w = data.w || 260;
+  const h = data.h || 200;
+  const x = Math.max(targetCountry.x + 10, Math.min(targetCountry.x + targetCountry.w - w - 10, Math.round(pt.x - w / 2)));
+  const y = Math.max(targetCountry.y + 30, Math.min(targetCountry.y + targetCountry.h - h - 10, Math.round(pt.y - h / 2)));
+
+  let zoneId = data.code;
+  let uniqueId = zoneId;
+  let k = 2;
+  while (getZone(project, uniqueId)) { uniqueId = `${zoneId}_${k++}`; }
+
+  const maxZI = Math.max(0, ...project.zones.filter(z => z.jurisdiction === data.jurisdiction).map(z => Number(z.zIndex || 0)));
+
+  const currency = data.currency || JURISDICTION_CURRENCIES[data.jurisdiction] || 'USD';
+  project.fx = project.fx || { fxDate: "2026-01-15", rateToKZT: { KZT: 1 }, source: "manual" };
+  project.fx.rateToKZT = project.fx.rateToKZT || { KZT: 1 };
+  if (!project.fx.rateToKZT[currency] && currency !== 'KZT') {
+    const rStr = prompt(`Нет курса для ${currency} → KZT. Введите курс (число > 0):`, '500');
+    const r = Number(rStr);
+    if (!isFinite(r) || r <= 0) return toast("Неверный курс, отмена");
+    project.fx.rateToKZT[currency] = r;
+  }
+
+  const z = {
+    id: uniqueId, name: data.name, x, y, w, h,
+    jurisdiction: data.jurisdiction, code: data.code, currency,
+    zIndex: maxZI + 1, kind: 'regime', tax: {}
+  };
+  project.zones.push(z);
+
+  const txa = makeTXA(z);
+  if (!getNode(project, txa.id)) project.nodes.push(txa);
+
+  normalizeZoneCascade(project, uniqueId);
+  syncTXANodes(project);
+  bootstrapNormalizeZones(project);
+  recomputeRisks(project);
+
+  await auditAppend(project, 'ZONE_CREATE', { entityType: 'ZONE', entityId: uniqueId }, {}, { zones: [z] }, { note: 'Regime zone created via Smart Focus DnD' });
+  save();
+  toast(`Режим «${data.name}» добавлен`);
+  render();
+  refreshDrawerIfOpen();
+}
+
+// ── Строгая валидация: Обработка drop узла (Компания/Физлицо) ──
+async function handleNodeDrop(project, data, pt) {
+  if (project.readOnly) return toast("Read-only: изменения запрещены");
+
+  // Валидация: узел должен падать строго внутрь зоны с kind === 'regime' (или любой зоны)
+  const hitZone = findZoneAtPoint(project, pt.x, pt.y);
+  if (!hitZone) {
+    toast("Ошибка: Узел должен быть размещён внутри режима");
+    return;
+  }
+
+  // Предпочтительно внутри зоны с kind === 'regime', но допустимо в любой зоне
+  const regimeZone = project.zones
+    .filter(z => isZoneEnabled(project, z) && pointInZone(pt.x, pt.y, z) && z.kind === 'regime')
+    .sort((a, b) => (zoneArea(a) - zoneArea(b)))[0];
+
+  const targetZone = regimeZone || hitZone;
+
+  const nodeType = data.nodeType || 'company';
+  const nodeName = data.nodeName || (nodeType === 'company' ? 'New Company' : 'New Person');
+  const n = makeNode(nodeName, nodeType, Math.round(pt.x - 95), Math.round(pt.y - 45));
+  n.zoneId = targetZone.id;
+
+  project.nodes.push(n);
+  await auditAppend(project, 'NODE_CREATE', { entityType: 'NODE', entityId: n.id }, { nodes: [] }, { nodes: [n] }, { note: 'Node created via Smart Focus DnD' });
+  save();
+  toast(`${nodeType === 'company' ? 'Компания' : 'Физлицо'} создано в «${targetZone.name}»`);
+  render();
+}
 
 export function render(){
   const project = state.project;
@@ -1607,6 +2013,20 @@ function renderCatalogs(panel){
 
     <div class="item">
       <div class="hdr">
+        <div>
+          <div class="name">Smart Focus DnD</div>
+          <div class="meta">Перетащите элемент из панели на канвас</div>
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="row" style="gap:8px">
+        <button class="btn secondary" id="btnDndCountries">Добавить страну</button>
+        <button class="btn secondary" id="btnDndRegimes">Добавить режим</button>
+      </div>
+    </div>
+
+    <div class="item">
+      <div class="hdr">
         <div><div class="name">Отображение стран и режимов</div></div>
         <div class="row" style="gap:8px">
           <button class="btn secondary" id="expAll">Развернуть</button>
@@ -1654,6 +2074,13 @@ function renderCatalogs(panel){
   setSeg();
   root.querySelector('#modeNodes')?.addEventListener('click', ()=>{ project.ui.editMode = 'nodes'; save(); render(); });
   root.querySelector('#modeZones')?.addEventListener('click', ()=>{ project.ui.editMode = 'zones'; save(); render(); });
+
+  // Smart Focus DnD кнопки
+  root.querySelector('#btnDndCountries')?.addEventListener('click', () => openRightDrawer('COUNTRIES'));
+  root.querySelector('#btnDndRegimes')?.addEventListener('click', () => {
+    const firstJur = (project.catalogs?.jurisdictions || [])[0]?.id || 'KZ';
+    openRightDrawer('REGIMES', firstJur);
+  });
 
   root.querySelector('#applyCanvas')?.addEventListener('click', ()=>{
     if (project.readOnly) return toast("Read-only");
@@ -2319,7 +2746,12 @@ export function initCreation() {
           const name = prompt("Название:", type === "company" ? "New Company" : "New Person");
           if (!name) return;
           const n = makeNode(name, type, x, y);
-          n.zoneId = detectZoneId(project, n); // Авто-привязка к зоне, если кликнули внутри неё
+          n.zoneId = detectZoneId(project, n);
+          // Строгая валидация: узел должен быть внутри режима
+          if (!n.zoneId) {
+              toast("Ошибка: Узел должен быть размещён внутри режима");
+              return;
+          }
           project.nodes.push(n);
           await auditAppend(project, 'NODE_CREATE', {entityType:'NODE', entityId:n.id}, {nodes:[]}, {nodes:[n]});
           save(); render(); overlay.remove();
@@ -2346,6 +2778,9 @@ export function initCreation() {
           showCreationModal(pt.x, pt.y);
       };
   }
+
+  // Инициализация Smart Focus DnD (drop-обработчики на канвасе)
+  initCanvasDrop();
 }
 
 export function exportJson(){

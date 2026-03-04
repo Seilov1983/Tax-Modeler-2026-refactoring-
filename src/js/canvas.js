@@ -1,6 +1,6 @@
 import { escapeHtml, fmtMoney, toast } from './utils.js';
 import { state, uiState, save, auditAppend } from './state.js';
-import { getZone, getNode, isZoneEnabled, detectZoneId, clampToZoneExclusive, zoneArea, recomputeRisks } from './engine.js';
+import { getZone, getNode, isZoneEnabled, detectZoneId, clampToZoneExclusive, zoneArea, pointInZone, recomputeRisks } from './engine.js';
 import { render } from './ui.js';
 
 // Глобальное состояние виртуальной камеры
@@ -12,6 +12,93 @@ export const boardState = {
     startX: 0,
     startY: 0
 };
+
+// ── Smart Focus: Сохранение/восстановление камеры для DnD анимации ──
+let previousCameraState = null;
+let cameraAnimationId = null;
+
+export function saveCameraState() {
+    previousCameraState = {
+        x: boardState.x,
+        y: boardState.y,
+        scale: boardState.scale
+    };
+}
+
+export function getSavedCameraState() {
+    return previousCameraState;
+}
+
+function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+export function animateCameraTo(targetX, targetY, targetScale, duration, callback) {
+    if (cameraAnimationId) cancelAnimationFrame(cameraAnimationId);
+
+    const startX = boardState.x;
+    const startY = boardState.y;
+    const startScale = boardState.scale;
+    const startTime = performance.now();
+
+    function step(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = easeInOutCubic(progress);
+
+        boardState.x = startX + (targetX - startX) * eased;
+        boardState.y = startY + (targetY - startY) * eased;
+        boardState.scale = startScale + (targetScale - startScale) * eased;
+        updateBoardTransform();
+
+        if (progress < 1) {
+            cameraAnimationId = requestAnimationFrame(step);
+        } else {
+            cameraAnimationId = null;
+            if (callback) callback();
+        }
+    }
+
+    cameraAnimationId = requestAnimationFrame(step);
+}
+
+export function animateCameraToZone(zone) {
+    const viewport = document.getElementById('viewport');
+    if (!viewport || !zone) return;
+    const rect = viewport.getBoundingClientRect();
+
+    // Рассчитываем масштаб чтобы зона заполнила viewport с отступами
+    const padding = 80;
+    const scaleX = (rect.width - padding * 2) / zone.w;
+    const scaleY = (rect.height - padding * 2) / zone.h;
+    const targetScale = Math.min(scaleX, scaleY, 2.5);
+
+    // Центрируем зону в viewport
+    const targetX = rect.width / 2 - (zone.x + zone.w / 2) * targetScale;
+    const targetY = rect.height / 2 - (zone.y + zone.h / 2) * targetScale;
+
+    animateCameraTo(targetX, targetY, targetScale, 400);
+}
+
+export function animateCameraRestore(callback) {
+    if (!previousCameraState) {
+        if (callback) callback();
+        return;
+    }
+    const saved = previousCameraState;
+    previousCameraState = null;
+    animateCameraTo(saved.x, saved.y, saved.scale, 400, callback);
+}
+
+// ── Smart Focus: Обнаружение зоны под точкой (для валидации drop) ──
+export function findZoneAtPoint(project, x, y) {
+    const hits = project.zones
+        .filter(z => isZoneEnabled(project, z) && pointInZone(x, y, z));
+    if (hits.length === 0) return null;
+    // Наименьшая по площади (самая вложенная) с наибольшим zIndex
+    hits.sort((a, b) => (zoneArea(a) - zoneArea(b)) || ((b.zIndex || 0) - (a.zIndex || 0)));
+    return hits[0];
+}
 
 // Применить текущий transform к доске
 export function updateBoardTransform() {
