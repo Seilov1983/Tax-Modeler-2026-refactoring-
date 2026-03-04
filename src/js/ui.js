@@ -2904,75 +2904,76 @@ export function renderMasterDataTables() {
 // ── CSV Импортеры для Master Data ──
 export function initCsvImporters() {
     const project = state.project;
+    if (!project) return;
+
+    // Умный парсер строки: не разбивает запятые, если они внутри двойных кавычек
+    const parseCsvLine = (text) => {
+        let result = [], cur = '', inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+            let char = text[i];
+            if (inQuotes) {
+                if (char === '"') {
+                    if (i + 1 < text.length && text[i+1] === '"') { cur += '"'; i++; } 
+                    else inQuotes = false;
+                } else cur += char;
+            } else {
+                if (char === '"') inQuotes = true;
+                else if (char === ',' || char === ';') { result.push(cur.trim()); cur = ''; }
+                else cur += char;
+            }
+        }
+        result.push(cur.trim());
+        return result;
+    };
+
     const btnImportCountries = document.getElementById('btnImportCountries');
     if (btnImportCountries) {
         btnImportCountries.onclick = () => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.csv';
+            const input = document.createElement('input'); input.type = 'file'; input.accept = '.csv';
             input.onchange = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-
+                const file = e.target.files[0]; if (!file) return;
                 const reader = new FileReader();
                 reader.onload = (event) => {
-                    const project = state.project;
-                    const lines = event.target.result.split('\n').map(l => l.trim()).filter(l => l);
-                    const dataLines = lines.slice(1); // Пропускаем шапку
+                    // ИСПРАВЛЕНИЕ: Читаем переносы строк Windows, Mac и Linux
+                    const lines = event.target.result.split(/\r\n|\n|\r/).map(l => l.trim()).filter(l => l);
                     let added = 0;
-
+                    
                     if (!project.catalogs) project.catalogs = {};
                     if (!project.catalogs.jurisdictions) project.catalogs.jurisdictions = [];
                     if (!project.activeJurisdictions) project.activeJurisdictions = [];
                     if (!project.masterData) project.masterData = {};
 
-                    dataLines.forEach(line => {
-                        // Country Code;Name;Flag;Base Currency;Statute;CFC;PillarTwo;MCI;MinWage;VatThreshold
-                        const parts = line.split(';');
+                    lines.slice(1).forEach(line => {
+                        const parts = parseCsvLine(line);
                         if (parts.length < 4) return;
-
-                        const code = parts[0].trim().toUpperCase();
+                        
+                        const code = parts[0].toUpperCase();
                         if (!code) return;
-
-                        // 1. Добавляем в справочник юрисдикций
+                        
+                        // Добавляем в общий каталог для UI
                         if (!project.catalogs.jurisdictions.find(j => j.id === code)) {
-                            project.catalogs.jurisdictions.push({
-                                id: code,
-                                name: parts[1].trim(),
-                                flag: parts[2] ? parts[2].trim() : '',
-                                enabled: true
-                            });
-                            if (!project.activeJurisdictions.includes(code)) {
-                                project.activeJurisdictions.push(code);
-                            }
+                            project.catalogs.jurisdictions.push({ id: code, name: parts[1], flag: parts[2], enabled: true });
+                            if (!project.activeJurisdictions.includes(code)) project.activeJurisdictions.push(code);
                         }
-
-                        // 2. Заполняем Master Data (налоговые макро-параметры)
+                        
+                        // Заполняем базу налоговых констант
                         project.masterData[code] = project.masterData[code] || {};
                         const md = project.masterData[code];
-
-                        md.countryCode = code;
-                        md.baseCurrency = parts[3].trim();
+                        md.countryCode = code; 
+                        md.baseCurrency = parts[3];
                         md.statuteOfLimitationsYears = Number(parts[4]) || 5;
-                        md.cfcRulesActive = parts[5]?.trim().toLowerCase() === 'true';
-                        md.pillarTwoActive = parts[6]?.trim().toLowerCase() === 'true';
-
-                        // Парсим макро-константы с учетом null
+                        md.cfcRulesActive = String(parts[5]).toLowerCase() === 'true';
+                        md.pillarTwoActive = String(parts[6]).toLowerCase() === 'true';
+                        
                         md.macroConstants = md.macroConstants || {};
-                        if (parts[7] && parts[7].trim().toLowerCase() !== 'null') md.macroConstants.mciValue = Number(parts[7]);
-                        if (parts[8] && parts[8].trim().toLowerCase() !== 'null') md.macroConstants.minWage = Number(parts[8]);
-
+                        if (parts[7] && String(parts[7]).toLowerCase() !== 'null') md.macroConstants.mciValue = Number(parts[7]);
+                        if (parts[8] && String(parts[8]).toLowerCase() !== 'null') md.macroConstants.minWage = Number(parts[8]);
+                        
                         md.thresholds = md.thresholds || {};
-                        if (parts[9] && parts[9].trim().toLowerCase() !== 'null') {
-                            const vatThresh = parts[9].replace(/[^0-9]/g, '');
-                            md.thresholds.vatRegistrationBaseCurrency = Number(vatThresh);
-                        }
+                        if (parts[9] && String(parts[9]).toLowerCase() !== 'null') md.thresholds.vatRegistrationBaseCurrency = Number(String(parts[9]).replace(/[^0-9]/g, ''));
                         added++;
                     });
-
-                    toast(`Загружено стран: ${added}`);
-                    save();
-                    renderMasterDataTables();
+                    toast(`✅ Загружено стран: ${added}`); save(); renderMasterDataTables();
                 };
                 reader.readAsText(file);
             };
@@ -2980,50 +2981,51 @@ export function initCsvImporters() {
         };
     }
 
-    // Кнопка загрузки режимов (CSV)
     const btnImportRegimes = document.getElementById('btnImportRegimes');
     if (btnImportRegimes) {
         btnImportRegimes.onclick = () => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.csv';
+            const input = document.createElement('input'); input.type = 'file'; input.accept = '.csv';
             input.onchange = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-
+                const file = e.target.files[0]; if (!file) return;
                 const reader = new FileReader();
                 reader.onload = (event) => {
-                    const project = state.project;
-                    const lines = event.target.result.split('\n').map(l => l.trim()).filter(l => l);
-                    const dataLines = lines.slice(1);
+                    // ИСПРАВЛЕНИЕ: Читаем любые переносы строк
+                    const lines = event.target.result.split(/\r\n|\n|\r/).map(l => l.trim()).filter(l => l);
                     let added = 0;
+                    
+                    lines.slice(1).forEach(line => {
+                        const parts = parseCsvLine(line);
+                        if (parts.length < 12) return;
+                        
+                        const regimeCode = parts[0].toUpperCase();
+                        const countryCode = parts[1].toUpperCase();
+                        if (!regimeCode || !countryCode) return;
+                        
+                        project.masterData[countryCode] = project.masterData[countryCode] || {};
+                        project.masterData[countryCode].regimes = project.masterData[countryCode].regimes || {};
+                        
+                        // Читаем сложную WHT ставку (берем первую цифру до слэша)
+                        let whtDiv = parts[5] || "0";
+                        let whtDivBase = whtDiv.includes('/') ? Number(whtDiv.split('/')[0].trim()) : Number(whtDiv);
 
-                    if (!project.catalogs) project.catalogs = {};
-                    if (!project.catalogs.regimes) project.catalogs.regimes = [];
-
-                    dataLines.forEach(line => {
-                        // RegimeCode;Name;JurisdictionCode;CIT%;Description
-                        const parts = line.split(';');
-                        if (parts.length < 3) return;
-
-                        const code = parts[0].trim();
-                        if (!code) return;
-
-                        if (!project.catalogs.regimes.find(r => r.code === code)) {
-                            project.catalogs.regimes.push({
-                                code: code,
-                                name: parts[1]?.trim() || code,
-                                jurisdiction: parts[2]?.trim().toUpperCase() || '',
-                                citRate: parts[3] ? Number(parts[3]) : null,
-                                description: parts[4]?.trim() || ''
-                            });
-                            added++;
-                        }
+                        project.masterData[countryCode].regimes[regimeCode] = {
+                            regimeName: parts[2],
+                            citRateStandard: Number(parts[3]) || 0,
+                            vatRateStandard: Number(parts[4]) || 0,
+                            wht: {
+                                dividends: whtDivBase,
+                                interest: Number(parts[6]) || 0,
+                                royalties: Number(parts[7]) || 0,
+                                services: Number(parts[8]) || 0
+                            },
+                            substanceRequired: String(parts[9]).toLowerCase() === 'true',
+                            cryptoAllowed: String(parts[10]).toLowerCase() === 'true',
+                            separateAccounting: String(parts[11]).toLowerCase() === 'true',
+                            lossCarryforwardYears: String(parts[12]).toLowerCase() === 'unlimited' ? 999 : (Number(parts[12]) || 0)
+                        };
+                        added++;
                     });
-
-                    toast(`Загружено режимов: ${added}`);
-                    save();
-                    renderMasterDataTables();
+                    toast(`✅ Загружено режимов: ${added}`); save(); renderMasterDataTables();
                 };
                 reader.readAsText(file);
             };
