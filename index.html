@@ -11,93 +11,87 @@
 
   <div id="toasts" class="toastWrap"></div>
 
-  <div style="display: flex; height: 100vh; width: 100vw; overflow: hidden; background: var(--bg-color);">
+  <div style="display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; background: var(--bg-color);">
+      
+      <header class="top-bar">
+          <div class="brand">
+              <span style="font-size: 18px; font-weight: 800;">TSM 26</span>
+              <div id="metaLine" style="font-size: 11px; color: var(--muted); margin-top: 2px;">schema 2.4.1</div>
+          </div>
 
-    <div id="sidebar" style="width: 250px; min-width: 250px; background: var(--panel); border-right: 1px solid var(--stroke); display: flex; flex-direction: column; z-index: 1000;">
-        <div style="padding: 20px; font-weight: bold; font-size: 18px; border-bottom: 1px solid var(--stroke); display: flex; align-items: center; justify-content: space-between;">
-            <span>Tax Modeler 2026</span>
-            <button class="theme-toggle" id="themeToggle">
-              <span class="icon" id="themeIcon">🌓</span>
-            </button>
-        </div>
+          <nav class="top-tabs">
+              <button class="top-tab" data-target="screen-master">Мастер-данные</button>
+              <button class="top-tab active" data-target="screen-modeling">Моделирование</button>
+              <button class="top-tab" data-target="screen-analytics">Аналитика</button>
+          </nav>
 
-        <div style="padding: 10px 14px 6px; font-size: 12px; color: var(--muted); font-weight: 600;">
-            <div id="projTitle">Demo Project</div>
-            <div id="metaLine" style="margin-top: 2px; font-size: 11px;"></div>
-        </div>
+          <div class="top-actions">
+              <div class="system-state">
+                  <span class="state-dot ok"></span>
+                  <span id="stateText">Ready</span>
+              </div>
+              <button id="btnSettings" class="gear-btn" title="Настройки системы">⚙️</button>
+          </div>
+      </header>
 
-        <div style="display: flex; flex-direction: column; padding: 10px; gap: 5px;">
-            <button class="btn secondary nav-btn" data-target="screen-master">📚 Мастер-данные</button>
-            <button class="btn primary nav-btn" data-target="screen-modeling">🛠 Моделирование</button>
-            <button class="btn secondary nav-btn" data-target="screen-analytics">📊 Аналитика (D-MACE)</button>
-        </div>
+      <div id="main-content" style="flex: 1; position: relative;">
 
-        <!-- Legacy sidebar panel for tabs content -->
-        <div id="sidebarPanelWrap" style="flex: 1; overflow-y: auto; padding: 0 10px;">
-            <div class="tabs" id="tabs" style="padding: 4px 4px 8px; display: none;"></div>
-            <div class="card" id="panel" style="margin-bottom: 10px;"></div>
-        </div>
+          <div id="screen-master" class="app-screen" style="display: none; width: 100%; height: 100%; padding: 30px; overflow-y: auto;">
+              <div style="max-width: 1200px; margin: 0 auto;">
+                  
+                  <h2 style="margin-top: 0; margin-bottom: 16px;">Базовые вводные (Environment)</h2>
+                  <div id="fxDataContainer" class="hierarchical-list" style="margin-bottom: 40px;">
+                      </div>
 
-        <div style="margin-top: auto; padding: 10px; border-top: 1px solid var(--stroke);">
-            <button id="btnNew" class="btn secondary" style="width: 100%; margin-bottom: 5px;">Demo Project</button>
-            <button id="btnNewEmpty" class="btn secondary" style="width: 100%; margin-bottom: 5px;">Очистить проект</button>
-            <div style="display: flex; gap: 5px;">
-                <button id="btnExport" class="btn secondary" style="flex: 1;">Экспорт JSON</button>
-                <button id="btnImport" class="btn secondary" style="flex: 1;">Импорт</button>
-            </div>
-        </div>
-    </div>
+                  <h2 style="margin-top: 0; display: flex; align-items: center; justify-content: space-between;">
+                      Глобальные Справочники 
+                      <div style="display: flex; gap: 10px;">
+                          <button id="btnImportCountries" class="btn" style="background: var(--ok); color: white;">📥 Загрузить Страны</button>
+                          <button id="btnImportRegimes" class="btn secondary" disabled title="Сначала загрузите страны">📥 Загрузить Режимы</button>
+                      </div>
+                  </h2>
+                  <div id="masterDataContainer" class="hierarchical-list" style="margin-top: 20px;">
+                      <div style="text-align:center; padding: 40px; color: var(--muted); border: 2px dashed var(--stroke); border-radius: 12px;">
+                          Нет данных. Начните с загрузки стран (CSV).
+                      </div>
+                  </div>
+              </div>
+          </div>
 
-    <div id="main-content" style="flex: 1; position: relative;">
+          <div id="screen-modeling" class="app-screen" style="display: block; width: 100%; height: 100%; position: relative;">
+              
+              <div id="viewport" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; cursor: grab; z-index: 1;">
+                  <div id="canvas-board" data-w="5000" data-h="5000" style="position: absolute; width: 5000px; height: 5000px; transform-origin: 0 0;">
+                      <div id="zones-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
+                      <svg id="arrows-layer" xmlns="http://www.w3.org/2000/svg" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;"></svg>
+                      <div id="nodes-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20;"></div>
+                  </div>
+                  <button id="fabCreate" style="position: absolute; bottom: 40px; right: 40px; width: 64px; height: 64px; border-radius: 32px; background: var(--accent); color: white; border: none; font-size: 32px; font-weight: 300; box-shadow: 0 8px 24px rgba(37, 99, 235, 0.4); cursor: pointer; z-index: 1000; transition: transform 0.2s;">+</button>
+              </div>
 
-        <div id="screen-master" class="app-screen" style="display: none; width: 100%; height: 100%; padding: 30px; overflow-y: auto;">
-            <div style="max-width: 1200px; margin: 0 auto;">
+              <div id="floatingPanel" style="position: absolute; top: 20px; left: 20px; width: 340px; max-height: calc(100vh - 100px); overflow-y: auto; background: var(--panel); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border: 1px solid var(--stroke); border-radius: 12px; box-shadow: var(--shadow); z-index: 500;">
+                  <div id="panel" style="padding: 16px;">
+                      </div>
+              </div>
 
-                <h2 style="margin-top: 0; margin-bottom: 16px;">Базовые вводные (Environment)</h2>
-                <div id="fxDataContainer" class="hierarchical-list" style="margin-bottom: 40px;">
-                </div>
+              <div class="roBadge" id="roBadge" style="display:none; position:absolute; top:10px; right:10px; background:var(--danger); color:#fff; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:12px; z-index:100;">READ ONLY</div>
 
-                <h2 style="margin-top: 0; display: flex; align-items: center; justify-content: space-between;">
-                    Глобальные Справочники
-                    <div style="display: flex; gap: 10px;">
-                        <button id="btnImportCountries" class="btn" style="background: var(--ok); color: white;">📥 Загрузить Страны</button>
-                        <button id="btnImportRegimes" class="btn secondary">📥 Загрузить Режимы</button>
-                    </div>
-                </h2>
-                <div id="masterDataContainer" class="hierarchical-list" style="margin-top: 20px;">
-                </div>
-            </div>
-        </div>
+              <div id="rightDrawer" class="right-drawer">
+                  <div class="right-drawer-header">
+                      <h3 id="rdTitle">Добавить на канвас</h3>
+                      <button id="rdClose" class="btn secondary" style="padding:4px 10px; font-size:14px; min-width:auto;">✕</button>
+                  </div>
+                  <div class="right-drawer-body" id="rdBody"></div>
+              </div>
+          </div>
 
-        <div id="screen-modeling" class="app-screen" style="display: block; width: 100%; height: 100%; position: relative;">
-            <div id="viewport" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: hidden; cursor: grab; z-index: 1;">
-                <div id="canvas-board" data-w="5000" data-h="5000" style="position: absolute; width: 5000px; height: 5000px; transform-origin: 0 0;">
-                    <div id="zones-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></div>
-                    <svg id="arrows-layer" xmlns="http://www.w3.org/2000/svg" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;"></svg>
-                    <div id="nodes-layer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 20;"></div>
-                </div>
-                <button id="fabCreate" style="position: absolute; bottom: 40px; right: 40px; width: 64px; height: 64px; border-radius: 32px; background: var(--accent, #a855f7); color: white; border: none; font-size: 32px; font-weight: 300; box-shadow: 0 8px 24px rgba(168, 85, 247, 0.4); cursor: pointer; z-index: 1000; display: flex; align-items: center; justify-content: center; transition: transform 0.2s;">+</button>
-            </div>
-            <div class="roBadge" id="roBadge" style="display:none; position:absolute; top:10px; right:10px; background:var(--danger); color:#fff; padding:4px 8px; border-radius:4px; font-weight:bold; font-size:12px; z-index:100;">READ ONLY</div>
+          <div id="screen-analytics" class="app-screen" style="display: none; width: 100%; height: 100%; padding: 30px; overflow-y: auto;">
+              <h2 style="margin-top: 0; margin-bottom: 20px; text-align: center;">Executive Dashboard</h2>
+              <div id="dashboardContainer" style="max-width: 1200px; margin: 0 auto;">
+                  </div>
+          </div>
 
-            <!-- Smart Focus DnD Right Drawer -->
-            <div id="rightDrawer" class="right-drawer">
-                <div class="right-drawer-header">
-                    <h3 id="rdTitle">Добавить на канвас</h3>
-                    <button id="rdClose" class="btn secondary" style="padding:4px 10px; font-size:14px; min-width:auto;">✕</button>
-                </div>
-                <div class="right-drawer-body" id="rdBody"></div>
-            </div>
-        </div>
-
-        <div id="screen-analytics" class="app-screen" style="display: none; width: 100%; height: 100%; padding: 30px; overflow-y: auto;">
-            <h2 style="margin-top: 0;">Аналитика и D-MACE Отчеты</h2>
-            <div id="dashboardContainer" style="width: 100%; min-height: 400px; border: 1px dashed var(--stroke); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                <span style="color: var(--muted);">Здесь будут графики ECharts</span>
-            </div>
-        </div>
-
-    </div>
+      </div>
   </div>
 
   <script type="module" src="./src/js/app.js"></script>
