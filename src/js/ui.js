@@ -1068,24 +1068,31 @@ function renderSettingsJurisdictions(panel){
 
   c.querySelector('#btnAddCountry').onclick = async ()=>{
     if (project.readOnly) return toast("Read-only: изменения запрещены");
-    let id = prompt('Код страны (например: DE, CN, RU). Только латиница/цифры/_.', '');
+
+    let id = prompt('1. КОД СТРАНЫ (ID). Строго латиницей! (например: CN, DE, RU):', '');
     if (!id) return;
     id = String(id).trim().toUpperCase().replace(/\s+/g,'_');
-    if (!/^[A-Z0-9_]{2,10}$/.test(id)) return toast('Неверный код');
-    if ((project.catalogs.jurisdictions||[]).some(j=>j.id===id)) return toast('Уже существует');
-    let name = prompt('Название (для UI):', id) || id;
+    if (!/^[A-Z0-9_]{2,10}$/.test(id)) {
+        alert('Ошибка: Код страны должен содержать ТОЛЬКО латинские буквы!');
+        return;
+    }
+    if ((project.catalogs.jurisdictions||[]).some(j=>j.id===id)) return toast('Такой код уже существует');
+
+    let name = prompt('2. НАЗВАНИЕ СТРАНЫ. (Можно на русском, например: Китай):', 'Китай') || id;
     name = String(name||'').trim() || id;
+
     const jur = { id, name, enabled:true };
     project.catalogs.jurisdictions.push(jur);
     const set = new Set(project.activeJurisdictions || []);
     set.add(id);
     project.activeJurisdictions = Array.from(set);
     project.masterData[id] = project.masterData[id] || {};
+
     await auditAppend(project, 'MASTERDATA_OVERRIDE', { entityType:'CATALOG', entityId:'jurisdictions' }, [
       {op:'add', path:'/catalogs/jurisdictions/-', value: jur},
       {op:'replace', path:'/activeJurisdictions', value: project.activeJurisdictions}
     ]);
-    save(); toast('Страна добавлена'); render();
+    save(); toast('Страна успешно добавлена!'); render();
   };
 
   c.querySelector('#btnAddRegime').onclick = async ()=>{

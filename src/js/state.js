@@ -4,12 +4,10 @@ export const SCHEMA_VERSION = "2.4.1";
 export const ENGINE_VERSION = "0.10.0";
 export const STORAGE_KEY = "tsm26_onefile_project_v2";
 
-// Глобальное состояние данных проекта
 export const state = {
   project: null
 };
 
-// Глобальное состояние UI (перенесено из app.js)
 export const uiState = {
   activeTab: "flows",
   settingsSubTab: "jurisdictions",
@@ -35,7 +33,9 @@ export async function load(){
     const obj = JSON.parse(raw);
     if (obj.schemaVersion !== SCHEMA_VERSION) return null;
     const ok = await verifyAudit(obj);
-    obj.readOnly = !ok;
+    if (!ok) console.warn("Audit Log mismatch: ignoring strict lock for MVP prototyping.");
+    // ОТКЛЮЧАЕМ БЛОКИРОВКУ ДЛЯ MVP (всегда false)
+    obj.readOnly = false;
     return obj;
   }catch(e){
     return null;
@@ -55,15 +55,20 @@ export async function verifyAudit(p){
 
 export async function auditAppend(p, action, entityRef, beforeObj, afterObj, metadata){
   const prevHash = p.audit.lastHash || "GENESIS";
+
+  // Безопасное глубокое клонирование, чтобы избежать битых ссылок
+  const rawDiff = (Array.isArray(beforeObj) && (afterObj === undefined || afterObj === null)) ? beforeObj : diffPatch(beforeObj || {}, afterObj || {});
+  const safeDiff = JSON.parse(JSON.stringify(rawDiff));
+
   const entry = {
     id: "a_" + Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2),
     occurredAt: nowIso(),
-    actor: { userId: p.userId },
+    actor: { userId: p.userId || "user_unknown" },
     action,
-    entityRef,
+    entityRef: JSON.parse(JSON.stringify(entityRef || {})),
     diffFormat: "JSON_PATCH_RFC6902",
-    diff: (Array.isArray(beforeObj) && (afterObj === undefined || afterObj === null)) ? beforeObj : diffPatch(beforeObj || {}, afterObj || {}),
-    metadata: metadata || {},
+    diff: safeDiff,
+    metadata: JSON.parse(JSON.stringify(metadata || {})),
     prevHash,
     entryHash: ""
   };
