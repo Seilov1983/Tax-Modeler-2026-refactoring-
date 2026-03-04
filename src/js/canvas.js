@@ -394,8 +394,8 @@ export function renderCanvas(){
   nodesLayer.innerHTML = "";
   arrowsLayer.innerHTML = "";
 
-  const W = Math.max(1000, Math.min(5000, Number(project?.ui?.canvasW || 5000)));
-  const H = Math.max(700, Math.min(5000, Number(project?.ui?.canvasH || 5000)));
+  const W = 5000;
+  const H = 5000;
   board.dataset.w = String(W); board.dataset.h = String(H);
   board.style.width = W + "px"; board.style.height = H + "px";
   const editMode = (project.ui?.editMode || "nodes");
