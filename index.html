@@ -51,13 +51,21 @@
     <div id="main-content" style="flex: 1; position: relative;">
 
         <div id="screen-master" class="app-screen" style="display: none; width: 100%; height: 100%; padding: 30px; overflow-y: auto;">
-            <h2 style="margin-top: 0;">Глобальные Справочники (Master Data)</h2>
-            <div style="display: flex; gap: 15px; margin-bottom: 20px;">
-                <button id="btnImportCountries" class="btn" style="background: #10b981; color: white;">📥 Загрузить Страны (CSV)</button>
-                <button id="btnImportRegimes" class="btn" style="background: #3b82f6; color: white;">📥 Загрузить Режимы (CSV)</button>
-            </div>
-            <div id="masterDataContainer">
-                <p style="color: var(--muted);">Загрузите данные из CSV или добавьте вручную...</p>
+            <div style="max-width: 1200px; margin: 0 auto;">
+
+                <h2 style="margin-top: 0; margin-bottom: 16px;">Базовые вводные (Environment)</h2>
+                <div id="fxDataContainer" class="hierarchical-list" style="margin-bottom: 40px;">
+                </div>
+
+                <h2 style="margin-top: 0; display: flex; align-items: center; justify-content: space-between;">
+                    Глобальные Справочники
+                    <div style="display: flex; gap: 10px;">
+                        <button id="btnImportCountries" class="btn" style="background: var(--ok); color: white;">📥 Загрузить Страны</button>
+                        <button id="btnImportRegimes" class="btn secondary">📥 Загрузить Режимы</button>
+                    </div>
+                </h2>
+                <div id="masterDataContainer" class="hierarchical-list" style="margin-top: 20px;">
+                </div>
             </div>
         </div>
 
