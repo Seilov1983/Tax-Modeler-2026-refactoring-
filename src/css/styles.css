@@ -68,6 +68,17 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg-color);
 .sidebar { padding: 14px; border-right: 1px solid var(--stroke); background: var(--panel); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); overflow-y: auto; display: flex; flex-direction: column; gap: 14px; z-index: 10; }
 .main { position: relative; overflow: hidden; }
 
+/* SPA Navigation */
+.nav-btn { text-align: left; width: 100%; }
+.nav-btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+.app-screen { position: absolute; top: 0; left: 0; }
+
+/* Master Data tables */
+.master-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px; }
+.master-table th { background: var(--panel2); border: 1px solid var(--stroke); padding: 8px 12px; text-align: left; font-weight: 700; font-size: 12px; color: var(--muted); }
+.master-table td { border: 1px solid var(--stroke); padding: 8px 12px; }
+.master-table tr:hover td { background: var(--accent-soft); }
+
 /* Холст и сетка */
 .canvas-grid { background-image: radial-gradient(var(--bg-grid) 1px, transparent 1px); background-size: 24px 24px; position: relative; }
 
