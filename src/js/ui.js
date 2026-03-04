@@ -495,7 +495,7 @@ export function renderPanel(){
               const sep = document.createElement('div'); sep.className = 'sep'; body.appendChild(sep);
               renderAudit(body);
           } else {
-              body.innerHTML = `<div class="item" style="text-align:center; padding: 40px;"><h3 style="color:var(--accent);">Здесь будет Executive Dashboard 📊</h3></div>`;
+              renderDashboard(body); // <-- Вызов нашего нового модуля
           }
       }
   }
@@ -2583,6 +2583,141 @@ function renderFlows(panel){
     }
     taxList.appendChild(it);
   });
+}
+
+// --- АНАЛИТИЧЕСКИЙ ДАШБОРД (Vanilla SVG) ---
+function renderDashboard(panel) {
+    const project = state.project;
+    if (!project) return;
+
+    // 1. Агрегация данных
+    let totalIncomeKZT = 0;
+    const incomeByZone = {};
+
+    listCompanies(project).forEach(co => {
+        const incomeKZT = Number(co.annualIncome || 0);
+        totalIncomeKZT += incomeKZT;
+
+        const z = getZone(project, co.zoneId);
+        const jur = z ? z.jurisdiction : 'Вне юрисдикции';
+        incomeByZone[jur] = (incomeByZone[jur] || 0) + incomeKZT;
+    });
+
+    let totalTaxKZT = 0;
+    const taxesByType = { 'CIT': 0, 'WHT': 0, 'VAT': 0, 'PAYROLL': 0 };
+
+    (project.taxes || []).forEach(t => {
+        if (t.status === 'written_off' || t.status === 'exempted') return;
+        const taxKZT = convert(project, t.amountFunctional, t.functionalCurrency, 'KZT') || 0;
+        totalTaxKZT += taxKZT;
+
+        // Группировка
+        if (t.taxType.includes('CIT')) taxesByType['CIT'] += taxKZT;
+        else if (t.taxType.includes('WHT')) taxesByType['WHT'] += taxKZT;
+        else if (t.taxType.includes('VAT')) taxesByType['VAT'] += taxKZT;
+        else taxesByType['PAYROLL'] += taxKZT; // фоллбэк
+    });
+
+    const globalEtr = totalIncomeKZT > 0 ? (totalTaxKZT / totalIncomeKZT) * 100 : 0;
+
+    // 2. Вспомогательные функции для SVG
+    const createDonutChart = (data, size = 220) => {
+        const center = size / 2;
+        const strokeW = 30;
+        const radius = center - strokeW / 2;
+        const circ = 2 * Math.PI * radius;
+        const total = data.reduce((s, d) => s + d.value, 0);
+
+        if (total === 0) return `<svg width="${size}" height="${size}"><circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--stroke)" stroke-width="${strokeW}"/></svg>`;
+
+        let offset = 0;
+        const circles = data.map(d => {
+            const fraction = d.value / total;
+            const dashArray = `${fraction * circ} ${circ}`;
+            const dashOffset = -offset;
+            offset += fraction * circ;
+            return `<circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--${d.color})" stroke-width="${strokeW}" stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" transform="rotate(-90 ${center} ${center})" style="transition: all 0.5s ease;"></circle>`;
+        }).join('');
+
+        return `
+        <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+            ${circles}
+            <text x="${center}" y="${center - 5}" text-anchor="middle" dominant-baseline="middle" fill="var(--text)" font-size="18" font-weight="800">${formatMoney(total)}</text>
+            <text x="${center}" y="${center + 15}" text-anchor="middle" dominant-baseline="middle" fill="var(--muted)" font-size="11">Всего налогов (KZT)</text>
+        </svg>`;
+    };
+
+    const createBarChart = (dataObj, height = 220) => {
+        const entries = Object.entries(dataObj).sort((a, b) => b[1] - a[1]);
+        if (!entries.length || entries[0][1] === 0) return `<div class="small" style="text-align:center; padding: 40px;">Нет данных</div>`;
+
+        const maxVal = entries[0][1];
+        return `<div style="display:flex; flex-direction:column; gap:12px; height:${height}px; justify-content:center;">` +
+            entries.map(([label, val]) => {
+                const pct = (val / maxVal) * 100;
+                return `
+                <div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px; font-weight:600;">
+                        <span>${escapeHtml(label)}</span>
+                        <span>${formatMoney(val)}</span>
+                    </div>
+                    <div style="width:100%; height:8px; background:var(--stroke); border-radius:4px; overflow:hidden;">
+                        <div style="width:${pct}%; height:100%; background:var(--accent); border-radius:4px; transition: width 0.5s ease;"></div>
+                    </div>
+                </div>`;
+            }).join('') + `</div>`;
+    };
+
+    // 3. Сборка UI Дашборда
+    const c = document.createElement('div');
+    c.className = 'col';
+    c.style.gap = '20px';
+
+    const taxData = [
+        { label: 'CIT (Корп. налог)', value: taxesByType['CIT'], color: 'accent' },
+        { label: 'WHT (У источника)', value: taxesByType['WHT'], color: 'warn' },
+        { label: 'VAT (НДС)', value: taxesByType['VAT'], color: 'ok' },
+        { label: 'Payroll (Зарплатные)', value: taxesByType['PAYROLL'], color: 'danger' }
+    ].filter(d => d.value > 0);
+
+    c.innerHTML = `
+        <div class="row" style="gap: 16px; flex-wrap: nowrap;">
+            <div class="item" style="flex:1; background: var(--panel);">
+                <div class="small">Консолидированная выручка</div>
+                <div style="font-size: 24px; font-weight: 800; margin-top: 4px; color: var(--text);">${formatMoney(totalIncomeKZT)} <span style="font-size:14px; color:var(--muted)">KZT</span></div>
+            </div>
+            <div class="item" style="flex:1; background: var(--panel);">
+                <div class="small">Общая налоговая нагрузка</div>
+                <div style="font-size: 24px; font-weight: 800; margin-top: 4px; color: var(--danger);">${formatMoney(totalTaxKZT)} <span style="font-size:14px; color:var(--muted)">KZT</span></div>
+            </div>
+            <div class="item" style="flex:1; background: var(--panel);">
+                <div class="small">Global ETR (Эффективная ставка)</div>
+                <div style="font-size: 24px; font-weight: 800; margin-top: 4px; color: ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};">${bankersRound2(globalEtr)}%</div>
+            </div>
+        </div>
+
+        <div class="row" style="gap: 16px; align-items: stretch;">
+            <div class="item" style="flex: 1; min-width: 300px; display:flex; flex-direction:column; align-items:center;">
+                <div class="title" style="align-self: flex-start;">Структура налогов</div>
+                <div style="margin-top: 10px;">${createDonutChart(taxData)}</div>
+                <div style="display:flex; flex-wrap:wrap; gap:12px; margin-top:20px; justify-content:center;">
+                    ${taxData.map(d => `
+                        <div style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600;">
+                            <div style="width:10px; height:10px; border-radius:50%; background:var(--${d.color})"></div>
+                            ${d.label}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div class="item" style="flex: 1; min-width: 300px;">
+                <div class="title">Выручка по юрисдикциям (KZT)</div>
+                <div style="margin-top: 16px;">${createBarChart(incomeByZone)}</div>
+            </div>
+        </div>
+    `;
+
+    panel.appendChild(c);
 }
 
 function renderAudit(panel){
