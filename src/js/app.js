@@ -23,7 +23,7 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
   project.flows.forEach(f=>updateFlowCompliance(project, f));
   recomputeFrozen(project); recomputeRisks(project);
 
-  // Внедряем кнопки "Demo" и "Empty" 
+  // Внедряем кнопки "Demo" и "Empty" (Безопасная проверка)
   const btnNew = document.getElementById('btnNew');
   if (btnNew) {
       const p = btnNew.parentNode;
@@ -42,26 +42,8 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
       btnNew.onclick = ()=>{ 
           if(confirm("Сбросить текущий холст и создать Демо-проект?")) { localStorage.removeItem(STORAGE_KEY); state.project = defaultProject(); save(); toast("Создан демо-проект"); render(); }
       };
-      document.getElementById('btnNewEmpty').onclick = () => {
-          if(confirm("Очистить холст и потоки? (База стран и налоговых режимов останется нетронутой)")) {
-              // 1. Сохраняем "золотые" Мастер-данные перед очисткой
-              const savedCatalogs = state.project.catalogs;
-              const savedMD = state.project.masterData;
-              const savedActiveJurs = state.project.activeJurisdictions;
-
-              // 2. Сбрасываем проект
-              localStorage.removeItem(STORAGE_KEY);
-              state.project = emptyProject();
-
-              // 3. Возвращаем Мастер-данные обратно в пустой проект
-              state.project.catalogs = savedCatalogs;
-              state.project.masterData = savedMD;
-              state.project.activeJurisdictions = savedActiveJurs;
-
-              save();
-              toast("Проект очищен. Справочники сохранены.");
-              render();
-          }
+      document.getElementById('btnNewEmpty').onclick = ()=>{ 
+          if(confirm("Сбросить текущий холст и создать Пустой проект?")) { localStorage.removeItem(STORAGE_KEY); state.project = emptyProject(); save(); toast("Создан пустой проект"); render(); }
       };
   }
   
@@ -70,8 +52,12 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
       if(confirm("Полностью очистить кэш и создать пустой холст?")) { localStorage.removeItem(STORAGE_KEY); state.project = emptyProject(); save(); toast("Очищено"); render(); }
   };
   
-  document.getElementById('btnExport').onclick = exportJson;
-  document.getElementById('btnImport').onclick = importJson;
+  // --- ИСПРАВЛЕНИЕ ОШИБКИ: БЕЗОПАСНАЯ ПРИВЯЗКА СОБЫТИЙ ---
+  const btnExport = document.getElementById('btnExport');
+  if (btnExport) btnExport.onclick = exportJson;
+  
+  const btnImport = document.getElementById('btnImport');
+  if (btnImport) btnImport.onclick = importJson;
   
   window.onblur = onPointerCancel;
   document.addEventListener('visibilitychange', ()=>{ if (document.hidden) onPointerCancel(); });
@@ -83,16 +69,69 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
   initCsvImporters();  // CSV-импорт стран и режимов
 
   if (project.readOnly) toast("Audit log нарушен. Режим read-only.");
-  // --- Переключение темной/светлой темы ---
+
+  // --- НОВЫЙ БЛОК: ГЛОБАЛЬНЫЕ НАСТРОЙКИ (ШЕСТЕРЕНКА В ТОП-БАРЕ) ---
+  const btnSettings = document.getElementById('btnSettings');
+  if (btnSettings) {
+      btnSettings.onclick = () => {
+          if (document.getElementById('sysSettingsModal')) document.getElementById('sysSettingsModal').remove();
+
+          const overlay = document.createElement('div');
+          overlay.id = 'sysSettingsModal';
+          overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.4); backdrop-filter:var(--blur); -webkit-backdrop-filter:var(--blur); display:flex; align-items:center; justify-content:center; z-index:9999;";
+
+          const isDark = document.body.classList.contains('dark-mode');
+
+          overlay.innerHTML = `
+              <div style="background: var(--panel); padding: 24px; border-radius: 16px; width: 340px; border: 1px solid var(--stroke); box-shadow: var(--shadow); color: var(--text);">
+                  <h3 style="margin-top:0; margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center;">
+                      Настройки ⚙️ 
+                      <span class="badge ok">v2.4.1</span>
+                  </h3>
+                  
+                  <div class="col" style="gap: 12px;">
+                      <button class="btn secondary" id="mdlBtnExport">📥 Экспорт проекта (JSON)</button>
+                      <button class="btn secondary" id="mdlBtnImport">📤 Импорт проекта (JSON)</button>
+                      <div class="sep"></div>
+                      <button class="btn secondary" id="mdlBtnTheme">${isDark ? '☀️ Включить светлую тему' : '🌙 Включить тёмную тему'}</button>
+                      <button class="btn secondary" id="mdlBtnClear" style="color: var(--danger); border-color: var(--danger-soft);">🗑 Сбросить проект (Очистить)</button>
+                  </div>
+
+                  <div class="sep" style="margin: 16px 0;"></div>
+                  <button class="btn" id="mdlBtnClose" style="width:100%;">Закрыть</button>
+              </div>
+          `;
+          document.body.appendChild(overlay);
+
+          document.getElementById('mdlBtnClose').onclick = () => overlay.remove();
+          
+          document.getElementById('mdlBtnExport').onclick = () => { exportJson(); overlay.remove(); };
+          document.getElementById('mdlBtnImport').onclick = () => { importJson(); overlay.remove(); };
+          
+          document.getElementById('mdlBtnTheme').onclick = () => {
+              document.body.classList.toggle('dark-mode');
+              overlay.remove();
+          };
+          
+          document.getElementById('mdlBtnClear').onclick = () => {
+              if(confirm("Внимание! Текущий проект будет удален. Создать пустой холст?")) { 
+                  localStorage.removeItem(STORAGE_KEY); 
+                  state.project = emptyProject(); 
+                  save(); toast("Проект очищен"); render(); overlay.remove(); 
+              }
+          };
+      };
+  }
+
+  // Запасная проверка для старой кнопки темы (если где-то осталась)
   const themeToggle = document.getElementById('themeToggle');
   const themeIcon = document.getElementById('themeIcon');
   if (themeToggle) {
     themeToggle.onclick = () => {
       document.body.classList.toggle('dark-mode');
-      const isDark = document.body.classList.contains('dark-mode');
-      themeIcon.textContent = isDark ? '☀️' : '🌓';
-      // Можно даже сохранить выбор в localStorage, если захотите
+      if (themeIcon) themeIcon.textContent = document.body.classList.contains('dark-mode') ? '☀️' : '🌓';
     };
   }
+  
   render();
 })();
