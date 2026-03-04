@@ -3001,6 +3001,87 @@ export function initRouter() {
 export function renderMasterDataTables() {
     const project = state.project;
     if (!project) return;
+
+    // --- 1. РЕНДЕР БАЗОВЫХ ВВОДНЫХ (FX & ENVIRONMENT) ---
+    const fxContainer = document.getElementById('fxDataContainer');
+    if (fxContainer) {
+        // Убедимся, что объект fx существует
+        project.fx = project.fx || { fxDate: "2026-01-15", rateToKZT: { KZT: 1 }, source: "manual" };
+        project.fx.rateToKZT = project.fx.rateToKZT || { KZT: 1 };
+
+        const ccyKeys = Object.keys(project.fx.rateToKZT).filter(x => x && x !== 'KZT').sort();
+
+        let fxHtml = `
+            <div class="md-row" id="fxRow">
+                <div class="md-header" style="grid-template-columns: 1fr 2fr auto;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="small" style="font-weight:700;">Дата курсов (fxDate)</span>
+                        <input class="md-input fx-input" type="date" value="${escapeHtml(project.fx.fxDate)}" data-orig="${escapeHtml(project.fx.fxDate)}" id="fxDateInp"/>
+                    </div>
+
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <span class="small">KZT</span>
+                            <input class="md-input" disabled value="1.00" style="width:70px; background:var(--bg-grid);"/>
+                        </div>
+                        ${ccyKeys.map(ccy => `
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span class="small">${escapeHtml(ccy)}</span>
+                                <input class="md-input fx-input" type="number" step="0.01" min="0" value="${project.fx.rateToKZT[ccy]}" data-orig="${project.fx.rateToKZT[ccy]}" id="fx_${ccy}" style="width:80px;"/>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <div class="md-actions" id="fxActions">
+                        <button class="btn ok" style="padding:6px 12px;" id="fxSave">✓ Сохранить и пересчитать</button>
+                        <button class="btn secondary" style="padding:6px 12px;" id="fxCancel">✕</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        fxContainer.innerHTML = fxHtml;
+
+        // Логика Inline-редактирования для FX
+        const fxRow = document.getElementById('fxRow');
+        const fxInputs = fxRow.querySelectorAll('.fx-input');
+
+        const checkFxChanges = () => {
+            const isChanged = Array.from(fxInputs).some(inp => inp.value !== inp.getAttribute('data-orig'));
+            fxRow.classList.toggle('modified', isChanged);
+        };
+
+        fxInputs.forEach(inp => inp.addEventListener('input', checkFxChanges));
+
+        document.getElementById('fxCancel').onclick = () => {
+            fxInputs.forEach(inp => inp.value = inp.getAttribute('data-orig'));
+            checkFxChanges();
+        };
+
+        document.getElementById('fxSave').onclick = () => {
+            // Собираем данные
+            project.fx.fxDate = document.getElementById('fxDateInp').value;
+            ccyKeys.forEach(ccy => {
+                const val = Number(document.getElementById(`fx_${ccy}`).value);
+                if (isFinite(val) && val > 0) project.fx.rateToKZT[ccy] = val;
+            });
+
+            // Пересчёт рисков и лимитов при изменении курсов
+            if (project.flows) {
+                project.flows.forEach(f => updateFlowCompliance(project, f));
+            }
+            recomputeFrozen(project);
+            recomputeRisks(project);
+
+            save(); // Сохраняем в LocalStorage
+
+            // Обновляем UI (прячем кнопки)
+            fxInputs.forEach(inp => inp.setAttribute('data-orig', inp.value));
+            checkFxChanges();
+            toast("Курсы обновлены, пересчет выполнен");
+        };
+    }
+
+    // --- 2. РЕНДЕР СТРАН И РЕЖИМОВ ---
     const container = document.getElementById('masterDataContainer');
     if (!container) return;
 
