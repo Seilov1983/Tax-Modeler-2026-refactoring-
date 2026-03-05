@@ -445,45 +445,29 @@ export function render(){
 }
 
 export function renderPanel(){
-  // Находим контейнеры нового SPA интерфейса
-  const panelModeling = document.getElementById('panel'); // Плавающая панель на канвасе
-  const containerMaster = document.getElementById('masterDataContainer'); // Экран справочников
-  const containerAnalytics = document.getElementById('dashboardContainer'); // Экран аналитики
+  const panelModeling = document.getElementById('panel');
+  const containerMaster = document.getElementById('masterDataContainer');
+  const containerAnalytics = document.getElementById('dashboardContainer');
 
   if (panelModeling) panelModeling.innerHTML = "";
 
   if (uiState.activeTab === "master") {
-      // Рендерим настройки в полноэкранный контейнер
       if (containerMaster) {
           containerMaster.innerHTML = "";
-          uiState.settingsSubTab = uiState.settingsSubTab || "jurisdictions";
-          renderSettings(containerMaster); // Отправляем старые настройки сюда!
-
-          // Рендерим наши новые загруженные CSV таблицы ниже
-          const div = document.createElement('div');
-          div.style.marginTop = "30px";
-          containerMaster.appendChild(div);
-          // Вызов функции отрисовки CSV таблиц (напишем/вызовем её, если она есть)
-          if (typeof renderMasterDataTables === 'function') {
-               const wrap = document.createElement('div');
-               wrap.id = "csvTableWrap";
-               containerMaster.appendChild(wrap);
-               renderMasterDataTables();
-          }
+          if (typeof renderMasterDataTables === 'function') renderMasterDataTables();
       }
   }
   else if (uiState.activeTab === "analytics") {
-      // Рендерим аналитику и D-MACE в полноэкранный контейнер
       if (containerAnalytics) {
           containerAnalytics.innerHTML = "";
           uiState.analyticsTab = uiState.analyticsTab || "dashboard";
 
           const c = document.createElement('div');
           c.innerHTML = `
-            <div class="row" style="margin-bottom:16px; gap:8px; border-bottom:1px solid var(--stroke); padding-bottom:10px;">
+            <div class="row" style="margin-bottom:20px; gap:8px; border-bottom:1px solid var(--stroke); padding-bottom:10px;">
               <button class="tab ${uiState.analyticsTab==='dashboard'?'active':''}" id="tDash">Executive Dashboard</button>
               <button class="tab ${uiState.analyticsTab==='risks'?'active':''}" id="tRisks">Риски (D-MACE)</button>
-              <button class="tab ${uiState.analyticsTab==='audit'?'active':''}" id="tAudit">Системные Журналы</button>
+              <button class="tab ${uiState.analyticsTab==='audit'?'active':''}" id="tAudit">Audit Log</button>
             </div>
             <div id="analyticsBody"></div>
           `;
@@ -494,27 +478,27 @@ export function renderPanel(){
           c.querySelector('#tAudit').onclick = () => { uiState.analyticsTab='audit'; renderPanel(); };
 
           const body = c.querySelector('#analyticsBody');
+
           if (uiState.analyticsTab === 'risks') renderRisks(body);
           else if (uiState.analyticsTab === 'audit') {
               renderPipeline(body);
               const sep = document.createElement('div'); sep.className = 'sep'; body.appendChild(sep);
               renderAudit(body);
           } else {
-              renderDashboard(body); // <-- Вызов нашего нового модуля
+              renderDashboard(body);
           }
       }
   }
   else {
-      // Активна вкладка "Моделирование" - оставляем Потоки и Владение в плавающей панели
       if (!panelModeling) return;
-      uiState.modelingTab = uiState.modelingTab || "flows";
+      if (!uiState.modelingTab || uiState.modelingTab === 'canvas') uiState.modelingTab = "flows";
 
       const c = document.createElement('div');
       c.innerHTML = `
         <div class="row" style="margin-bottom:16px; gap:8px; border-bottom:1px solid var(--stroke); padding-bottom:10px;">
           <button class="tab ${uiState.modelingTab==='flows'?'active':''}" id="tFlows">Потоки</button>
           <button class="tab ${uiState.modelingTab==='ownership'?'active':''}" id="tOwn">Владение</button>
-          <button class="tab ${uiState.modelingTab==='canvas'?'active':''}" id="tCanv">Канвас</button>
+          <button class="tab ${uiState.modelingTab==='canvas'?'active':''}" id="tCanv">Элементы</button>
         </div>
         <div id="modelingBody"></div>
       `;
@@ -2597,75 +2581,47 @@ export function renderDashboard(panel) {
 
     let totalIncomeKZT = 0;
     const incomeByZone = {};
-
     listCompanies(project).forEach(co => {
-        const incomeKZT = Number(co.annualIncome || 0);
-        totalIncomeKZT += incomeKZT;
-        const z = getZone(project, co.zoneId);
-        const jur = z ? z.jurisdiction : 'Вне юрисдикции';
+        const incomeKZT = Number(co.annualIncome || 0); totalIncomeKZT += incomeKZT;
+        const z = getZone(project, co.zoneId); const jur = z ? z.jurisdiction : 'Вне юрисдикции';
         incomeByZone[jur] = (incomeByZone[jur] || 0) + incomeKZT;
     });
 
     let totalTaxKZT = 0;
-    const taxesByType = { 'CIT (Корпоративный)': 0, 'WHT (У источника)': 0, 'VAT (НДС)': 0, 'Payroll (Зарплатные)': 0 };
-
+    const taxesByType = { 'CIT': 0, 'WHT': 0, 'VAT': 0 };
     (project.taxes || []).forEach(t => {
         if (['written_off', 'exempted', 'offset_cleared'].includes(t.status)) return;
-        const taxKZT = convert(project, t.amountFunctional, t.functionalCurrency, 'KZT') || 0;
-        totalTaxKZT += taxKZT;
-
-        if (t.taxType.includes('CIT')) taxesByType['CIT (Корпоративный)'] += taxKZT;
-        else if (t.taxType.includes('WHT')) taxesByType['WHT (У источника)'] += taxKZT;
-        else if (t.taxType.includes('VAT')) taxesByType['VAT (НДС)'] += taxKZT;
-        else taxesByType['Payroll (Зарплатные)'] += taxKZT;
+        const taxKZT = convert(project, t.amountFunctional, t.functionalCurrency, 'KZT') || 0; totalTaxKZT += taxKZT;
+        if (t.taxType.includes('CIT')) taxesByType['CIT'] += taxKZT;
+        else if (t.taxType.includes('WHT')) taxesByType['WHT'] += taxKZT;
+        else if (t.taxType.includes('VAT')) taxesByType['VAT'] += taxKZT;
     });
 
     const globalEtr = totalIncomeKZT > 0 ? (totalTaxKZT / totalIncomeKZT) * 100 : 0;
 
-    const createDonutChart = (dataObj, size = 240) => {
+    const createDonutChart = (dataObj, size = 200) => {
         const data = Object.entries(dataObj).filter(([_, val]) => val > 0).map(([label, value], i) => ({ label, value, color: ['accent', 'warn', 'ok', 'danger'][i % 4] }));
-        const center = size / 2, strokeW = 35, radius = center - strokeW / 2, circ = 2 * Math.PI * radius;
+        const center = size / 2, strokeW = 30, radius = center - strokeW / 2, circ = 2 * Math.PI * radius;
         const total = data.reduce((s, d) => s + d.value, 0);
-
-        if (total === 0) return `<svg width="${size}" height="${size}"><circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--stroke)" stroke-width="${strokeW}"/></svg><div class="small" style="text-align:center; margin-top:10px;">Нет налогов</div>`;
-
+        if (total === 0) return `<svg width="${size}" height="${size}"><circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--stroke)" stroke-width="${strokeW}"/></svg>`;
         let offset = 0;
         const circles = data.map(d => {
-            const fraction = d.value / total, dashArray = `${fraction * circ} ${circ}`, dashOffset = -offset;
-            offset += fraction * circ;
-            return `<circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--${d.color})" stroke-width="${strokeW}" stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" transform="rotate(-90 ${center} ${center})" style="transition: all 0.5s ease;"><title>${d.label}: ${formatMoney(d.value)} KZT</title></circle>`;
+            const fraction = d.value / total, dashArray = `${fraction * circ} ${circ}`, dashOffset = -offset; offset += fraction * circ;
+            return `<circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--${d.color})" stroke-width="${strokeW}" stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" transform="rotate(-90 ${center} ${center})" style="transition: all 0.5s ease;"></circle>`;
         }).join('');
-
-        const legend = data.map(d => `<div style="display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:600; margin-bottom:6px;"><div style="display:flex; align-items:center; gap:6px;"><div style="width:10px; height:10px; border-radius:50%; background:var(--${d.color})"></div>${d.label}</div><span>${formatMoney(d.value)}</span></div>`).join('');
-
-        return `<div style="display:flex; gap: 30px; align-items: center; justify-content: center; flex-wrap: wrap;"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${circles}<text x="${center}" y="${center - 5}" text-anchor="middle" dominant-baseline="middle" fill="var(--text)" font-size="16" font-weight="800">${formatMoney(total)}</text><text x="${center}" y="${center + 15}" text-anchor="middle" dominant-baseline="middle" fill="var(--muted)" font-size="10">Всего налогов (KZT)</text></svg><div style="min-width: 200px;">${legend}</div></div>`;
-    };
-
-    const createBarChart = (dataObj) => {
-        const entries = Object.entries(dataObj).filter(([_, val]) => val > 0).sort((a, b) => b[1] - a[1]);
-        if (!entries.length) return `<div class="small" style="text-align:center; padding: 20px;">Нет доходов</div>`;
-        const maxVal = entries[0][1];
-        return `<div class="col" style="gap:12px; justify-content:center; margin-top: 10px;">` + entries.map(([label, val]) => `<div style="margin-bottom: 8px;"><div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px; font-weight:600;"><span>${escapeHtml(label)}</span><span>${formatMoney(val)} KZT</span></div><div style="width:100%; height:10px; background:var(--stroke); border-radius:5px; overflow:hidden;"><div style="width:${(val / maxVal) * 100}%; height:100%; background:var(--accent); border-radius:5px; transition: width 0.5s ease;"></div></div></div>`).join('') + `</div>`;
+        const legend = data.map(d => `<div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; margin-bottom:4px;"><div style="display:flex; gap:6px; align-items:center;"><div style="width:10px;height:10px;border-radius:50%;background:var(--${d.color})"></div>${d.label}</div><span>${formatMoney(d.value)}</span></div>`).join('');
+        return `<div style="display:flex; gap:20px; align-items:center; justify-content:center; flex-wrap:wrap;"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${circles}<text x="${center}" y="${center}" text-anchor="middle" dominant-baseline="middle" fill="var(--text)" font-size="14" font-weight="800">${formatMoney(total)}</text></svg><div style="min-width: 200px;">${legend}</div></div>`;
     };
 
     const c = document.createElement('div');
     c.className = 'col'; c.style.gap = '20px';
     c.innerHTML = `
         <div class="row" style="gap: 16px; flex-wrap: wrap;">
-            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid var(--ok);">
-                <div class="small">Выручка группы</div><div style="font-size: 22px; font-weight: 800; margin-top: 4px; color: var(--text);">${formatMoney(totalIncomeKZT)} <span style="font-size:12px; color:var(--muted)">KZT</span></div>
-            </div>
-            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid var(--danger);">
-                <div class="small">Налоговая нагрузка</div><div style="font-size: 22px; font-weight: 800; margin-top: 4px; color: var(--danger);">${formatMoney(totalTaxKZT)} <span style="font-size:12px; color:var(--muted)">KZT</span></div>
-            </div>
-            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};">
-                <div class="small">Global ETR</div><div style="display: flex; align-items: baseline; gap: 8px;"><div style="font-size: 22px; font-weight: 800; margin-top: 4px; color: ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};">${bankersRound2(globalEtr)}%</div>${globalEtr < 15 ? '<span class="badge danger" style="font-size:10px;">Pillar 2 Risk</span>' : '<span class="badge ok" style="font-size:10px;">Safe Harbor</span>'}</div>
-            </div>
+            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid var(--ok);"><div class="small">Консолидированная выручка</div><div style="font-size: 20px; font-weight: 800; color: var(--text);">${formatMoney(totalIncomeKZT)} <span style="font-size:12px; color:var(--muted)">KZT</span></div></div>
+            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid var(--danger);"><div class="small">Налоговая нагрузка</div><div style="font-size: 20px; font-weight: 800; color: var(--danger);">${formatMoney(totalTaxKZT)} <span style="font-size:12px; color:var(--muted)">KZT</span></div></div>
+            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};"><div class="small">Global ETR</div><div style="display: flex; align-items: baseline; gap: 8px;"><div style="font-size: 20px; font-weight: 800; color: ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};">${bankersRound2(globalEtr)}%</div></div></div>
         </div>
-        <div class="row" style="gap: 20px; align-items: stretch; flex-wrap: wrap;">
-            <div class="item" style="flex: 2; min-width: 350px;"><div class="title" style="margin-bottom: 20px;">Структура налогов (Consolidated)</div>${createDonutChart(taxesByType)}</div>
-            <div class="item" style="flex: 1; min-width: 300px;"><div class="title">Концентрация выручки</div>${createBarChart(incomeByZone)}</div>
-        </div>
+        <div class="item" style="margin-top: 10px;"><div class="title" style="margin-bottom: 20px; text-align:center;">Структура налогов группы</div>${createDonutChart(taxesByType)}</div>
     `;
     panel.appendChild(c);
 }
@@ -2889,76 +2845,41 @@ export async function importJson(){
 
 // ── SPA Router: переключение полноэкранных вкладок ──
 export function initRouter() {
-    const navButtons = document.querySelectorAll('.nav-btn');
+    const navButtons = document.querySelectorAll('.top-tab');
     const screens = document.querySelectorAll('.app-screen');
-    const sidebarPanelWrap = document.getElementById('sidebarPanelWrap');
-    const tabsEl = document.getElementById('tabs');
 
     navButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
             const targetId = e.currentTarget.getAttribute('data-target');
 
-            // Синхронизируем старый стейт с новым левым меню
             if (targetId === 'screen-master') uiState.activeTab = "master";
             else if (targetId === 'screen-analytics') uiState.activeTab = "analytics";
             else uiState.activeTab = "modeling";
 
-            // 1. Обновляем активную кнопку в меню
-            navButtons.forEach(b => {
-                b.classList.remove('primary');
-                b.classList.add('secondary');
-            });
-            e.currentTarget.classList.remove('secondary');
-            e.currentTarget.classList.add('primary');
+            navButtons.forEach(b => b.classList.remove('active'));
+            e.currentTarget.classList.add('active');
 
-            // 2. Скрываем все экраны и показываем нужный
-            screens.forEach(screen => {
-                screen.style.display = 'none';
-            });
+            screens.forEach(screen => screen.style.display = 'none');
             const activeScreen = document.getElementById(targetId);
             if (activeScreen) activeScreen.style.display = 'block';
 
-            // 3. Показываем/скрываем боковую панель с табами для моделирования
-            if (targetId === 'screen-modeling') {
-                if (sidebarPanelWrap) sidebarPanelWrap.style.display = 'block';
-                if (tabsEl) tabsEl.style.display = 'flex';
-            } else {
-                if (sidebarPanelWrap) sidebarPanelWrap.style.display = 'none';
-                if (tabsEl) tabsEl.style.display = 'none';
-            }
-
-            // 4. Guard-rails
-            if (targetId === 'screen-analytics') {
-                window.dispatchEvent(new Event('resize'));
-            }
-            if (targetId === 'screen-master') {
-                renderMasterDataTables();
-            }
-            if (targetId === 'screen-modeling') {
-                renderCanvas();
-            }
+            if (targetId === 'screen-analytics') window.dispatchEvent(new Event('resize'));
+            if (targetId === 'screen-master' && typeof renderMasterDataTables === 'function') renderMasterDataTables();
+            if (targetId === 'screen-modeling') renderCanvas();
 
             renderPanel();
         });
     });
-
-    // По умолчанию: моделирование активно
-    if (sidebarPanelWrap) sidebarPanelWrap.style.display = 'block';
-    if (tabsEl) tabsEl.style.display = 'flex';
 }
 
-// ── Рендер таблиц Master Data (экран Мастер-данные) ──
 export function renderMasterDataTables() {
     const project = state.project;
     if (!project) return;
 
-    // --- 1. РЕНДЕР БАЗОВЫХ ВВОДНЫХ (FX & ENVIRONMENT) ---
     const fxContainer = document.getElementById('fxDataContainer');
     if (fxContainer) {
-        // Убедимся, что объект fx существует
         project.fx = project.fx || { fxDate: "2026-01-15", rateToKZT: { KZT: 1 }, source: "manual" };
         project.fx.rateToKZT = project.fx.rateToKZT || { KZT: 1 };
-
         const ccyKeys = Object.keys(project.fx.rateToKZT).filter(x => x && x !== 'KZT').sort();
 
         let fxHtml = `
@@ -2968,20 +2889,10 @@ export function renderMasterDataTables() {
                         <span class="small" style="font-weight:700;">Дата курсов (fxDate)</span>
                         <input class="md-input fx-input" type="date" value="${escapeHtml(project.fx.fxDate)}" data-orig="${escapeHtml(project.fx.fxDate)}" id="fxDateInp"/>
                     </div>
-
                     <div style="display:flex; gap:12px; flex-wrap:wrap;">
-                        <div style="display:flex; align-items:center; gap:6px;">
-                            <span class="small">KZT</span>
-                            <input class="md-input" disabled value="1.00" style="width:70px; background:var(--bg-grid);"/>
-                        </div>
-                        ${ccyKeys.map(ccy => `
-                            <div style="display:flex; align-items:center; gap:6px;">
-                                <span class="small">${escapeHtml(ccy)}</span>
-                                <input class="md-input fx-input" type="number" step="0.01" min="0" value="${project.fx.rateToKZT[ccy]}" data-orig="${project.fx.rateToKZT[ccy]}" id="fx_${ccy}" style="width:80px;"/>
-                            </div>
-                        `).join('')}
+                        <div style="display:flex; align-items:center; gap:6px;"><span class="small">KZT</span><input class="md-input" disabled value="1.00" style="width:70px; background:var(--bg-grid);"/></div>
+                        ${ccyKeys.map(ccy => `<div style="display:flex; align-items:center; gap:6px;"><span class="small">${escapeHtml(ccy)}</span><input class="md-input fx-input" type="number" step="0.01" min="0" value="${project.fx.rateToKZT[ccy]}" data-orig="${project.fx.rateToKZT[ccy]}" id="fx_${ccy}" style="width:80px;"/></div>`).join('')}
                     </div>
-
                     <div class="md-actions" id="fxActions">
                         <button class="btn ok" style="padding:6px 12px;" id="fxSave">✓ Сохранить и пересчитать</button>
                         <button class="btn secondary" style="padding:6px 12px;" id="fxCancel">✕</button>
@@ -2991,81 +2902,32 @@ export function renderMasterDataTables() {
         `;
         fxContainer.innerHTML = fxHtml;
 
-        // Логика Inline-редактирования для FX
         const fxRow = document.getElementById('fxRow');
         const fxInputs = fxRow.querySelectorAll('.fx-input');
-
-        const checkFxChanges = () => {
-            const isChanged = Array.from(fxInputs).some(inp => inp.value !== inp.getAttribute('data-orig'));
-            fxRow.classList.toggle('modified', isChanged);
-        };
-
+        const checkFxChanges = () => { fxRow.classList.toggle('modified', Array.from(fxInputs).some(inp => inp.value !== inp.getAttribute('data-orig'))); };
         fxInputs.forEach(inp => inp.addEventListener('input', checkFxChanges));
-
-        document.getElementById('fxCancel').onclick = () => {
-            fxInputs.forEach(inp => inp.value = inp.getAttribute('data-orig'));
-            checkFxChanges();
-        };
-
+        document.getElementById('fxCancel').onclick = () => { fxInputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkFxChanges(); };
         document.getElementById('fxSave').onclick = () => {
-            // Собираем данные
             project.fx.fxDate = document.getElementById('fxDateInp').value;
-            ccyKeys.forEach(ccy => {
-                const val = Number(document.getElementById(`fx_${ccy}`).value);
-                if (isFinite(val) && val > 0) project.fx.rateToKZT[ccy] = val;
-            });
-
-            // Пересчёт рисков и лимитов при изменении курсов
-            if (project.flows) {
-                project.flows.forEach(f => updateFlowCompliance(project, f));
-            }
-            recomputeFrozen(project);
-            recomputeRisks(project);
-
-            save(); // Сохраняем в LocalStorage
-
-            // Обновляем UI (прячем кнопки)
-            fxInputs.forEach(inp => inp.setAttribute('data-orig', inp.value));
-            checkFxChanges();
-            toast("Курсы обновлены, пересчет выполнен");
+            ccyKeys.forEach(ccy => { const val = Number(document.getElementById(`fx_${ccy}`).value); if (isFinite(val) && val > 0) project.fx.rateToKZT[ccy] = val; });
+            if (project.flows) project.flows.forEach(f => updateFlowCompliance(project, f));
+            recomputeFrozen(project); recomputeRisks(project); save();
+            fxInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkFxChanges(); toast("Курсы обновлены");
         };
     }
 
-    // --- 2. РЕНДЕР СТРАН И РЕЖИМОВ ---
     const container = document.getElementById('masterDataContainer');
     if (!container) return;
-
     const jurisdictions = project.catalogs?.jurisdictions || [];
     const masterData = project.masterData || {};
 
-    if (jurisdictions.length === 0) {
-        container.innerHTML = '<p style="color: var(--muted);">Нет загруженных данных. Используйте кнопку «Загрузить Страны (CSV)» для импорта.</p>';
-        return;
-    }
+    if (jurisdictions.length === 0) { container.innerHTML = '<p style="color: var(--muted); text-align:center;">Нет данных. Загрузите страны.</p>'; return; }
 
-    let html = '<h3 style="margin-top: 0;">Юрисдикции (' + jurisdictions.length + ')</h3>';
-    html += '<table class="master-table"><thead><tr>';
-    html += '<th>Код</th><th>Название</th><th>Флаг</th><th>Валюта</th><th>Срок давности</th><th>CFC</th><th>Pillar Two</th><th>MCI</th><th>Мин. зарплата</th><th>Порог НДС</th>';
-    html += '</tr></thead><tbody>';
-
+    let html = '<h3 style="margin-top: 0;">Юрисдикции</h3><table style="width:100%; text-align:left; border-collapse: collapse;"><thead><tr><th style="border-bottom:1px solid var(--stroke); padding:8px;">Код</th><th style="border-bottom:1px solid var(--stroke); padding:8px;">Название</th><th style="border-bottom:1px solid var(--stroke); padding:8px;">Валюта</th></tr></thead><tbody>';
     jurisdictions.forEach(j => {
         const md = masterData[j.id] || {};
-        const mc = md.macroConstants || {};
-        const th = md.thresholds || {};
-        html += '<tr>';
-        html += '<td><strong>' + escapeHtml(j.id) + '</strong></td>';
-        html += '<td>' + escapeHtml(j.name || '') + '</td>';
-        html += '<td>' + escapeHtml(j.flag || '') + '</td>';
-        html += '<td>' + escapeHtml(md.baseCurrency || '—') + '</td>';
-        html += '<td>' + (md.statuteOfLimitationsYears || '—') + '</td>';
-        html += '<td>' + (md.cfcRulesActive ? '✅' : '—') + '</td>';
-        html += '<td>' + (md.pillarTwoActive ? '✅' : '—') + '</td>';
-        html += '<td>' + (mc.mciValue != null ? mc.mciValue.toLocaleString() : '—') + '</td>';
-        html += '<td>' + (mc.minWage != null ? mc.minWage.toLocaleString() : '—') + '</td>';
-        html += '<td>' + (th.vatRegistrationBaseCurrency != null ? th.vatRegistrationBaseCurrency.toLocaleString() : '—') + '</td>';
-        html += '</tr>';
+        html += `<tr><td style="padding:8px; border-bottom:1px solid var(--stroke);"><strong>${escapeHtml(j.id)}</strong></td><td style="padding:8px; border-bottom:1px solid var(--stroke);">${escapeHtml(j.name || '')}</td><td style="padding:8px; border-bottom:1px solid var(--stroke);">${escapeHtml(md.baseCurrency || '—')}</td></tr>`;
     });
-
     html += '</tbody></table>';
     container.innerHTML = html;
 }

@@ -23,7 +23,7 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
   project.flows.forEach(f=>updateFlowCompliance(project, f));
   recomputeFrozen(project); recomputeRisks(project);
 
-  // Безопасная инициализация кнопок (Guard-rails)
+  // ПРАВИЛЬНОЕ РЕШЕНИЕ: Защитные проверки (Guard-rails) при биндинге событий
   const btnNew = document.getElementById('btnNew');
   if (btnNew) {
       const p = btnNew.parentNode;
@@ -40,52 +40,60 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
   const btnClear = document.getElementById('btnClear');
   if (btnClear) btnClear.onclick = ()=>{ if(confirm("Очистить проект?")) { localStorage.removeItem(STORAGE_KEY); state.project = emptyProject(); save(); toast("Очищено"); render(); } };
 
-  const btnExport = document.getElementById('btnExport'); if (btnExport) btnExport.onclick = exportJson;
-  const btnImport = document.getElementById('btnImport'); if (btnImport) btnImport.onclick = importJson;
+  const btnExport = document.getElementById('btnExport');
+  if (btnExport) btnExport.onclick = exportJson;
+
+  const btnImport = document.getElementById('btnImport');
+  if (btnImport) btnImport.onclick = importJson;
 
   window.onblur = onPointerCancel;
   document.addEventListener('visibilitychange', ()=>{ if (document.hidden) onPointerCancel(); });
 
-  initBoardInteractions(); initCreation(); initRouter(); initCsvImporters();
+  initBoardInteractions();
+  initCreation();
+  initRouter();
+  initCsvImporters();
 
   if (project.readOnly) toast("Audit log нарушен. Режим read-only.");
 
-  // Глобальные настройки (Шестеренка в Top-bar)
+  // ЛОГИКА ГЛОБАЛЬНЫХ НАСТРОЕК (ШЕСТЕРЕНКА)
   const btnSettings = document.getElementById('btnSettings');
   if (btnSettings) {
       btnSettings.onclick = () => {
           if (document.getElementById('sysSettingsModal')) document.getElementById('sysSettingsModal').remove();
           const overlay = document.createElement('div');
           overlay.id = 'sysSettingsModal';
-          overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.4); backdrop-filter:var(--blur); display:flex; align-items:center; justify-content:center; z-index:9999;";
+          overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.4); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; z-index:9999;";
           const isDark = document.body.classList.contains('dark-mode');
 
           overlay.innerHTML = `
-              <div style="background: var(--panel); padding: 24px; border-radius: 16px; width: 340px; border: 1px solid var(--stroke); box-shadow: var(--shadow); color: var(--text);">
+              <div style="background: var(--panel); padding: 24px; border-radius: 16px; width: 340px; border: 1px solid var(--stroke); box-shadow: 0 10px 30px rgba(0,0,0,0.2); color: var(--text);">
                   <h3 style="margin-top:0; margin-bottom: 20px; display:flex; justify-content:space-between; align-items:center;">
-                      Настройки ⚙️ <span class="badge ok">v2.4.1</span>
+                      Настройки ⚙️ <span class="badge ok" style="font-size: 11px; padding: 4px 8px; background: var(--ok); color: white; border-radius: 12px;">v2.4.1</span>
                   </h3>
-                  <div class="col" style="gap: 12px;">
-                      <button class="btn secondary" id="mdlBtnExport">📥 Экспорт проекта (JSON)</button>
-                      <button class="btn secondary" id="mdlBtnImport">📤 Импорт проекта (JSON)</button>
-                      <div class="sep"></div>
-                      <button class="btn secondary" id="mdlBtnTheme">${isDark ? '☀️ Светлая тема' : '🌙 Тёмная тема'}</button>
-                      <button class="btn secondary" id="mdlBtnClear" style="color: var(--danger); border-color: var(--danger-soft);">🗑 Сбросить проект</button>
+                  <div class="col" style="display:flex; flex-direction:column; gap: 12px;">
+                      <button class="btn secondary" id="mdlBtnDemo" style="width:100%;">🏗 Загрузить Demo Проект</button>
+                      <button class="btn secondary" id="mdlBtnExport" style="width:100%;">📥 Экспорт (JSON)</button>
+                      <button class="btn secondary" id="mdlBtnImport" style="width:100%;">📤 Импорт (JSON)</button>
+                      <div style="height: 1px; background: var(--stroke); margin: 5px 0;"></div>
+                      <button class="btn secondary" id="mdlBtnTheme" style="width:100%;">${isDark ? '☀️ Светлая тема' : '🌙 Тёмная тема'}</button>
+                      <button class="btn secondary" id="mdlBtnClear" style="width:100%; color: var(--danger); border-color: var(--danger-soft);">🗑 Очистить проект</button>
                   </div>
-                  <div class="sep" style="margin: 16px 0;"></div>
-                  <button class="btn" id="mdlBtnClose" style="width:100%;">Закрыть</button>
+                  <div style="height: 1px; background: var(--stroke); margin: 16px 0;"></div>
+                  <button class="btn" id="mdlBtnClose" style="width:100%; background: var(--accent); color: white; padding: 10px; border-radius: 8px; border:none; cursor:pointer;">Закрыть</button>
               </div>
           `;
           document.body.appendChild(overlay);
+
           document.getElementById('mdlBtnClose').onclick = () => overlay.remove();
+          document.getElementById('mdlBtnDemo').onclick = () => { if(confirm("Загрузить демо?")) { localStorage.removeItem(STORAGE_KEY); state.project = defaultProject(); save(); toast("Демо загружено"); render(); overlay.remove(); } };
           document.getElementById('mdlBtnExport').onclick = () => { exportJson(); overlay.remove(); };
           document.getElementById('mdlBtnImport').onclick = () => { importJson(); overlay.remove(); };
           document.getElementById('mdlBtnTheme').onclick = () => { document.body.classList.toggle('dark-mode'); overlay.remove(); };
           document.getElementById('mdlBtnClear').onclick = () => {
-              if(confirm("Текущий проект будет удален. Создать пустой холст?")) { localStorage.removeItem(STORAGE_KEY); state.project = emptyProject(); save(); toast("Проект очищен"); render(); overlay.remove(); }
+              if(confirm("Создать пустой холст?")) { localStorage.removeItem(STORAGE_KEY); state.project = emptyProject(); save(); toast("Проект очищен"); render(); overlay.remove(); }
           };
       };
   }
-
   render();
 })();
