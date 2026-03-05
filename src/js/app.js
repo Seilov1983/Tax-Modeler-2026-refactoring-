@@ -10,7 +10,12 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
 
   const project = state.project;
 
-  project.fx = project.fx || { fxDate: "2026-01-15", rateToUSD: { USD: 1, KZT: 500 }, source:"manual" };
+  project.fx = project.fx || {
+      fxDate: "2026-03-16",
+      rateToUSD: { USD: 1, KZT: 500, EUR: 540, CNY: 7.2, AED: 3.67, HKD: 7.8, GBP: 0.79, SGD: 1.34 },
+      source: "manual"
+  };
+  project.fx.rateToUSD = project.fx.rateToUSD || { USD: 1, KZT: 500, EUR: 540, CNY: 7.2, AED: 3.67, HKD: 7.8, GBP: 0.79, SGD: 1.34 };
   project.catalogs = project.catalogs || defaultCatalogs();
   project.catalogs.jurisdictions = project.catalogs.jurisdictions || defaultCatalogs().jurisdictions;
   if (!Array.isArray(project.activeJurisdictions)) project.activeJurisdictions = (project.catalogs.jurisdictions||[]).filter(j=>j.enabled !== false).map(j=>j.id);
