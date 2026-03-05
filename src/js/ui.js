@@ -10,7 +10,7 @@ import {
   makeNode, frozenThresholdFunctional, nodeDebtToTXA, yearOf, isYearClosed,
   ensurePeriods, ensureAccounting, ensureAccountingYear, createSnapshot,
   runPipeline, recomputeFrozen, recomputeRisks, applyTaxAdjustment, convert,
-  bootstrapNormalizeZones, defaultCatalogs, makeTXA, makeFlowDraft, pointInZone
+  bootstrapNormalizeZones, defaultCatalogs, makeTXA, makeFlowDraft
 } from './engine.js';
 import {
   renderCanvas, syncTXANodes, normalizeZoneCascade, boardState, updateBoardTransform,
@@ -312,14 +312,12 @@ async function handleCountryDrop(project, data, pt) {
 async function handleRegimeDrop(project, data, pt) {
   if (project.readOnly) return toast("Read-only: изменения запрещены");
 
-  // Валидация: курсор должен быть строго внутри зоны с kind === 'country' и совпадающей jurisdiction
-  const hitZones = project.zones.filter(z =>
-    isZoneEnabled(project, z) && pointInZone(pt.x, pt.y, z)
-  );
+    // Сортируем страны по размеру
+    const hitZones = project.zones.filter(z =>
+        pt.x >= z.x && pt.x <= z.x + z.w && pt.y >= z.y && pt.y <= z.y + z.h && z.kind === 'country'
+    ).sort((a, b) => (a.w * a.h) - (b.w * b.h));
 
-  const targetCountry = hitZones.find(z =>
-    (z.kind === 'country' || !z.kind) && z.jurisdiction === data.jurisdiction
-  );
+    const targetCountry = hitZones.length > 0 ? hitZones[0] : null;
 
   if (!targetCountry) {
     toast("Ошибка: Режим не соответствует стране");
