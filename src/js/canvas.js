@@ -108,23 +108,146 @@ export function updateBoardTransform() {
     }
 }
 
-// 1. МОНОЛИТНЫЙ КОНТРОЛЛЕР ВЗАИМОДЕЙСТВИЙ
+// 1. ЕДИНЫЙ POINTER CONTROLLER (State Machine)
+// Режимы: null | 'pan' | 'dragZone_move' | 'dragZone_resize' | 'dragNode'
+let _pointerMode = null;
+
 export function initBoardInteractions() {
     const viewport = document.getElementById('viewport');
     const board = document.getElementById('canvas-board');
     if (!viewport || !board) return;
 
-    // Сдвиг камеры (Pan)
-    viewport.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.node') || e.target.closest('.zone-header') || e.target.closest('.zone-resize-handle')) return;
-        e.preventDefault();
+    // ── pointerdown: определяем режим по таргету ──
+    viewport.addEventListener('pointerdown', (ev) => {
+        if (ev.button !== 0) return; // Только основная кнопка
+        const project = state.project;
+        if (!project) return;
+
+        const target = ev.target;
+
+        // Клик по иконке настроек узла — пропускаем (у неё свой обработчик)
+        if (target.closest('.node-edit-icon')) return;
+
+        // ── dragZone_move: клик по заголовку зоны ──
+        const zoneHeader = target.closest('.zone-header');
+        if (zoneHeader && !project.readOnly) {
+            const zoneId = zoneHeader.dataset.id;
+            const z = getZone(project, zoneId);
+            if (z) {
+                _pointerMode = 'dragZone_move';
+                ev.preventDefault();
+                ev.stopPropagation();
+                const pt = pointerToCanvas(ev);
+                const parentId = findParentZoneId(project, z);
+                uiState.dragZone = {
+                    active: true, zoneId, mode: 'move', handle: null,
+                    startX: pt.x, startY: pt.y,
+                    orig: { x: z.x, y: z.y, w: z.w, h: z.h },
+                    parentId
+                };
+                viewport.setPointerCapture(ev.pointerId);
+                return;
+            }
+        }
+
+        // ── dragZone_resize: клик по ручке ресайза ──
+        const zoneResize = target.closest('.zone-resize-handle');
+        if (zoneResize && !project.readOnly) {
+            const zoneId = zoneResize.dataset.id;
+            const z = getZone(project, zoneId);
+            if (z) {
+                _pointerMode = 'dragZone_resize';
+                ev.preventDefault();
+                ev.stopPropagation();
+                const pt = pointerToCanvas(ev);
+                const parentId = findParentZoneId(project, z);
+                uiState.dragZone = {
+                    active: true, zoneId, mode: 'resize', handle: 'se',
+                    startX: pt.x, startY: pt.y,
+                    orig: { x: z.x, y: z.y, w: z.w, h: z.h },
+                    parentId
+                };
+                viewport.setPointerCapture(ev.pointerId);
+                return;
+            }
+        }
+
+        // ── dragNode: клик по узлу (кроме шестеренки) ──
+        const nodeEl = target.closest('.node');
+        if (nodeEl) {
+            const nodeId = nodeEl.dataset.nodeId;
+            const n = getNode(project, nodeId);
+            if (n && !project.readOnly && !(n.type === 'company' && n.frozen)) {
+                _pointerMode = 'dragNode';
+                ev.preventDefault();
+                uiState.drag.active = true;
+                uiState.drag.nodeId = nodeId;
+                uiState.drag.lockZone = (n.type === 'txa');
+                uiState.drag.lockZoneId = uiState.drag.lockZone
+                    ? (n.zoneId || (String(n.id || '').startsWith('txa_') ? String(n.id).slice(4) : null) || null)
+                    : null;
+                if (uiState.drag.lockZone) {
+                    uiState.drag.lastValidX = n.x;
+                    uiState.drag.lastValidY = n.y;
+                }
+                const pt = pointerToCanvas(ev);
+                uiState.drag.offX = pt.x - n.x;
+                uiState.drag.offY = pt.y - n.y;
+                viewport.setPointerCapture(ev.pointerId);
+                return;
+            }
+            return; // Frozen/readonly — не начинаем pan
+        }
+
+        // ── pan_canvas: клик по пустому месту ──
+        _pointerMode = 'pan';
+        ev.preventDefault();
         boardState.isPanning = true;
-        boardState.startX = e.clientX - boardState.x;
-        boardState.startY = e.clientY - boardState.y;
+        boardState.startX = ev.clientX - boardState.x;
+        boardState.startY = ev.clientY - boardState.y;
         viewport.style.cursor = 'grabbing';
+        viewport.setPointerCapture(ev.pointerId);
     });
 
-    // Зум камеры
+    // ── pointermove: маршрутизация по текущему режиму ──
+    viewport.addEventListener('pointermove', (ev) => {
+        if (!_pointerMode) return;
+
+        if (_pointerMode === 'pan') {
+            boardState.x = ev.clientX - boardState.startX;
+            boardState.y = ev.clientY - boardState.startY;
+            updateBoardTransform();
+            return;
+        }
+
+        // dragZone и dragNode — делегируем в onPointerMove
+        onPointerMove(ev);
+    });
+
+    // ── pointerup: завершение операции, сохранение, финальная отрисовка ──
+    viewport.addEventListener('pointerup', (ev) => {
+        if (!_pointerMode) return;
+        const prevMode = _pointerMode;
+        _pointerMode = null;
+
+        if (prevMode === 'pan') {
+            boardState.isPanning = false;
+            viewport.style.cursor = 'grab';
+        } else {
+            onPointerUp(ev);
+        }
+
+        try { viewport.releasePointerCapture(ev.pointerId); } catch (e) {}
+    });
+
+    // ── pointercancel: аварийный сброс ──
+    viewport.addEventListener('pointercancel', (ev) => {
+        _pointerMode = null;
+        onPointerCancel(ev);
+        try { viewport.releasePointerCapture(ev.pointerId); } catch (e) {}
+    });
+
+    // ── Зум камеры (wheel) ──
     viewport.addEventListener('wheel', (e) => {
         if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
@@ -142,87 +265,12 @@ export function initBoardInteractions() {
         }
     }, { passive: false });
 
-    // Глобальное движение мыши (Pan + Drag Zones + Resize + Drag Nodes)
-    window.addEventListener('mousemove', (e) => {
-        if (boardState.isPanning) {
-            boardState.x = e.clientX - boardState.startX;
-            boardState.y = e.clientY - boardState.startY;
-            updateBoardTransform();
-            return;
-        }
-
-        const project = state.project;
-        if (!project || project.readOnly) return;
-        const pt = pointerToCanvas(e);
-
-        // Перетаскивание и ресайз Страны/Режима
-        if (uiState.dragZone && uiState.dragZone.active) {
-            e.preventDefault();
-            const z = project.zones.find(x => x.id === uiState.dragZone.zoneId);
-            if (z) {
-                const dx = pt.x - uiState.dragZone.startX;
-                const dy = pt.y - uiState.dragZone.startY;
-                if (uiState.dragZone.mode === 'move') {
-                    z.x = uiState.dragZone.orig.x + dx;
-                    z.y = uiState.dragZone.orig.y + dy;
-                } else if (uiState.dragZone.mode === 'resize') {
-                    z.w = Math.max(200, uiState.dragZone.orig.w + dx);
-                    z.h = Math.max(150, uiState.dragZone.orig.h + dy);
-                }
-                renderCanvas();
-            }
-            return;
-        }
-
-        // Перетаскивание субъекта (Компании)
-        if (uiState.dragNode && uiState.dragNode.active) {
-            e.preventDefault();
-            const n = project.nodes.find(x => x.id === uiState.dragNode.nodeId);
-            if (n) {
-                n.x = pt.x - uiState.dragNode.offsetX;
-                n.y = pt.y - uiState.dragNode.offsetY;
-                renderCanvas();
-            }
-        }
-    });
-
-    // Глобальное отпускание мыши
-    window.addEventListener('mouseup', (e) => {
-        if (boardState.isPanning) {
-            boardState.isPanning = false;
-            viewport.style.cursor = 'grab';
-        }
-
-        if (uiState.dragZone && uiState.dragZone.active) {
-            uiState.dragZone.active = false;
-            save();
-        }
-
-        if (uiState.dragNode && uiState.dragNode.active) {
-            uiState.dragNode.active = false;
-            const project = state.project;
-            const pt = pointerToCanvas(e);
-            const hitZones = project.zones.filter(z =>
-                pt.x >= z.x && pt.x <= z.x + z.w && pt.y >= z.y && pt.y <= z.y + z.h
-            ).sort((a, b) => (a.w * a.h) - (b.w * b.h));
-
-            // Если уронили в новый режим - перепривязываем
-            if (hitZones.length > 0 && hitZones[0].kind === 'regime') {
-                const n = project.nodes.find(x => x.id === uiState.dragNode.nodeId);
-                if (n) n.zoneId = hitZones[0].id;
-            }
-            save();
-            renderCanvas();
-        }
-    });
-
-    // Умный двойной клик (Открытие панелей)
+    // ── Умный двойной клик (Открытие панелей) ──
     board.addEventListener('dblclick', (e) => {
         e.stopPropagation();
         const project = state.project;
         const pt = pointerToCanvas(e);
 
-        // Находим самую глубокую зону (отдаем приоритет режиму перед страной)
         const hitZones = project.zones.filter(z =>
             pt.x >= z.x && pt.x <= z.x + z.w && pt.y >= z.y && pt.y <= z.y + z.h
         ).sort((a, b) => (a.w * a.h) - (b.w * b.h));
@@ -437,63 +485,7 @@ export function syncTXANodes(p){
   }
 }
 
-// 2. ИНИЦИАЛИЗАЦИЯ ЗАХВАТА
-export function onZonePointerDown(ev, zoneId, mode) {
-    const project = state.project;
-    if (!project || project.readOnly) return;
-
-    const z = project.zones.find(x => x.id === zoneId);
-    if (!z) return;
-
-    // Останавливаем событие, чтобы канвас не начал двигать камеру (Pan)
-    ev.preventDefault();
-    ev.stopPropagation();
-
-    // Запоминаем стартовые координаты мыши и зоны
-    const startPt = pointerToCanvas(ev);
-    const origX = z.x;
-    const origY = z.y;
-    const origW = z.w;
-    const origH = z.h;
-
-    // Функция, которая двигает или растягивает зону (работает только пока мышь зажата)
-    const onMove = (moveEv) => {
-        const currentPt = pointerToCanvas(moveEv);
-        const dx = currentPt.x - startPt.x;
-        const dy = currentPt.y - startPt.y;
-
-        if (mode === 'move') {
-            z.x = origX + dx;
-            z.y = origY + dy;
-        } else if (mode === 'resize') {
-            z.w = Math.max(200, origW + dx);
-            z.h = Math.max(150, origH + dy);
-        }
-        renderCanvas();
-    };
-
-    // Функция, которая срабатывает при отпускании мыши
-    const onUp = () => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-        save();
-    };
-
-    // Вешаем слушатели на глобальный window, чтобы мышь не "соскальзывала" при быстром движении
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-}
-
-export function onPointerDown(ev, nodeId){
-  const project = state.project;
-  const n = getNode(project, nodeId);
-  if (!n || project.readOnly || (n.type === "company" && n.frozen)) return;
-  uiState.drag.active = true; uiState.drag.nodeId = nodeId; uiState.drag.lockZone = (n.type === "txa");
-  uiState.drag.lockZoneId = uiState.drag.lockZone ? (n.zoneId || (String(n.id||"").startsWith("txa_") ? String(n.id).slice(4) : null) || null) : null;
-  if (uiState.drag.lockZone){ uiState.drag.lastValidX = n.x; uiState.drag.lastValidY = n.y; }
-  const pt = pointerToCanvas(ev); uiState.drag.offX = pt.x - n.x; uiState.drag.offY = pt.y - n.y;
-  document.getElementById('canvas-board').setPointerCapture(ev.pointerId); ev.preventDefault();
-}
+// 2. onZonePointerDown и onPointerDown удалены — логика встроена в единый Pointer Controller (initBoardInteractions)
 
 export function onPointerMove(ev){
   const project = state.project;
@@ -578,19 +570,18 @@ export function onPointerMove(ev){
 
 export async function onPointerUp(ev){
   const project = state.project;
-  const board = document.getElementById('canvas-board');
   if (uiState.dragZone.active){
     const z = getZone(project, uiState.dragZone.zoneId); uiState.dragZone.active = false;
     if (z) { normalizeZoneCascade(project, z.id); syncTXANodes(project); save(); render(); }
-    try { board.releasePointerCapture(ev.pointerId); } catch(e){} return;
+    return;
   }
   if (!uiState.drag.active) return;
   const n = getNode(project, uiState.drag.nodeId); uiState.drag.active = false;
   if (n) { n.zoneId = detectZoneId(project, n); save(); render(); }
-  try { board.releasePointerCapture(ev.pointerId); } catch(e){}
 }
 
 export function onPointerCancel(ev){
+  _pointerMode = null;
   uiState.drag.active = false; uiState.dragZone.active = false; uiState.hoverZoneId = null; boardState.isPanning = false; render();
 }
 
@@ -631,16 +622,8 @@ export function renderCanvas(){
       <div class="zone-resize-handle" data-id="${z.id}" title="Потяните, чтобы изменить размер" style="pointer-events: auto;"></div>
     `;
 
-    const header = el.querySelector('.zone-header');
-    const resize = el.querySelector('.zone-resize-handle');
-
-    // ВАЖНО: Используем 'pointerdown', так как он надежнее 'mousedown' и работает на тачпадах
-    if (header) {
-        header.addEventListener('pointerdown', (ev) => onZonePointerDown(ev, z.id, 'move'));
-    }
-    if (resize) {
-        resize.addEventListener('pointerdown', (ev) => onZonePointerDown(ev, z.id, 'resize'));
-    }
+    // Pointer events для zone-header и zone-resize-handle обрабатываются
+    // единым Pointer Controller через event delegation (initBoardInteractions)
 
     zonesLayer.appendChild(el);
   });
@@ -679,7 +662,7 @@ project.nodes.forEach(n=>{
       icon.onmouseenter = () => icon.style.opacity = '1';
       icon.onmouseleave = () => icon.style.opacity = '0.6';
 
-      el.addEventListener('pointerdown', (ev)=>onPointerDown(ev, n.id));
+      // Pointer events для drag узлов обрабатываются единым Pointer Controller (initBoardInteractions)
 
       // КРАСИВОЕ ВСПЛЫВАЮЩЕЕ ОКНО (МОДАЛКА) ДЛЯ НАСТРОЕК
       const openSettingsModal = (ev) => {
@@ -794,12 +777,7 @@ project.nodes.forEach(n=>{
       nodesLayer.appendChild(el);
     });
 
-  board.onpointermove = (ev) => {
-      onPointerMove(ev);
-      if (uiState.drag.active || uiState.dragZone.active) updateCanvasArrows();
-  };
-  board.onpointerup = onPointerUp;
-  board.onpointercancel = onPointerCancel;
+  // Pointer events обрабатываются единым контроллером на #viewport (initBoardInteractions)
 
   // Переприменяем transform доски после рендера
   updateBoardTransform();

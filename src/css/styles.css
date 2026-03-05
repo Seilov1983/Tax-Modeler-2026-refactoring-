@@ -96,7 +96,7 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg-color);
 .gear-btn:hover { background: var(--stroke); transform: rotate(45deg); transition: transform 0.3s; }
 
 /* Viewport and board */
-#viewport { position: absolute; inset: 0; overflow: hidden; background: transparent; cursor: grab; z-index: 1; }
+#viewport { position: absolute; inset: 0; overflow: hidden; background: transparent; cursor: grab; z-index: 1; touch-action: none; }
 #canvas-board {
     position: absolute; width: 5000px; height: 5000px; transform-origin: 0 0;
     background-image: radial-gradient(var(--bg-grid) 1px, transparent 1px);
