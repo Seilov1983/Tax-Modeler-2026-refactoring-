@@ -114,9 +114,10 @@ export function initBoardInteractions() {
     const board = document.getElementById('canvas-board');
     if (!viewport || !board) return;
 
-    // Pan: хватаем полотно (клик по пустому месту)
+    // Pan: хватаем полотно
     viewport.addEventListener('mousedown', (e) => {
-        if (e.target.closest('.node') || e.target.closest('.zone')) return;
+        // Игнорируем клики по зонам и узлам
+        if (e.target.closest('.node') || e.target.closest('.zone-header') || e.target.closest('.zone-resize-handle')) return;
         e.preventDefault();
         boardState.isPanning = true;
         boardState.startX = e.clientX - boardState.x;
@@ -164,13 +165,13 @@ export function initBoardInteractions() {
         }
     }, { passive: false });
 
-    // --- УМНЫЙ ДВОЙНОЙ КЛИК ПО ХОЛСТУ ---
+    // --- УМНЫЙ ДВОЙНОЙ КЛИК ПО ХОЛСТУ (Context-Aware) ---
     board.addEventListener('dblclick', (e) => {
         e.stopPropagation();
-        if (uiState.editMode !== 'zones' && uiState.editMode !== 'nodes') return;
+        const project = state.project;
+        if (project.ui?.editMode !== 'zones' && project.ui?.editMode !== 'nodes') return;
 
         const pt = pointerToCanvas(e);
-        const project = state.project;
         const hitZone = findZoneAtPoint(project, pt.x, pt.y);
 
         if (!hitZone) {
@@ -554,13 +555,14 @@ export function renderCanvas(){
 
   project.zones.filter(z=>isZoneEnabled(project,z)).forEach(z=>{
     const el = document.createElement('div');
-    el.className = 'zone' + (z.id === uiState.hoverZoneId ? ' hover' : '') + (editMode === "zones" ? ' editable' : '');
-    el.dataset.zoneId = z.id; el.style.left = z.x + "px"; el.style.top = z.y + "px";
+    el.className = 'zone' + (z.id === uiState.hoverZoneId ? ' hover' : '');
+    el.dataset.zoneId = z.id;
+    el.style.left = z.x + "px"; el.style.top = z.y + "px";
     el.style.width = z.w + "px"; el.style.height = z.h + "px";
-    el.style.borderColor = z.jurisdiction === "KZ" ? "rgba(79,140,255,.55)" : "rgba(151,163,179,.35)";
-    el.style.background = z.jurisdiction === "KZ" ? "rgba(79,140,255,.06)" : "rgba(151,163,179,.05)";
 
-    // Отрисовка умной зоны
+    // Делаем саму зону прозрачной для кликов
+    el.style.pointerEvents = "none";
+
     const flag = project.catalogs?.jurisdictions?.find(j => j.id === z.jurisdiction)?.flag || '';
     const titleText = z.kind === 'country' ? `${flag} ${z.name}` : z.name;
 
@@ -570,6 +572,13 @@ export function renderCanvas(){
       </div>
       <div class="zone-resize-handle" data-id="${z.id}" title="Потяните, чтобы изменить размер"></div>
     `;
+
+    // Вешаем логику Drag & Resize ТОЛЬКО на заголовок и уголок
+    const header = el.querySelector('.zone-header');
+    const resize = el.querySelector('.zone-resize-handle');
+
+    header.addEventListener('pointerdown', (ev) => onZonePointerDown(ev, z.id, 'move'));
+    resize.addEventListener('pointerdown', (ev) => onZonePointerDown(ev, z.id, 'resize', 'se'));
 
     zonesLayer.appendChild(el);
   });

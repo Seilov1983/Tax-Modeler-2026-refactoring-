@@ -1524,11 +1524,6 @@ function renderSettingsJurisdictions(panel){
     project.ui = project.ui || {};
     project.ui.hiddenZoneIds = (project.ui.hiddenZoneIds || []).filter(x=>x!==zoneId);
 
-    const txa = makeTXA(z);
-    if (!getNode(project, txa.id)){
-      project.nodes.push(txa);
-    }
-
     normalizeZoneCascade(project, zoneId);
     syncTXANodes(project);
     bootstrapNormalizeZones(project);
@@ -2877,19 +2872,18 @@ export function showYearEndWizard() {
   };
 }
 
-// --- ЛОГИКА СОЗДАНИЯ (Кнопка + открывает шторку) ---
+// --- ЛОГИКА СОЗДАНИЯ ---
 export function initCreation() {
-  // Привязываем кнопку "+" на канвасе к открытию шторки со странами
-  const fab = document.getElementById('fabCreate');
-  if (fab) {
-      fab.onclick = () => {
-          // По умолчанию кнопка "+" открывает список стран
-          openRightDrawer('COUNTRIES');
-      };
-  }
+    // Инициализация Smart Focus DnD (drop-обработчики на канвасе)
+    initCanvasDrop();
 
-  // Инициализация Smart Focus DnD (drop-обработчики на канвасе)
-  initCanvasDrop();
+    // Слушаем плавающую кнопку "+" (она просто открывает панель со странами)
+    const fab = document.getElementById('fabCreate');
+    if (fab) {
+        fab.onclick = () => {
+            openRightDrawer('COUNTRIES');
+        };
+    }
 }
 
 export function exportJson(){

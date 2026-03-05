@@ -146,15 +146,12 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 .pill.warn, .badge.warn { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
 .pill.danger, .badge.danger { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
 
-/* Ноды и зоны на канвасе */
 /* --- УМНЫЕ ЗОНЫ (КАНВАС) --- */
 .zone {
-    position: absolute;
-    border: 1px solid var(--stroke);
-    border-radius: 12px;
+    position: absolute; border: 1px solid var(--stroke); border-radius: 12px;
     background: rgba(241, 245, 249, 0.4); /* Полупрозрачный фон */
     box-shadow: 0 4px 20px rgba(0,0,0,0.02);
-    pointer-events: none; /* Пропускаем клики сквозь тело зоны */
+    pointer-events: none; /* Пропускаем клики сквозь тело зоны, чтобы не мешать двойному клику */
 }
 .zone.hover { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft) inset; }
 
@@ -163,7 +160,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
     background: var(--panel); border-bottom: 1px solid var(--stroke);
     border-radius: 12px 12px 0 0; cursor: grab; display: flex; align-items: center; padding: 0 12px;
     font-size: 13px; font-weight: 800; color: var(--text); user-select: none;
-    pointer-events: auto; /* Заголовок ловит клики */
+    pointer-events: auto; /* Заголовок ловит клики (Drag) */
     transition: background 0.2s;
 }
 .zone-header:hover { background: var(--bg-grid); }
@@ -173,7 +170,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
     position: absolute; bottom: 0; right: 0; width: 24px; height: 24px;
     cursor: nwse-resize; display: flex; align-items: flex-end; justify-content: flex-end; padding: 4px 6px;
     color: var(--muted); opacity: 0.3; transition: opacity 0.2s, color 0.2s;
-    pointer-events: auto; /* Уголок ловит клики */
+    pointer-events: auto; /* Уголок ловит клики (Resize) */
 }
 .zone-resize-handle:hover { opacity: 1; color: var(--accent); }
 .zone-resize-handle::after { content: '↘'; font-size: 14px; line-height: 1; font-weight: 800;}
