@@ -287,13 +287,13 @@ async function handleCountryDrop(project, data, pt) {
 
   // Убедиться что курс валюты есть
   const currency = JURISDICTION_CURRENCIES[jurId] || 'USD';
-  project.fx = project.fx || { fxDate: "2026-01-15", rateToKZT: { KZT: 1 }, source: "manual" };
-  project.fx.rateToKZT = project.fx.rateToKZT || { KZT: 1 };
-  if (!project.fx.rateToKZT[currency] && currency !== 'KZT') {
-    const rStr = prompt(`Нет курса для ${currency} → KZT. Введите курс (число > 0):`, '500');
+  project.fx = project.fx || { fxDate: "2026-01-15", rateToUSD: { USD: 1, KZT: 500 }, source: "manual" };
+  project.fx.rateToUSD = project.fx.rateToUSD || { USD: 1, KZT: 500 };
+  if (!project.fx.rateToUSD[currency] && currency !== 'USD') {
+    const rStr = prompt(`Нет курса для ${currency} → USD. Введите курс (число > 0):`, '1');
     const r = Number(rStr);
     if (!isFinite(r) || r <= 0) return toast("Неверный курс, отмена");
-    project.fx.rateToKZT[currency] = r;
+    project.fx.rateToUSD[currency] = r;
   }
 
   const z = {
@@ -359,13 +359,13 @@ async function handleRegimeDrop(project, data, pt) {
   const maxZI = Math.max(0, ...project.zones.filter(z => z.jurisdiction === data.jurisdiction).map(z => Number(z.zIndex || 0)));
 
   const currency = data.currency || JURISDICTION_CURRENCIES[data.jurisdiction] || 'USD';
-  project.fx = project.fx || { fxDate: "2026-01-15", rateToKZT: { KZT: 1 }, source: "manual" };
-  project.fx.rateToKZT = project.fx.rateToKZT || { KZT: 1 };
-  if (!project.fx.rateToKZT[currency] && currency !== 'KZT') {
-    const rStr = prompt(`Нет курса для ${currency} → KZT. Введите курс (число > 0):`, '500');
+  project.fx = project.fx || { fxDate: "2026-01-15", rateToUSD: { USD: 1, KZT: 500 }, source: "manual" };
+  project.fx.rateToUSD = project.fx.rateToUSD || { USD: 1, KZT: 500 };
+  if (!project.fx.rateToUSD[currency] && currency !== 'USD') {
+    const rStr = prompt(`Нет курса для ${currency} → USD. Введите курс (число > 0):`, '1');
     const r = Number(rStr);
     if (!isFinite(r) || r <= 0) return toast("Неверный курс, отмена");
-    project.fx.rateToKZT[currency] = r;
+    project.fx.rateToUSD[currency] = r;
   }
 
   const z = {
@@ -565,15 +565,15 @@ function renderSettings(panel){
 
 function renderSettingsFx(panel){
   const project = state.project;
-  const fx = project.fx || (project.fx = { fxDate:"2026-01-15", rateToKZT:{KZT:1}, source:"manual" });
-  fx.rateToKZT = fx.rateToKZT || { KZT:1 };
-  const ccyKeys = Object.keys(fx.rateToKZT || {}).filter(x=>x).sort((a,b)=>a.localeCompare(b));
+  const fx = project.fx || (project.fx = { fxDate:"2026-01-15", rateToUSD:{USD:1, KZT:500}, source:"manual" });
+  fx.rateToUSD = fx.rateToUSD || { USD:1, KZT:500 };
+  const ccyKeys = Object.keys(fx.rateToUSD || {}).filter(x=>x).sort((a,b)=>a.localeCompare(b));
 
   const c = document.createElement('div');
   c.className = 'col';
   c.innerHTML = `
     <div class="title">Курсы</div>
-    <div class="small">Курс задаётся как 1 единица валюты → KZT. Пример: USD=500 означает 1 USD = 500 KZT.</div>
+    <div class="small">Курс задаётся относительно USD. Пример: KZT=500 означает 1 USD = 500 KZT.</div>
     <div class="sep"></div>
     <label>Дата курсов (fxDate)</label>
     <input id="fxDate2" type="date" />
@@ -592,19 +592,19 @@ function renderSettingsFx(panel){
   fxDate.value = fx.fxDate || "2026-01-15";
   const grid = c.querySelector('#fxGrid');
   grid.innerHTML = ccyKeys.map(ccy=>`
-    <div><label>${escapeHtml(ccy)} → KZT</label><input data-ccy="${escapeHtml(ccy)}" type="number" step="0.0001" min="0" value="${escapeHtml(String(fx.rateToKZT[ccy]||""))}"/></div>
+    <div><label>${escapeHtml(ccy)} / USD</label><input data-ccy="${escapeHtml(ccy)}" type="number" step="0.0001" min="0" value="${escapeHtml(String(fx.rateToUSD[ccy]||""))}"/></div>
   `).join("");
 
   c.querySelector('#btnAddFxCcy').onclick = ()=>{
     if (project.readOnly) return toast("Read-only: изменения запрещены");
-    let ccy = prompt("Код валюты (например USD, EUR):","") || "";
+    let ccy = prompt("Код валюты (например KZT, EUR):","") || "";
     ccy = String(ccy).trim().toUpperCase();
     if (!/^[A-Z]{3}$/.test(ccy)) return toast("Неверный код валюты");
-    if (fx.rateToKZT[ccy]) return toast("Валюта уже есть");
-    const rStr = prompt(`Курс 1 ${ccy} → KZT (число > 0):`, "1");
+    if (fx.rateToUSD[ccy]) return toast("Валюта уже есть");
+    const rStr = prompt(`Курс 1 USD → ${ccy} (число > 0):`, "1");
     const r = Number(rStr);
     if (!isFinite(r) || r<=0) return toast("Неверный курс");
-    fx.rateToKZT[ccy] = r;
+    fx.rateToUSD[ccy] = r;
     save(); render();
   };
 
@@ -613,7 +613,7 @@ function renderSettingsFx(panel){
     c.querySelectorAll('input[data-ccy]').forEach(inp=>{
       const ccy = inp.getAttribute('data-ccy');
       const v = Number(inp.value || 0);
-      if (isFinite(v) && v>0) fx.rateToKZT[ccy] = v;
+      if (isFinite(v) && v>0) fx.rateToUSD[ccy] = v;
     });
     project.fx = fx;
   };
@@ -1402,13 +1402,13 @@ function renderSettingsJurisdictions(panel){
       z.tax.payroll.pensionEmployeeRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#pPenE').value || 0)));
       z.tax.payroll.pensionEmployerRate = Math.min(1, Math.max(0, Number(wrap.querySelector('#pPenER').value || 0)));
 
-      project.fx = project.fx || { fxDate:"2026-01-15", rateToKZT:{KZT:1}, source:"manual" };
-      project.fx.rateToKZT = project.fx.rateToKZT || { KZT:1 };
-      if (!project.fx.rateToKZT[z.currency]){
-        const rStr = prompt(`Нет курса для ${z.currency} → KZT. Введите курс (число > 0):`, "1");
+      project.fx = project.fx || { fxDate:"2026-01-15", rateToUSD:{USD:1, KZT:500}, source:"manual" };
+      project.fx.rateToUSD = project.fx.rateToUSD || { USD:1, KZT:500 };
+      if (!project.fx.rateToUSD[z.currency]){
+        const rStr = prompt(`Нет курса для ${z.currency} → USD. Введите курс (число > 0):`, "1");
         const r = Number(rStr);
         if (!isFinite(r) || r<=0) return toast("Неверный курс");
-        project.fx.rateToKZT[z.currency] = r;
+        project.fx.rateToUSD[z.currency] = r;
       }
 
       syncTXANodes(project);
@@ -1418,7 +1418,7 @@ function renderSettingsJurisdictions(panel){
 
       auditAppend(project, 'MASTERDATA_OVERRIDE', { entityType:'ZONE', entityId: z.id }, [
         {op:'replace', path:`/zones`, value: project.zones},
-        {op:'replace', path:`/fx/rateToKZT`, value: project.fx.rateToKZT},
+        {op:'replace', path:`/fx/rateToUSD`, value: project.fx.rateToUSD},
         {op:'replace', path:`/nodes`, value: project.nodes}
       ]);
       save();
@@ -1501,18 +1501,18 @@ function renderSettingsJurisdictions(panel){
     let zoneName = prompt('Название режима (zone.name):', zoneCode) || zoneCode;
     zoneName = String(zoneName||'').trim() || zoneCode;
 
-    project.fx = project.fx || { fxDate:"2026-01-15", rateToKZT:{KZT:1}, source:"manual" };
-    project.fx.rateToKZT = project.fx.rateToKZT || { KZT:1 };
-    const knownCcy = Object.keys(project.fx.rateToKZT||{KZT:1}).filter(x=>x && x!=='');
-    let currency = prompt(`Валюта режима (${knownCcy.join(', ')}). Можно ввести новую:`, (knownCcy.includes('KZT') ? 'KZT' : (knownCcy[0]||'KZT'))) || 'KZT';
+    project.fx = project.fx || { fxDate:"2026-01-15", rateToUSD:{USD:1, KZT:500}, source:"manual" };
+    project.fx.rateToUSD = project.fx.rateToUSD || { USD:1, KZT:500 };
+    const knownCcy = Object.keys(project.fx.rateToUSD||{USD:1}).filter(x=>x && x!=='');
+    let currency = prompt(`Валюта режима (${knownCcy.join(', ')}). Можно ввести новую:`, (knownCcy.includes('USD') ? 'USD' : (knownCcy[0]||'USD'))) || 'USD';
     currency = String(currency||'').trim().toUpperCase();
     if (!currency) return;
 
-    if (!project.fx.rateToKZT[currency]){
-      const rStr = prompt(`Нет курса для ${currency} → KZT. Введите курс (число > 0):`, '1');
+    if (!project.fx.rateToUSD[currency]){
+      const rStr = prompt(`Нет курса для ${currency} → USD. Введите курс (число > 0):`, '1');
       const r = Number(rStr);
       if (!isFinite(r) || r <= 0) return toast('Неверный курс');
-      project.fx.rateToKZT[currency] = r;
+      project.fx.rateToUSD[currency] = r;
     }
 
     const safeTail = zoneCode.replace(new RegExp('^'+jurId+'_?'), '').replace(/[^A-Z0-9_]/g,'') || 'ZONE';
@@ -1560,7 +1560,7 @@ function renderSettingsJurisdictions(panel){
     await auditAppend(project, 'MASTERDATA_OVERRIDE', { entityType:'ZONE', entityId: zoneId }, [
       {op:'add', path:'/zones/-', value: z},
       {op:'add', path:'/nodes/-', value: txa},
-      {op:'replace', path:'/fx/rateToKZT', value: project.fx.rateToKZT}
+      {op:'replace', path:'/fx/rateToUSD', value: project.fx.rateToUSD}
     ]);
     save(); toast('Режим добавлен'); render();
   };
@@ -3019,16 +3019,19 @@ export function initRouter() {
 }
 
 // ── Рендер таблиц Master Data (Аккордеон и Инлайн-редактирование) ──
+// ── Рендер таблиц Master Data (Удаление, USD FX и Авто-загрузка) ──
 export function renderMasterDataTables() {
     const project = state.project;
     if (!project) return;
 
-    // 1. РЕНДЕР БАЗОВЫХ ВВОДНЫХ (FX)
+    // 1. РЕНДЕР БАЗОВЫХ ВВОДНЫХ (FX - База USD + API)
     const fxContainer = document.getElementById('fxDataContainer');
     if (fxContainer) {
-        project.fx = project.fx || { fxDate: "2026-01-15", rateToKZT: { KZT: 1 }, source: "manual" };
-        project.fx.rateToKZT = project.fx.rateToKZT || { KZT: 1 };
-        const ccyKeys = Object.keys(project.fx.rateToKZT).filter(x => x && x !== 'KZT').sort();
+        // Меняем структуру на rateToUSD
+        project.fx = project.fx || { fxDate: isoDate(nowIso()), rateToUSD: { USD: 1, KZT: 500 }, source: "manual" };
+        project.fx.rateToUSD = project.fx.rateToUSD || { USD: 1, KZT: 500 };
+
+        const ccyKeys = Object.keys(project.fx.rateToUSD).filter(x => x && x !== 'USD').sort();
 
         let fxHtml = `
             <div class="md-row" id="fxRow">
@@ -3036,20 +3039,22 @@ export function renderMasterDataTables() {
                     <div style="display:flex; align-items:center; gap:8px;">
                         <span class="small" style="font-weight:700;">Дата курсов (fxDate)</span>
                         <input class="md-input fx-input" type="date" value="${escapeHtml(project.fx.fxDate)}" data-orig="${escapeHtml(project.fx.fxDate)}" id="fxDateInp"/>
+                        <button class="btn secondary" id="btnAutoFx" title="Загрузить актуальные курсы с API" style="padding:4px 8px; font-size:12px;">🔄 Авто</button>
                     </div>
                     <div style="display:flex; gap:12px; flex-wrap:wrap;">
                         <div style="display:flex; align-items:center; gap:6px;">
-                            <span class="small">KZT</span><input class="md-input" disabled value="1.00" style="width:70px; background:var(--bg-grid);"/>
+                            <span class="small" style="font-weight: bold; color: var(--accent);">USD</span>
+                            <input class="md-input" disabled value="1.00" style="width:70px; background:var(--bg-grid);"/>
                         </div>
                         ${ccyKeys.map(ccy => `
                             <div style="display:flex; align-items:center; gap:6px;">
                                 <span class="small">${escapeHtml(ccy)}</span>
-                                <input class="md-input fx-input" type="number" step="0.01" min="0" value="${project.fx.rateToKZT[ccy]}" data-orig="${project.fx.rateToKZT[ccy]}" id="fx_${ccy}" style="width:80px;"/>
+                                <input class="md-input fx-input" type="number" step="0.01" min="0" value="${project.fx.rateToUSD[ccy]}" data-orig="${project.fx.rateToUSD[ccy]}" id="fx_${ccy}" style="width:80px;"/>
                             </div>
                         `).join('')}
                     </div>
-                    <div class="md-actions" id="fxActions">
-                        <button class="btn ok" style="padding:6px 12px;" id="fxSave">✓ Сохранить и пересчитать</button>
+                    <div class="md-actions" id="fxActions" style="opacity:1; pointer-events:auto; display:none;">
+                        <button class="btn ok" style="padding:6px 12px;" id="fxSave">✓ Сохранить</button>
                         <button class="btn secondary" style="padding:6px 12px;" id="fxCancel">✕</button>
                     </div>
                 </div>
@@ -3059,7 +3064,13 @@ export function renderMasterDataTables() {
 
         const fxRow = document.getElementById('fxRow');
         const fxInputs = fxRow.querySelectorAll('.fx-input');
-        const checkFxChanges = () => fxRow.classList.toggle('modified', Array.from(fxInputs).some(inp => inp.value !== inp.getAttribute('data-orig')));
+        const acts = document.getElementById('fxActions');
+
+        const checkFxChanges = () => {
+            const changed = Array.from(fxInputs).some(inp => inp.value !== inp.getAttribute('data-orig'));
+            fxRow.classList.toggle('modified', changed);
+            acts.style.display = changed ? 'flex' : 'none';
+        };
         fxInputs.forEach(inp => inp.addEventListener('input', checkFxChanges));
 
         document.getElementById('fxCancel').onclick = () => {
@@ -3070,30 +3081,49 @@ export function renderMasterDataTables() {
             project.fx.fxDate = document.getElementById('fxDateInp').value;
             ccyKeys.forEach(ccy => {
                 const val = Number(document.getElementById(`fx_${ccy}`).value);
-                if (isFinite(val) && val > 0) project.fx.rateToKZT[ccy] = val;
+                if (isFinite(val) && val > 0) project.fx.rateToUSD[ccy] = val;
             });
             if (project.flows) project.flows.forEach(f => updateFlowCompliance(project, f));
             recomputeFrozen(project); recomputeRisks(project); save();
             fxInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkFxChanges();
-            toast("Курсы обновлены, пересчет выполнен");
+            toast("Курсы обновлены");
+        };
+
+        // ЛОГИКА АВТО-ЗАГРУЗКИ (API)
+        document.getElementById('btnAutoFx').onclick = async () => {
+            try {
+                toast("Загрузка курсов...");
+                const res = await fetch('https://open.er-api.com/v6/latest/USD');
+                if (!res.ok) throw new Error("API Error");
+                const data = await res.json();
+
+                ccyKeys.forEach(ccy => {
+                    const el = document.getElementById(`fx_${ccy}`);
+                    if (el && data.rates[ccy]) {
+                        el.value = bankersRound2(data.rates[ccy]);
+                        el.dispatchEvent(new Event('input')); // Триггерим подсветку изменений
+                    }
+                });
+                toast("Курсы успешно загружены! Нажмите ✓ Сохранить");
+            } catch (err) {
+                toast("Ошибка загрузки курсов. Проверьте сеть.");
+            }
         };
     }
 
-    // 2. РЕНДЕР СТРАН И РЕЖИМОВ (АККОРДЕОН)
+    // 2. РЕНДЕР СТРАН И РЕЖИМОВ (С КНОПКАМИ УДАЛЕНИЯ)
     const container = document.getElementById('masterDataContainer');
     if (!container) return;
 
     const jurisdictions = project.catalogs?.jurisdictions || [];
     const btnRegimes = document.getElementById('btnImportRegimes');
 
-    // Если стран нет — блокируем кнопку загрузки режимов
     if (jurisdictions.length === 0) {
         if(btnRegimes) btnRegimes.disabled = true;
-        container.innerHTML = '<div style="text-align:center; padding: 40px; color: var(--muted); border: 2px dashed var(--stroke); border-radius: 12px;">Нет данных. Начните с загрузки стран (CSV).</div>';
+        container.innerHTML = '<div style="text-align:center; padding: 40px; color: var(--muted); border: 2px dashed var(--stroke); border-radius: 12px;">Нет данных. Загрузите страны.</div>';
         return;
     }
 
-    // Если страны есть — РАЗБЛОКИРУЕМ кнопку
     if(btnRegimes) btnRegimes.disabled = false;
     container.innerHTML = '';
 
@@ -3108,9 +3138,7 @@ export function renderMasterDataTables() {
         countryEl.innerHTML = `
             <div class="md-header">
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <button class="btn secondary" style="padding:4px 8px; font-size:10px; min-width: 28px;" id="toggle_${j.id}">
-                        ${regimeKeys.length > 0 ? '▼' : '○'}
-                    </button>
+                    <button class="btn secondary" style="padding:4px 8px; font-size:10px; min-width: 28px;" id="toggle_${j.id}">${regimeKeys.length > 0 ? '▼' : '○'}</button>
                     ${j.flag ? `<span style="font-size: 16px;">${escapeHtml(j.flag)}</span>` : ''}
                     <input class="md-input" style="font-weight:700;" value="${escapeHtml(j.name)}" data-orig="${escapeHtml(j.name)}" id="name_${j.id}"/>
                 </div>
@@ -3122,29 +3150,36 @@ export function renderMasterDataTables() {
                 <div class="md-actions" id="actions_${j.id}">
                     <button class="btn ok" style="padding:6px 12px;" id="save_${j.id}">✓</button>
                     <button class="btn secondary" style="padding:6px 12px;" id="cancel_${j.id}">✕</button>
+                    <button class="btn danger" style="padding:6px 12px;" id="del_${j.id}" title="Удалить страну">🗑</button>
                 </div>
             </div>
-            <div class="regimes-wrapper" id="wrap_${j.id}">
-                <div class="regimes-inner" id="inner_${j.id}"></div>
-            </div>
+            <div class="regimes-wrapper" id="wrap_${j.id}"><div class="regimes-inner" id="inner_${j.id}"></div></div>
         `;
         container.appendChild(countryEl);
 
-        // Логика Inline-редактирования для страны
         const inputs = countryEl.querySelectorAll('.md-header .md-input');
         const checkChanges = () => countryEl.classList.toggle('modified', Array.from(inputs).some(inp => inp.value !== inp.getAttribute('data-orig')));
         inputs.forEach(inp => inp.addEventListener('input', checkChanges));
 
         countryEl.querySelector(`#cancel_${j.id}`).onclick = () => { inputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkChanges(); };
+
+        // УДАЛЕНИЕ СТРАНЫ
+        countryEl.querySelector(`#del_${j.id}`).onclick = () => {
+            if(!confirm(`Внимание! Удалить страну ${j.name} и все её режимы?`)) return;
+            project.catalogs.jurisdictions = project.catalogs.jurisdictions.filter(x => x.id !== j.id);
+            project.activeJurisdictions = project.activeJurisdictions.filter(x => x !== j.id);
+            delete project.masterData[j.id];
+            save(); renderMasterDataTables(); toast(`Страна ${j.name} удалена`);
+        };
+
         countryEl.querySelector(`#save_${j.id}`).onclick = () => {
             j.name = countryEl.querySelector(`#name_${j.id}`).value;
             md.baseCurrency = countryEl.querySelector(`#ccy_${j.id}`).value;
             mc.mciValue = Number(countryEl.querySelector(`#mci_${j.id}`).value) || null;
             md.statuteOfLimitationsYears = Number(countryEl.querySelector(`#sol_${j.id}`).value) || 5;
-            save(); inputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkChanges(); toast(`Страна ${j.id} сохранена`);
+            save(); inputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkChanges(); toast(`Сохранено`);
         };
 
-        // Рендер режимов внутри страны
         const inner = countryEl.querySelector(`#inner_${j.id}`);
         if (regimeKeys.length > 0) {
             regimeKeys.forEach(rCode => {
@@ -3159,38 +3194,46 @@ export function renderMasterDataTables() {
                     <div><input class="md-input" type="number" step="0.01" value="${reg.citRateStandard || 0}" data-orig="${reg.citRateStandard || 0}" title="CIT %" id="rcit_${rCode}"/></div>
                     <div><input class="md-input" type="number" step="0.01" value="${reg.vatRateStandard || 0}" data-orig="${reg.vatRateStandard || 0}" title="VAT %" id="rvat_${rCode}"/></div>
 
-                    <div class="md-actions" id="ract_${rCode}">
-                        <button class="btn ok" style="padding:4px 8px; font-size:10px;" id="rsave_${rCode}">✓</button>
-                        <button class="btn secondary" style="padding:4px 8px; font-size:10px;" id="rcancel_${rCode}">✕</button>
+                    <div class="md-actions" id="ract_${rCode}" style="opacity:1; pointer-events:auto;">
+                        <button class="btn ok" style="padding:4px 8px; font-size:10px; display:none;" id="rsave_${rCode}">✓</button>
+                        <button class="btn secondary" style="padding:4px 8px; font-size:10px; display:none;" id="rcancel_${rCode}">✕</button>
+                        <button class="btn danger" style="padding:4px 8px; font-size:10px;" id="rdel_${rCode}" title="Удалить режим">🗑</button>
                     </div>
                 `;
                 inner.appendChild(regEl);
 
                 const rInputs = regEl.querySelectorAll('.md-input');
+                const btnS = regEl.querySelector(`#rsave_${rCode}`);
+                const btnC = regEl.querySelector(`#rcancel_${rCode}`);
+
                 const checkRChanges = () => {
                     const isChanged = Array.from(rInputs).some(inp => inp.value !== inp.getAttribute('data-orig'));
                     regEl.classList.toggle('modified', isChanged);
-                    regEl.querySelector(`#ract_${rCode}`).style.opacity = isChanged ? '1' : '0';
-                    regEl.querySelector(`#ract_${rCode}`).style.pointerEvents = isChanged ? 'auto' : 'none';
+                    btnS.style.display = isChanged ? 'block' : 'none';
+                    btnC.style.display = isChanged ? 'block' : 'none';
                 };
                 rInputs.forEach(inp => inp.addEventListener('input', checkRChanges));
 
                 regEl.querySelector(`#rcancel_${rCode}`).onclick = () => { rInputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkRChanges(); };
+
+                // УДАЛЕНИЕ РЕЖИМА
+                regEl.querySelector(`#rdel_${rCode}`).onclick = () => {
+                    if(!confirm(`Удалить режим ${rCode}?`)) return;
+                    delete regimes[rCode];
+                    save(); renderMasterDataTables(); toast(`Режим удален`);
+                };
+
                 regEl.querySelector(`#rsave_${rCode}`).onclick = () => {
                     reg.regimeName = regEl.querySelector(`#rname_${rCode}`).value;
                     reg.citRateStandard = Number(regEl.querySelector(`#rcit_${rCode}`).value);
                     reg.vatRateStandard = Number(regEl.querySelector(`#rvat_${rCode}`).value);
-                    save(); rInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkRChanges(); toast(`Режим ${rCode} обновлен`);
+                    save(); rInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkRChanges(); toast(`Сохранено`);
                 };
             });
 
-            // Логика аккордеона
             const wrapper = countryEl.querySelector(`#wrap_${j.id}`);
             const toggleBtn = countryEl.querySelector(`#toggle_${j.id}`);
-            toggleBtn.onclick = () => {
-                const isOpen = wrapper.classList.toggle('open');
-                toggleBtn.textContent = isOpen ? '▲' : '▼';
-            };
+            toggleBtn.onclick = () => { toggleBtn.textContent = wrapper.classList.toggle('open') ? '▲' : '▼'; };
         }
     });
 }

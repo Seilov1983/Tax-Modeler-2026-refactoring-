@@ -124,19 +124,17 @@ export function getNode(p, nodeId) { return p.nodes.find(n => n.id === nodeId) |
 export function listPersons(p) { return p.nodes.filter(n => n.type === "person"); }
 export function listCompanies(p) { return p.nodes.filter(n => n.type === "company"); }
 
-export function rateToKZT(p, ccy) {
-  const r = p.fx.rateToKZT[ccy];
-  return (typeof r === "number" && isFinite(r) && r > 0) ? r : null;
-}
-
 export function convert(p, amount, fromCcy, toCcy) {
-  const a = Number(amount || 0);
-  if (!isFinite(a)) return 0;
-  if (fromCcy === toCcy) return a;
-  if (fromCcy === "KZT") { const r = rateToKZT(p, toCcy); return r ? a / r : NaN; }
-  if (toCcy === "KZT") { const r = rateToKZT(p, fromCcy); return r ? a * r : NaN; }
-  const rFrom = rateToKZT(p, fromCcy), rTo = rateToKZT(p, toCcy);
-  return (rFrom && rTo) ? (a * rFrom) / rTo : NaN;
+  if (fromCcy === toCcy) return amount;
+  const rates = p.fx?.rateToUSD || { USD: 1 };
+
+  // Если курсов нет, возвращаем как есть (чтобы не сломать математику)
+  const rateFrom = rates[fromCcy] || 1;
+  const rateTo = rates[toCcy] || 1;
+
+  // Переводим исходную сумму в USD, а затем из USD в целевую валюту
+  const amountInUsd = amount / rateFrom;
+  return amountInUsd * rateTo;
 }
 
 export function nodeCenter(node) {
