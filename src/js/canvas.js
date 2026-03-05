@@ -1,7 +1,7 @@
 import { escapeHtml, fmtMoney, toast } from './utils.js';
 import { state, uiState, save, auditAppend } from './state.js';
 import { getZone, getNode, isZoneEnabled, detectZoneId, clampToZoneExclusive, zoneArea, pointInZone, recomputeRisks } from './engine.js';
-import { render } from './ui.js';
+import { render, openFlowInspector } from './ui.js';
 
 // Глобальное состояние виртуальной камеры
 export const boardState = {
@@ -271,7 +271,7 @@ export function updateCanvasArrows() {
         flows.forEach((f, idx) => {
             const a = getNode(project, f.fromId), b = getNode(project, f.toId);
             if (!a || !b || !isNodeVisible(a) || !isNodeVisible(b)) return;
-            
+
             const pathData = calculateOrthogonalPath(a, b, flows.length, idx, project.nodes);
             const line = document.createElementNS(svgNS, "path");
             line.setAttribute("d", pathData);
@@ -280,10 +280,37 @@ export function updateCanvasArrows() {
             line.setAttribute("stroke", colorForType(f.flowType));
             line.setAttribute("fill", "none");
             line.setAttribute("stroke-width", "2");
+
+            // Делаем стрелку кликабельной
+            line.style.cursor = 'pointer';
+            line.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openFlowInspector(f.id);
+            });
+
             const title = document.createElementNS(svgNS, "title");
             title.textContent = `${f.flowType} • ${f.status} • ${fmtMoney(f.grossAmount)} ${f.currency}`;
             line.appendChild(title);
             svg.appendChild(line);
+
+            // Выводим подпись с суммой и тегом сделки на стрелку
+            let labelText = `${fmtMoney(f.grossAmount)} ${f.currency}`;
+            if (f.dealTag) {
+                labelText += ` | 🏷 ${f.dealTag}`;
+            }
+            const textEl = document.createElementNS(svgNS, "text");
+            textEl.setAttribute("class", "flowLine");
+            textEl.setAttribute("fill", "var(--text, #ccc)");
+            textEl.setAttribute("font-size", "10");
+            textEl.setAttribute("pointer-events", "none");
+            // Позиционируем текст посередине пути
+            const midA = { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+            const midB = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+            textEl.setAttribute("x", String((midA.x + midB.x) / 2));
+            textEl.setAttribute("y", String((midA.y + midB.y) / 2 - 6));
+            textEl.setAttribute("text-anchor", "middle");
+            textEl.textContent = labelText;
+            svg.appendChild(textEl);
         });
     });
 }

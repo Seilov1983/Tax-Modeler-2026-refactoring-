@@ -221,6 +221,27 @@ export function updateFlowCompliance(p, flow) {
     flow.compliance = { applicable: true, exceeded: true, violationType: violationTypes.join(" & ") };
     flow.ack.ackStatus = (flow.ack.ackStatus === "acknowledged") ? "acknowledged" : "required";
   }
+
+  // ── D-MACE: FSIE / Внетерриториальный доход (Гонконг, Сингапур и др.) ──
+  const toNode = getNode(p, flow.toId);
+  const fromNode = getNode(p, flow.fromId);
+
+  if (flow.isOffshoreSource && toNode) {
+    toNode.riskFlags = toNode.riskFlags || [];
+    const r1 = "🚩 FSIE_SUBSTANCE: Требуется подтверждение substance для офшорного дохода.";
+    const r2 = "🚩 ADVANCE_RULING: Рекомендуется получение Advance Ruling от налоговой.";
+    const r3 = "🚩 SEPARATE_ACCOUNTING: Обязателен строгий раздельный учет доходов и прямых расходов.";
+    if (!toNode.riskFlags.includes(r1)) toNode.riskFlags.push(r1);
+    if (!toNode.riskFlags.includes(r2)) toNode.riskFlags.push(r2);
+    if (!toNode.riskFlags.includes(r3)) toNode.riskFlags.push(r3);
+  }
+
+  // ── D-MACE: Невычетаемые расходы (Direct Exempt Expense) ──
+  if (flow.isDirectExemptExpense && fromNode) {
+    fromNode.riskFlags = fromNode.riskFlags || [];
+    const rx = "⚠️ НЕДЕДУКТИВНЫЙ РАСХОД: Данный исходящий поток привязан к льготной деятельности и исключен из налоговых вычетов (КПН).";
+    if (!fromNode.riskFlags.includes(rx)) fromNode.riskFlags.push(rx);
+  }
 }
 
 export async function applyTaxAdjustment(project, nodeId, flowId, adjustmentData) {

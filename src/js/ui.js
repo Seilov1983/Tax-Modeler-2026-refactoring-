@@ -3480,3 +3480,111 @@ export function initCsvImporters() {
     const btnR = document.getElementById('btnImportRegimes');
     if (btnR) btnR.onclick = () => triggerUpload('regimes');
 }
+
+// ── ИНСПЕКТОР ТРАНЗАКЦИЙ (РАЗДЕЛЬНЫЙ УЧЕТ И ТЕГИ) ──
+export function openFlowInspector(flowId) {
+    const project = state.project;
+    const flow = project.flows.find(f => f.id === flowId);
+    if (!flow) return;
+
+    const drawer = document.getElementById('rightDrawer');
+    const rdTitle = document.getElementById('rdTitle');
+    const rdBody = document.getElementById('rdBody');
+
+    rdTitle.textContent = 'Настройка транзакции (Flow)';
+
+    const fromNode = getNode(project, flow.fromId);
+    const toNode = getNode(project, flow.toId);
+
+    rdBody.innerHTML = `
+        <div class="col" style="gap: 12px; padding-bottom: 20px;">
+            <div class="item" style="background: var(--bg-grid); border: 1px solid var(--stroke);">
+                <div style="display: flex; justify-content: space-between;">
+                    <div><div class="small">Отправитель</div><div style="font-weight: 800;">${escapeHtml(fromNode?.name || 'Unknown')}</div></div>
+                    <div style="text-align: right;"><div class="small">Получатель</div><div style="font-weight: 800;">${escapeHtml(toNode?.name || 'Unknown')}</div></div>
+                </div>
+            </div>
+
+            <div>
+                <label>Сумма (Gross Amount)</label>
+                <input class="md-input" type="number" id="inspFlowAmount" value="${flow.grossAmount || 0}" />
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div>
+                    <label>Валюта</label>
+                    <input class="md-input" type="text" id="inspFlowCurrency" value="${escapeHtml(flow.currency || 'USD')}" />
+                </div>
+                <div>
+                    <label>Тип платежа</label>
+                    <select class="md-input" id="inspFlowType">
+                        <option value="Dividends" ${flow.flowType==='Dividends'?'selected':''}>Dividends</option>
+                        <option value="Interest" ${flow.flowType==='Interest'?'selected':''}>Interest</option>
+                        <option value="Royalties" ${flow.flowType==='Royalties'?'selected':''}>Royalties</option>
+                        <option value="Services" ${flow.flowType==='Services'?'selected':''}>Services</option>
+                        <option value="Goods" ${flow.flowType==='Goods'?'selected':''}>Goods</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="sep"></div>
+            <h4 style="margin: 0; color: var(--accent); font-size: 13px; text-transform: uppercase;">Раздельный учет (FSIE)</h4>
+
+            <div>
+                <label>Тег сделки (Deal Tag) для группировки</label>
+                <input class="md-input" type="text" id="inspFlowTag" value="${escapeHtml(flow.dealTag || '')}" placeholder="Например: Сделка Металл-РФ" />
+            </div>
+
+            <div class="item" style="display: flex; gap: 10px; align-items: flex-start; margin-top: 4px; border-left: 3px solid var(--accent);">
+                <input type="checkbox" id="inspFlowOffshore" ${flow.isOffshoreSource ? 'checked' : ''} style="margin-top: 2px; width: 16px; height: 16px; flex-shrink: 0;" />
+                <label for="inspFlowOffshore" style="line-height: 1.4; font-size: 12px; cursor: pointer;">
+                    <strong style="color: var(--text);">Внетерриториальный доход (Offshore Source)</strong><br>
+                    Применить ставку 0% CIT для получателя и включить комплаенс-контроль.
+                </label>
+            </div>
+
+            <div class="item" style="display: flex; gap: 10px; align-items: flex-start; border-left: 3px solid var(--warn);">
+                <input type="checkbox" id="inspFlowExemptExp" ${flow.isDirectExemptExpense ? 'checked' : ''} style="margin-top: 2px; width: 16px; height: 16px; flex-shrink: 0;" />
+                <label for="inspFlowExemptExp" style="line-height: 1.4; font-size: 12px; cursor: pointer;">
+                    <strong style="color: var(--warn);">Прямой расход по льготной деятельности</strong><br>
+                    Исключить данный платеж из налоговых вычетов (Deductions) для отправителя.
+                </label>
+            </div>
+
+            <div style="margin-top: 10px; display: flex; gap: 10px;">
+                <button class="btn ok" id="inspFlowSave" style="flex: 2;">✓ Сохранить</button>
+                <button class="btn danger" id="inspFlowDelete" style="flex: 1;">🗑 Удалить</button>
+            </div>
+        </div>
+    `;
+
+    drawer.classList.add('open');
+
+    // Обработчики кнопок
+    document.getElementById('rdClose').onclick = () => drawer.classList.remove('open');
+
+    document.getElementById('inspFlowDelete').onclick = () => {
+        if(!confirm("Удалить этот финансовый поток?")) return;
+        project.flows = project.flows.filter(f => f.id !== flowId);
+        recomputeFrozen(project); recomputeRisks(project); save(); renderCanvas();
+        drawer.classList.remove('open');
+    };
+
+    document.getElementById('inspFlowSave').onclick = () => {
+        flow.grossAmount = Number(document.getElementById('inspFlowAmount').value);
+        flow.currency = document.getElementById('inspFlowCurrency').value;
+        flow.flowType = document.getElementById('inspFlowType').value;
+        flow.dealTag = document.getElementById('inspFlowTag').value;
+        flow.isOffshoreSource = document.getElementById('inspFlowOffshore').checked;
+        flow.isDirectExemptExpense = document.getElementById('inspFlowExemptExp').checked;
+
+        // Пересчет рисков с учетом новых галочек
+        project.nodes.forEach(n => n.riskFlags = []);
+        recomputeFrozen(project);
+        recomputeRisks(project);
+
+        save();
+        renderCanvas(); // Мгновенно обновляем стрелки на канвасе
+        toast("Транзакция обновлена");
+        drawer.classList.remove('open');
+    };
+}
