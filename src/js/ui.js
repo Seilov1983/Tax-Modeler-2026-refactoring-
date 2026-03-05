@@ -3018,26 +3018,78 @@ export function initRouter() {
     });
 }
 
-// ── Рендер таблиц Master Data (Аккордеон и Инлайн-редактирование) ──
-// ── Рендер таблиц Master Data (Удаление, USD FX и Авто-загрузка) ──
+// ── КАСТОМНОЕ ОКНО ПОДТВЕРЖДЕНИЯ (Замена стандартному confirm) ──
+export function customConfirm(title, text, onConfirm) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.6); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; z-index:10000; opacity: 0; transition: opacity 0.2s;";
+    overlay.innerHTML = `
+        <div style="background: var(--panel); padding: 24px; border-radius: 12px; width: 400px; border: 1px solid var(--stroke); box-shadow: 0 10px 40px rgba(0,0,0,0.3); color: var(--text); transform: translateY(20px); transition: transform 0.2s;">
+            <h3 style="margin-top:0; margin-bottom: 12px; font-size: 18px;">${escapeHtml(title)}</h3>
+            <p style="color:var(--muted); font-size:14px; line-height:1.5; margin-bottom: 24px;">${escapeHtml(text).replace(/\n/g, '<br>')}</p>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button class="btn secondary" id="ccCancel">Отмена</button>
+                <button class="btn danger" id="ccConfirm">Удалить</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // Анимация появления
+    requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        overlay.children[0].style.transform = 'translateY(0)';
+    });
+
+    const close = () => {
+        overlay.style.opacity = '0';
+        overlay.children[0].style.transform = 'translateY(20px)';
+        setTimeout(() => overlay.remove(), 200);
+    };
+
+    overlay.querySelector('#ccCancel').onclick = close;
+    overlay.querySelector('#ccConfirm').onclick = () => { close(); onConfirm(); };
+}
+
+// ── СОСТОЯНИЕ ДЛЯ ГРУППОВОГО УДАЛЕНИЯ ──
+let isBatchMode = false;
+let batchCountries = new Set();
+let batchRegimes = new Set();
+
+// ── РЕНДЕР ТАБЛИЦ MASTER DATA ──
 export function renderMasterDataTables() {
     const project = state.project;
     if (!project) return;
 
-    // 1. РЕНДЕР БАЗОВЫХ ВВОДНЫХ (FX - База USD + API)
+    // Внедряем кнопку Группового удаления в заголовок
+    const btnRegimes = document.getElementById('btnImportRegimes');
+    if (btnRegimes && btnRegimes.parentNode) {
+        if (!document.getElementById('btnBatchToggle')) {
+            const btn = document.createElement('button');
+            btn.id = 'btnBatchToggle';
+            btnRegimes.parentNode.insertBefore(btn, document.getElementById('btnImportCountries'));
+        }
+        const toggleBtn = document.getElementById('btnBatchToggle');
+        toggleBtn.className = isBatchMode ? 'btn danger' : 'btn secondary';
+        toggleBtn.innerHTML = isBatchMode ? '✕ Отменить выбор' : '🗑 Групповое удаление';
+        toggleBtn.onclick = () => {
+            isBatchMode = !isBatchMode;
+            batchCountries.clear(); batchRegimes.clear();
+            renderMasterDataTables();
+        };
+    }
+
+    // 1. РЕНДЕР БАЗОВЫХ ВВОДНЫХ (FX)
     const fxContainer = document.getElementById('fxDataContainer');
-    if (fxContainer) {
-        // Меняем структуру на rateToUSD
+    if (fxContainer && !isBatchMode) {
         project.fx = project.fx || { fxDate: isoDate(nowIso()), rateToUSD: { USD: 1, KZT: 500 }, source: "manual" };
         project.fx.rateToUSD = project.fx.rateToUSD || { USD: 1, KZT: 500 };
-
         const ccyKeys = Object.keys(project.fx.rateToUSD).filter(x => x && x !== 'USD').sort();
 
         let fxHtml = `
             <div class="md-row" id="fxRow">
                 <div class="md-header" style="grid-template-columns: 1fr 2fr auto;">
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span class="small" style="font-weight:700;">Дата курсов (fxDate)</span>
+                        <span class="small" style="font-weight:700;">Дата курсов</span>
                         <input class="md-input fx-input" type="date" value="${escapeHtml(project.fx.fxDate)}" data-orig="${escapeHtml(project.fx.fxDate)}" id="fxDateInp"/>
                         <button class="btn secondary" id="btnAutoFx" title="Загрузить актуальные курсы с API" style="padding:4px 8px; font-size:12px;">🔄 Авто</button>
                     </div>
@@ -3053,7 +3105,7 @@ export function renderMasterDataTables() {
                             </div>
                         `).join('')}
                     </div>
-                    <div class="md-actions" id="fxActions" style="opacity:1; pointer-events:auto; display:none;">
+                    <div class="md-actions" id="fxActions" style="display:none; gap:6px;">
                         <button class="btn ok" style="padding:6px 12px;" id="fxSave">✓ Сохранить</button>
                         <button class="btn secondary" style="padding:6px 12px;" id="fxCancel">✕</button>
                     </div>
@@ -3061,6 +3113,7 @@ export function renderMasterDataTables() {
             </div>
         `;
         fxContainer.innerHTML = fxHtml;
+        fxContainer.style.display = 'block';
 
         const fxRow = document.getElementById('fxRow');
         const fxInputs = fxRow.querySelectorAll('.fx-input');
@@ -3073,59 +3126,67 @@ export function renderMasterDataTables() {
         };
         fxInputs.forEach(inp => inp.addEventListener('input', checkFxChanges));
 
-        document.getElementById('fxCancel').onclick = () => {
-            fxInputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkFxChanges();
-        };
-
+        document.getElementById('fxCancel').onclick = () => { fxInputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkFxChanges(); };
         document.getElementById('fxSave').onclick = () => {
             project.fx.fxDate = document.getElementById('fxDateInp').value;
-            ccyKeys.forEach(ccy => {
-                const val = Number(document.getElementById(`fx_${ccy}`).value);
-                if (isFinite(val) && val > 0) project.fx.rateToUSD[ccy] = val;
-            });
+            ccyKeys.forEach(ccy => { const val = Number(document.getElementById(`fx_${ccy}`).value); if (isFinite(val) && val > 0) project.fx.rateToUSD[ccy] = val; });
             if (project.flows) project.flows.forEach(f => updateFlowCompliance(project, f));
             recomputeFrozen(project); recomputeRisks(project); save();
-            fxInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkFxChanges();
-            toast("Курсы обновлены");
+            fxInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkFxChanges(); toast("Курсы обновлены");
         };
 
-        // ЛОГИКА АВТО-ЗАГРУЗКИ (API)
         document.getElementById('btnAutoFx').onclick = async () => {
             try {
                 toast("Загрузка курсов...");
                 const res = await fetch('https://open.er-api.com/v6/latest/USD');
                 if (!res.ok) throw new Error("API Error");
                 const data = await res.json();
-
                 ccyKeys.forEach(ccy => {
                     const el = document.getElementById(`fx_${ccy}`);
-                    if (el && data.rates[ccy]) {
-                        el.value = bankersRound2(data.rates[ccy]);
-                        el.dispatchEvent(new Event('input')); // Триггерим подсветку изменений
-                    }
+                    if (el && data.rates[ccy]) { el.value = bankersRound2(data.rates[ccy]); el.dispatchEvent(new Event('input')); }
                 });
                 toast("Курсы успешно загружены! Нажмите ✓ Сохранить");
-            } catch (err) {
-                toast("Ошибка загрузки курсов. Проверьте сеть.");
-            }
+            } catch (err) { toast("Ошибка загрузки курсов. Проверьте сеть."); }
         };
+    } else if (fxContainer) {
+        fxContainer.style.display = 'none'; // Прячем курсы в режиме удаления
     }
 
-    // 2. РЕНДЕР СТРАН И РЕЖИМОВ (С КНОПКАМИ УДАЛЕНИЯ)
+    // 2. РЕНДЕР СТРАН И РЕЖИМОВ
     const container = document.getElementById('masterDataContainer');
     if (!container) return;
 
-    const jurisdictions = project.catalogs?.jurisdictions || [];
-    const btnRegimes = document.getElementById('btnImportRegimes');
+    let jurisdictions = project.catalogs?.jurisdictions || [];
 
     if (jurisdictions.length === 0) {
         if(btnRegimes) btnRegimes.disabled = true;
+        const batchBtn = document.getElementById('btnBatchToggle');
+        if (batchBtn) batchBtn.style.display = 'none';
         container.innerHTML = '<div style="text-align:center; padding: 40px; color: var(--muted); border: 2px dashed var(--stroke); border-radius: 12px;">Нет данных. Загрузите страны.</div>';
         return;
     }
 
     if(btnRegimes) btnRegimes.disabled = false;
-    container.innerHTML = '';
+    const batchBtn = document.getElementById('btnBatchToggle');
+    if (batchBtn) batchBtn.style.display = 'inline-block';
+
+    jurisdictions = jurisdictions.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    const gridLayout = isBatchMode ? "auto 2fr 1fr 1fr 1fr 1fr" : "2fr 1fr 1fr 1fr 1fr auto";
+
+    container.innerHTML = `
+        <div class="md-row" style="background: transparent; border: none; margin-bottom: 4px;">
+            <div class="md-header" style="padding: 4px 16px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; grid-template-columns: ${gridLayout};">
+                ${isBatchMode ? `<div></div>` : ''}
+                <div style="padding-left: ${isBatchMode ? '0' : '36px'};">Страна / Юрисдикция</div>
+                <div>Базовая валюта</div>
+                <div>МРП (MCI)</div>
+                <div>Исковая давность</div>
+                <div>Режимы</div>
+                ${!isBatchMode ? `<div style="text-align: center; min-width: 40px;">Удалить</div>` : ''}
+            </div>
+        </div>
+    `;
 
     jurisdictions.forEach(j => {
         const md = project.masterData[j.id] || {};
@@ -3133,112 +3194,209 @@ export function renderMasterDataTables() {
         const regimes = md.regimes || {};
         const regimeKeys = Object.keys(regimes);
 
+        const isCountryChecked = batchCountries.has(j.id);
+
         const countryEl = document.createElement('div');
         countryEl.className = 'md-row';
         countryEl.innerHTML = `
-            <div class="md-header">
+            <div class="md-header" style="grid-template-columns: ${gridLayout}; ${isBatchMode && isCountryChecked ? 'background: var(--danger-soft);' : ''}">
+                ${isBatchMode ? `<div><input type="checkbox" class="batch-chk-c" style="width:16px; height:16px; cursor:pointer;" ${isCountryChecked ? 'checked' : ''}></div>` : ''}
                 <div style="display:flex; align-items:center; gap:8px;">
-                    <button class="btn secondary" style="padding:4px 8px; font-size:10px; min-width: 28px;" id="toggle_${j.id}">${regimeKeys.length > 0 ? '▼' : '○'}</button>
+                    ${!isBatchMode ? `<button class="btn secondary" style="padding:4px 8px; font-size:10px; min-width: 28px;" id="toggle_${j.id}">${regimeKeys.length > 0 ? '▼' : '○'}</button>` : ''}
                     ${j.flag ? `<span style="font-size: 16px;">${escapeHtml(j.flag)}</span>` : ''}
-                    <input class="md-input" style="font-weight:700;" value="${escapeHtml(j.name)}" data-orig="${escapeHtml(j.name)}" id="name_${j.id}"/>
+                    <input class="md-input" style="font-weight:700; ${isBatchMode ? 'pointer-events:none; border:none;' : ''}" value="${escapeHtml(j.name)}" data-orig="${escapeHtml(j.name)}" id="name_${j.id}"/>
                 </div>
-                <div><input class="md-input" value="${escapeHtml(md.baseCurrency || '')}" data-orig="${escapeHtml(md.baseCurrency || '')}" placeholder="Валюта" id="ccy_${j.id}"/></div>
-                <div><input class="md-input" type="number" value="${mc.mciValue || ''}" data-orig="${mc.mciValue || ''}" placeholder="MCI" id="mci_${j.id}"/></div>
-                <div><input class="md-input" type="number" value="${md.statuteOfLimitationsYears || ''}" data-orig="${md.statuteOfLimitationsYears || ''}" placeholder="Срок давности" id="sol_${j.id}"/></div>
-                <div class="small">Режимов: ${regimeKeys.length}</div>
+                <div><input class="md-input" value="${escapeHtml(md.baseCurrency || '')}" data-orig="${escapeHtml(md.baseCurrency || '')}" ${isBatchMode ? 'disabled' : ''}/></div>
+                <div><input class="md-input" type="number" value="${mc.mciValue || ''}" data-orig="${mc.mciValue || ''}" ${isBatchMode ? 'disabled' : ''}/></div>
+                <div><input class="md-input" type="number" value="${md.statuteOfLimitationsYears || ''}" data-orig="${md.statuteOfLimitationsYears || ''}" ${isBatchMode ? 'disabled' : ''}/></div>
+                <div class="small" style="display:flex; align-items:center;">Всего: ${regimeKeys.length}</div>
 
-                <div class="md-actions" id="actions_${j.id}">
-                    <button class="btn ok" style="padding:6px 12px;" id="save_${j.id}">✓</button>
-                    <button class="btn secondary" style="padding:6px 12px;" id="cancel_${j.id}">✕</button>
-                    <button class="btn danger" style="padding:6px 12px;" id="del_${j.id}" title="Удалить страну">🗑</button>
-                </div>
+                ${!isBatchMode ? `
+                <div style="display:flex; gap:6px; justify-content: flex-end;">
+                    <div class="md-actions" id="actions_${j.id}" style="display:none; gap:6px;">
+                        <button class="btn ok" style="padding:6px 12px;" id="save_${j.id}">✓</button>
+                        <button class="btn secondary" style="padding:6px 12px;" id="cancel_${j.id}">✕</button>
+                    </div>
+                    <button class="btn danger" style="padding:6px 12px;" id="cdel_${j.id}">🗑</button>
+                </div>` : ''}
             </div>
-            <div class="regimes-wrapper" id="wrap_${j.id}"><div class="regimes-inner" id="inner_${j.id}"></div></div>
+            <div class="regimes-wrapper ${isBatchMode ? 'open' : ''}" id="wrap_${j.id}">
+                <div class="regimes-inner" id="inner_${j.id}"></div>
+            </div>
         `;
         container.appendChild(countryEl);
 
-        const inputs = countryEl.querySelectorAll('.md-header .md-input');
-        const checkChanges = () => countryEl.classList.toggle('modified', Array.from(inputs).some(inp => inp.value !== inp.getAttribute('data-orig')));
-        inputs.forEach(inp => inp.addEventListener('input', checkChanges));
+        // Обработка чекбоксов в пакетном режиме
+        if (isBatchMode) {
+            const chkC = countryEl.querySelector('.batch-chk-c');
+            chkC.onchange = (e) => {
+                if (e.target.checked) {
+                    batchCountries.add(j.id);
+                    regimeKeys.forEach(r => batchRegimes.add(`${j.id}|${r}`)); // Выделяем дочерние режимы
+                } else {
+                    batchCountries.delete(j.id);
+                    regimeKeys.forEach(r => batchRegimes.delete(`${j.id}|${r}`));
+                }
+                renderMasterDataTables();
+            };
+        }
 
-        countryEl.querySelector(`#cancel_${j.id}`).onclick = () => { inputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkChanges(); };
+        if (!isBatchMode) {
+            const inputs = countryEl.querySelectorAll('.md-header .md-input');
+            const countryActs = countryEl.querySelector(`#actions_${j.id}`);
 
-        // УДАЛЕНИЕ СТРАНЫ
-        countryEl.querySelector(`#del_${j.id}`).onclick = () => {
-            if(!confirm(`Внимание! Удалить страну ${j.name} и все её режимы?`)) return;
-            project.catalogs.jurisdictions = project.catalogs.jurisdictions.filter(x => x.id !== j.id);
-            project.activeJurisdictions = project.activeJurisdictions.filter(x => x !== j.id);
-            delete project.masterData[j.id];
-            save(); renderMasterDataTables(); toast(`Страна ${j.name} удалена`);
-        };
+            const checkChanges = () => {
+                const changed = Array.from(inputs).some(inp => inp.value !== inp.getAttribute('data-orig'));
+                countryEl.classList.toggle('modified', changed);
+                countryActs.style.display = changed ? 'flex' : 'none';
+            };
+            inputs.forEach(inp => inp.addEventListener('input', checkChanges));
 
-        countryEl.querySelector(`#save_${j.id}`).onclick = () => {
-            j.name = countryEl.querySelector(`#name_${j.id}`).value;
-            md.baseCurrency = countryEl.querySelector(`#ccy_${j.id}`).value;
-            mc.mciValue = Number(countryEl.querySelector(`#mci_${j.id}`).value) || null;
-            md.statuteOfLimitationsYears = Number(countryEl.querySelector(`#sol_${j.id}`).value) || 5;
-            save(); inputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkChanges(); toast(`Сохранено`);
-        };
+            countryEl.querySelector(`#cancel_${j.id}`).onclick = () => { inputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkChanges(); };
+
+            countryEl.querySelector(`#cdel_${j.id}`).onclick = () => {
+                customConfirm("Удалить страну?", `Вы собираетесь полностью удалить страну «${j.name}» и все её налоговые режимы.\n\nПродолжить?`, () => {
+                    project.catalogs.jurisdictions = project.catalogs.jurisdictions.filter(x => x.id !== j.id);
+                    project.activeJurisdictions = project.activeJurisdictions.filter(x => x !== j.id);
+                    delete project.masterData[j.id];
+                    const removedZones = project.zones.filter(z => z.jurisdiction === j.id).map(z => z.id);
+                    project.zones = project.zones.filter(z => z.jurisdiction !== j.id);
+                    project.nodes = project.nodes.filter(n => !(n.type === 'txa' && removedZones.includes(n.zoneId)));
+                    project.nodes.forEach(n => { if(removedZones.includes(n.zoneId)) n.zoneId = null; });
+                    save(); renderMasterDataTables(); toast(`Страна ${j.name} удалена`);
+                });
+            };
+
+            countryEl.querySelector(`#save_${j.id}`).onclick = () => {
+                j.name = countryEl.querySelector(`#name_${j.id}`).value;
+                save(); inputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkChanges(); toast(`Сохранено`);
+            };
+
+            const toggleBtn = countryEl.querySelector(`#toggle_${j.id}`);
+            const wrapper = countryEl.querySelector(`#wrap_${j.id}`);
+            toggleBtn.onclick = () => { toggleBtn.textContent = wrapper.classList.toggle('open') ? '▲' : '▼'; };
+        }
 
         const inner = countryEl.querySelector(`#inner_${j.id}`);
         if (regimeKeys.length > 0) {
             regimeKeys.forEach(rCode => {
                 const reg = regimes[rCode];
+                const isRegimeChecked = batchRegimes.has(`${j.id}|${rCode}`);
+
                 const regEl = document.createElement('div');
                 regEl.className = 'regime-row';
-                regEl.innerHTML = `
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span class="small" style="font-weight:700;">${escapeHtml(rCode)}</span>
-                        <input class="md-input" value="${escapeHtml(reg.regimeName)}" data-orig="${escapeHtml(reg.regimeName)}" id="rname_${rCode}"/>
-                    </div>
-                    <div><input class="md-input" type="number" step="0.01" value="${reg.citRateStandard || 0}" data-orig="${reg.citRateStandard || 0}" title="CIT %" id="rcit_${rCode}"/></div>
-                    <div><input class="md-input" type="number" step="0.01" value="${reg.vatRateStandard || 0}" data-orig="${reg.vatRateStandard || 0}" title="VAT %" id="rvat_${rCode}"/></div>
+                regEl.style.gridTemplateColumns = isBatchMode ? "auto 2fr 1fr 1fr auto" : "2fr 1fr 1fr auto";
+                if (isBatchMode && isRegimeChecked) regEl.style.background = 'var(--danger-soft)';
 
-                    <div class="md-actions" id="ract_${rCode}" style="opacity:1; pointer-events:auto;">
-                        <button class="btn ok" style="padding:4px 8px; font-size:10px; display:none;" id="rsave_${rCode}">✓</button>
-                        <button class="btn secondary" style="padding:4px 8px; font-size:10px; display:none;" id="rcancel_${rCode}">✕</button>
-                        <button class="btn danger" style="padding:4px 8px; font-size:10px;" id="rdel_${rCode}" title="Удалить режим">🗑</button>
+                regEl.innerHTML = `
+                    ${isBatchMode ? `<div><input type="checkbox" class="batch-chk-r" style="width:16px; height:16px; cursor:pointer; margin-left: 20px;" ${isRegimeChecked ? 'checked' : ''}></div>` : ''}
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="small" style="font-weight:700; width: 90px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(rCode)}</span>
+                        <input class="md-input" value="${escapeHtml(reg.regimeName)}" data-orig="${escapeHtml(reg.regimeName)}" ${isBatchMode ? 'disabled border:none;' : ''}/>
                     </div>
+                    <div><input class="md-input" type="number" step="0.01" value="${reg.citRateStandard || 0}" data-orig="${reg.citRateStandard || 0}" title="CIT" ${isBatchMode ? 'disabled' : ''}/></div>
+                    <div><input class="md-input" type="number" step="0.01" value="${reg.vatRateStandard || 0}" data-orig="${reg.vatRateStandard || 0}" title="VAT" ${isBatchMode ? 'disabled' : ''}/></div>
+
+                    ${!isBatchMode ? `
+                    <div style="display:flex; gap:6px; justify-content: flex-end;">
+                        <div class="md-actions" id="ract_${rCode}" style="display:none; gap:6px;">
+                            <button class="btn ok" style="padding:4px 8px; font-size:10px;" id="rsave_${rCode}">✓</button>
+                            <button class="btn secondary" style="padding:4px 8px; font-size:10px;" id="rcancel_${rCode}">✕</button>
+                        </div>
+                        <button class="btn danger" style="padding:4px 8px; font-size:10px;" id="rdel_${rCode}">🗑</button>
+                    </div>` : '<div></div>'}
                 `;
                 inner.appendChild(regEl);
 
-                const rInputs = regEl.querySelectorAll('.md-input');
-                const btnS = regEl.querySelector(`#rsave_${rCode}`);
-                const btnC = regEl.querySelector(`#rcancel_${rCode}`);
+                if (isBatchMode) {
+                    const chkR = regEl.querySelector('.batch-chk-r');
+                    chkR.onchange = (e) => {
+                        if (e.target.checked) batchRegimes.add(`${j.id}|${rCode}`);
+                        else {
+                            batchRegimes.delete(`${j.id}|${rCode}`);
+                            batchCountries.delete(j.id); // Снимаем галочку с родительской страны
+                        }
+                        renderMasterDataTables();
+                    };
+                } else {
+                    const rInputs = regEl.querySelectorAll('.md-input');
+                    const rActs = regEl.querySelector(`#ract_${rCode}`);
 
-                const checkRChanges = () => {
-                    const isChanged = Array.from(rInputs).some(inp => inp.value !== inp.getAttribute('data-orig'));
-                    regEl.classList.toggle('modified', isChanged);
-                    btnS.style.display = isChanged ? 'block' : 'none';
-                    btnC.style.display = isChanged ? 'block' : 'none';
-                };
-                rInputs.forEach(inp => inp.addEventListener('input', checkRChanges));
+                    const checkRChanges = () => {
+                        const changed = Array.from(rInputs).some(inp => inp.value !== inp.getAttribute('data-orig'));
+                        regEl.classList.toggle('modified', changed);
+                        rActs.style.display = changed ? 'flex' : 'none';
+                    };
+                    rInputs.forEach(inp => inp.addEventListener('input', checkRChanges));
 
-                regEl.querySelector(`#rcancel_${rCode}`).onclick = () => { rInputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkRChanges(); };
+                    regEl.querySelector(`#rcancel_${rCode}`).onclick = () => { rInputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkRChanges(); };
 
-                // УДАЛЕНИЕ РЕЖИМА
-                regEl.querySelector(`#rdel_${rCode}`).onclick = () => {
-                    if(!confirm(`Удалить режим ${rCode}?`)) return;
-                    delete regimes[rCode];
-                    save(); renderMasterDataTables(); toast(`Режим удален`);
-                };
+                    regEl.querySelector(`#rdel_${rCode}`).onclick = () => {
+                        customConfirm("Удалить режим?", `Удалить налоговый режим «${rCode}»?\nУзлы на канвасе потеряют эту привязку.`, () => {
+                            delete regimes[rCode];
+                            const removedZoneIds = project.zones.filter(z => z.code === rCode).map(z => z.id);
+                            project.zones = project.zones.filter(z => z.code !== rCode);
+                            project.nodes = project.nodes.filter(n => !(n.type === 'txa' && removedZoneIds.includes(n.zoneId)));
+                            project.nodes.forEach(n => { if(removedZoneIds.includes(n.zoneId)) n.zoneId = null; });
+                            save(); renderMasterDataTables(); toast(`Режим удален`);
+                        });
+                    };
 
-                regEl.querySelector(`#rsave_${rCode}`).onclick = () => {
-                    reg.regimeName = regEl.querySelector(`#rname_${rCode}`).value;
-                    reg.citRateStandard = Number(regEl.querySelector(`#rcit_${rCode}`).value);
-                    reg.vatRateStandard = Number(regEl.querySelector(`#rvat_${rCode}`).value);
-                    save(); rInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkRChanges(); toast(`Сохранено`);
-                };
+                    regEl.querySelector(`#rsave_${rCode}`).onclick = () => {
+                        reg.citRateStandard = Number(rInputs[1].value);
+                        reg.vatRateStandard = Number(rInputs[2].value);
+                        save(); rInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkRChanges(); toast(`Сохранено`);
+                    };
+                }
             });
-
-            const wrapper = countryEl.querySelector(`#wrap_${j.id}`);
-            const toggleBtn = countryEl.querySelector(`#toggle_${j.id}`);
-            toggleBtn.onclick = () => { toggleBtn.textContent = wrapper.classList.toggle('open') ? '▲' : '▼'; };
         }
     });
+
+    // ПЛАВАЮЩАЯ ПАНЕЛЬ ДЛЯ ГРУППОВОГО УДАЛЕНИЯ
+    if (isBatchMode) {
+        const total = batchCountries.size + batchRegimes.size;
+        const bPanel = document.createElement('div');
+        bPanel.style.cssText = "position:sticky; bottom:20px; left:0; background:var(--panel); padding:16px 24px; border:1px solid var(--danger); border-radius:12px; box-shadow:0 10px 30px rgba(220, 38, 38, 0.2); display:flex; justify-content:space-between; align-items:center; z-index:100; margin-top:20px;";
+        bPanel.innerHTML = `
+            <div>Выбрано для удаления: <strong>Стран (${batchCountries.size})</strong>, <strong>Режимов (${batchRegimes.size})</strong></div>
+            <button class="btn danger" ${total === 0 ? 'disabled' : ''} id="btnExecBatch" style="font-size: 14px; padding: 10px 20px;">Удалить выбранные</button>
+        `;
+        container.appendChild(bPanel);
+
+        const btnExec = bPanel.querySelector('#btnExecBatch');
+        if (btnExec) btnExec.onclick = () => {
+            customConfirm("Групповое удаление", `Вы уверены, что хотите удалить выбранные элементы?\nСтран: ${batchCountries.size}\nРежимов: ${batchRegimes.size}\n\nСвязанные объекты на канвасе будут отключены. Это действие необратимо.`, () => {
+
+                // Удаляем страны
+                batchCountries.forEach(jid => {
+                    project.catalogs.jurisdictions = project.catalogs.jurisdictions.filter(x => x.id !== jid);
+                    project.activeJurisdictions = project.activeJurisdictions.filter(x => x !== jid);
+                    delete project.masterData[jid];
+                    const removedZones = project.zones.filter(z => z.jurisdiction === jid).map(z => z.id);
+                    project.zones = project.zones.filter(z => z.jurisdiction !== jid);
+                    project.nodes = project.nodes.filter(n => !(n.type === 'txa' && removedZones.includes(n.zoneId)));
+                    project.nodes.forEach(n => { if(removedZones.includes(n.zoneId)) n.zoneId = null; });
+                });
+
+                // Удаляем режимы
+                batchRegimes.forEach(rid => {
+                    const [jid, rCode] = rid.split('|');
+                    if (project.masterData[jid] && project.masterData[jid].regimes) delete project.masterData[jid].regimes[rCode];
+                    const removedZoneIds = project.zones.filter(z => z.code === rCode).map(z => z.id);
+                    project.zones = project.zones.filter(z => z.code !== rCode);
+                    project.nodes = project.nodes.filter(n => !(n.type === 'txa' && removedZoneIds.includes(n.zoneId)));
+                    project.nodes.forEach(n => { if(removedZoneIds.includes(n.zoneId)) n.zoneId = null; });
+                });
+
+                isBatchMode = false;
+                batchCountries.clear(); batchRegimes.clear();
+                save(); renderMasterDataTables(); toast('Удаление завершено');
+            });
+        };
+    }
 }
 
-// ── Строгая валидация при загрузке CSV ──
+// ── СТАБИЛЬНАЯ ЗАГРУЗКА CSV (ИСПРАВЛЕН БАГ НЕСРАБАТЫВАНИЯ) ──
 export function initCsvImporters() {
     const project = state.project;
     if (!project) return;
@@ -3248,138 +3406,77 @@ export function initCsvImporters() {
         for (let i = 0; i < text.length; i++) {
             let char = text[i];
             if (inQuotes) {
-                if (char === '"') {
-                    if (i + 1 < text.length && text[i+1] === '"') { cur += '"'; i++; }
-                    else inQuotes = false;
-                } else cur += char;
+                if (char === '"') { if (i + 1 < text.length && text[i+1] === '"') { cur += '"'; i++; } else inQuotes = false; } else cur += char;
             } else {
-                if (char === '"') inQuotes = true;
-                else if (char === ',' || char === ';') { result.push(cur.trim()); cur = ''; }
-                else cur += char;
+                if (char === '"') inQuotes = true; else if (char === ',' || char === ';') { result.push(cur.trim()); cur = ''; } else cur += char;
             }
         }
-        result.push(cur.trim());
-        return result;
+        result.push(cur.trim()); return result;
     };
 
-    const btnImportCountries = document.getElementById('btnImportCountries');
-    if (btnImportCountries) {
-        btnImportCountries.onclick = () => {
-            const input = document.createElement('input'); input.type = 'file'; input.accept = '.csv';
-            input.onchange = (e) => {
-                const file = e.target.files[0]; if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const lines = event.target.result.split(/\r\n|\n|\r/).map(l => l.trim()).filter(l => l);
-                    if (lines.length < 2) return toast('Файл пуст или имеет неверный формат');
+    const triggerUpload = (type) => {
+        // Создаем и добавляем инпут в DOM (решает баг с неоткрывающимся окном)
+        const input = document.createElement('input');
+        input.type = 'file'; input.accept = '.csv'; input.style.display = 'none';
+        document.body.appendChild(input);
 
-                    // ВАЛИДАЦИЯ: Если в заголовке есть слово Regime или WHT — это файл режимов!
-                    const header = lines[0].toLowerCase();
-                    if (header.includes('regime') || header.includes('режим') || header.includes('wht')) {
-                        alert('❌ Ошибка: Вы пытаетесь загрузить файл Режимов (Regimes) вместо Стран (Countries)!');
-                        return;
-                    }
+        input.onchange = (e) => {
+            const file = e.target.files[0]; if (!file) { input.remove(); return; }
+            toast("Обработка файла...");
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const lines = event.target.result.split(/\r\n|\n|\r/).map(l => l.trim()).filter(l => l);
+                if (lines.length < 2) { toast('Файл пуст'); input.remove(); return; }
 
-                    let added = 0;
-                    if (!project.catalogs) project.catalogs = {};
-                    if (!project.catalogs.jurisdictions) project.catalogs.jurisdictions = [];
-                    if (!project.activeJurisdictions) project.activeJurisdictions = [];
-                    if (!project.masterData) project.masterData = {};
+                const header = lines[0].toLowerCase();
+                if (type === 'countries' && (header.includes('regime') || header.includes('wht'))) { alert('❌ Вы выбрали файл Режимов вместо Стран!'); input.remove(); return; }
+                if (type === 'regimes' && !header.includes('regime') && !header.includes('wht')) { alert('❌ Вы выбрали файл Стран вместо Режимов!'); input.remove(); return; }
 
-                    lines.slice(1).forEach(line => {
-                        const parts = parseCsvLine(line);
+                let added = 0;
+                if (!project.catalogs) project.catalogs = {};
+                if (!project.catalogs.jurisdictions) project.catalogs.jurisdictions = [];
+                if (!project.activeJurisdictions) project.activeJurisdictions = [];
+                if (!project.masterData) project.masterData = {};
+
+                lines.slice(1).forEach(line => {
+                    const parts = parseCsvLine(line);
+                    if (type === 'countries') {
                         if (parts.length < 4) return;
-
-                        const code = parts[0].toUpperCase();
-                        if (!code) return;
-
-                        if (!project.catalogs.jurisdictions.find(j => j.id === code)) {
+                        const code = parts[0].toUpperCase(); if (!code) return;
+                        const existingJur = project.catalogs.jurisdictions.find(j => j.id === code);
+                        if (!existingJur) {
                             project.catalogs.jurisdictions.push({ id: code, name: parts[1], flag: parts[2], enabled: true });
                             if (!project.activeJurisdictions.includes(code)) project.activeJurisdictions.push(code);
-                        }
+                        } else { existingJur.name = parts[1] || existingJur.name; if (parts[2]) existingJur.flag = parts[2]; }
 
                         project.masterData[code] = project.masterData[code] || {};
                         const md = project.masterData[code];
-                        md.countryCode = code;
-                        md.baseCurrency = parts[3];
-                        md.statuteOfLimitationsYears = Number(parts[4]) || 5;
-                        md.cfcRulesActive = String(parts[5]).toLowerCase() === 'true';
-                        md.pillarTwoActive = String(parts[6]).toLowerCase() === 'true';
-
-                        md.macroConstants = md.macroConstants || {};
-                        if (parts[7] && String(parts[7]).toLowerCase() !== 'null') md.macroConstants.mciValue = Number(parts[7]);
-                        if (parts[8] && String(parts[8]).toLowerCase() !== 'null') md.macroConstants.minWage = Number(parts[8]);
-
-                        md.thresholds = md.thresholds || {};
-                        if (parts[9] && String(parts[9]).toLowerCase() !== 'null') md.thresholds.vatRegistrationBaseCurrency = Number(String(parts[9]).replace(/[^0-9]/g, ''));
+                        md.countryCode = code; md.baseCurrency = parts[3]; md.statuteOfLimitationsYears = Number(parts[4]) || 5;
                         added++;
-                    });
-                    toast(`✅ Загружено стран: ${added}`); save(); renderMasterDataTables();
-                };
-                reader.readAsText(file);
-            };
-            input.click();
-        };
-    }
-
-    const btnImportRegimes = document.getElementById('btnImportRegimes');
-    if (btnImportRegimes) {
-        btnImportRegimes.onclick = () => {
-            const input = document.createElement('input'); input.type = 'file'; input.accept = '.csv';
-            input.onchange = (e) => {
-                const file = e.target.files[0]; if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const lines = event.target.result.split(/\r\n|\n|\r/).map(l => l.trim()).filter(l => l);
-                    if (lines.length < 2) return toast('Файл пуст или имеет неверный формат');
-
-                    // ВАЛИДАЦИЯ: Проверяем, что это именно файл режимов
-                    const header = lines[0].toLowerCase();
-                    if (!header.includes('regime') && !header.includes('режим') && !header.includes('wht')) {
-                        alert('❌ Ошибка: Похоже, вы выбрали файл Стран вместо Режимов!');
-                        return;
-                    }
-
-                    let added = 0;
-                    lines.slice(1).forEach(line => {
-                        const parts = parseCsvLine(line);
+                    } else {
                         if (parts.length < 12) return;
-
-                        const regimeCode = parts[0].toUpperCase();
-                        const countryCode = parts[1].toUpperCase();
-                        if (!regimeCode || !countryCode) return;
-
-                        // Блокировка: Если страны нет в базе, мы не можем добавить к ней режим
-                        if (!project.catalogs.jurisdictions.find(j => j.id === countryCode)) return;
+                        const regimeCode = parts[0].toUpperCase(); const countryCode = parts[1].toUpperCase();
+                        if (!regimeCode || !countryCode || !project.catalogs.jurisdictions.find(j => j.id === countryCode)) return;
 
                         project.masterData[countryCode] = project.masterData[countryCode] || {};
                         project.masterData[countryCode].regimes = project.masterData[countryCode].regimes || {};
 
-                        let whtDiv = parts[5] || "0";
-                        let whtDivBase = whtDiv.includes('/') ? Number(whtDiv.split('/')[0].trim()) : Number(whtDiv);
-
                         project.masterData[countryCode].regimes[regimeCode] = {
-                            regimeName: parts[2],
-                            citRateStandard: Number(parts[3]) || 0,
-                            vatRateStandard: Number(parts[4]) || 0,
-                            wht: {
-                                dividends: whtDivBase,
-                                interest: Number(parts[6]) || 0,
-                                royalties: Number(parts[7]) || 0,
-                                services: Number(parts[8]) || 0
-                            },
-                            substanceRequired: String(parts[9]).toLowerCase() === 'true',
-                            cryptoAllowed: String(parts[10]).toLowerCase() === 'true',
-                            separateAccounting: String(parts[11]).toLowerCase() === 'true',
-                            lossCarryforwardYears: String(parts[12]).toLowerCase() === 'unlimited' ? 999 : (Number(parts[12]) || 0)
+                            regimeName: parts[2], citRateStandard: Number(parts[3]) || 0, vatRateStandard: Number(parts[4]) || 0,
                         };
                         added++;
-                    });
-                    toast(`✅ Загружено режимов: ${added}`); save(); renderMasterDataTables();
-                };
-                reader.readAsText(file);
+                    }
+                });
+                save(); renderMasterDataTables(); toast(`✅ Загружено: ${added}`); input.remove();
             };
-            input.click();
+            reader.readAsText(file);
         };
-    }
+        input.click();
+    };
+
+    const btnC = document.getElementById('btnImportCountries');
+    if (btnC) btnC.onclick = () => triggerUpload('countries');
+
+    const btnR = document.getElementById('btnImportRegimes');
+    if (btnR) btnR.onclick = () => triggerUpload('regimes');
 }
