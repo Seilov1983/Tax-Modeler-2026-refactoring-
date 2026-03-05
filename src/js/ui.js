@@ -51,7 +51,7 @@ let drawerMode = null;
 let drawerSelectedJurisdiction = null;
 
 // ── Smart Focus DnD: Right Drawer ──
-export function openRightDrawer(mode, jurisdictionId) {
+export function openRightDrawer(mode, contextId) {
   const project = state.project;
   const drawer = document.getElementById('rightDrawer');
   const rdTitle = document.getElementById('rdTitle');
@@ -64,123 +64,108 @@ export function openRightDrawer(mode, jurisdictionId) {
   if (mode === 'COUNTRIES') {
     rdTitle.textContent = 'Добавить страну';
 
-    const jurs = (project.catalogs?.jurisdictions || []).filter(j => j.enabled !== false);
-    // Фильтрация: исключить юрисдикции, для которых уже есть зона с kind === 'country'
-    const usedCountryJurs = new Set(
-      project.zones.filter(z => z.kind === 'country').map(z => z.jurisdiction)
-    );
+    // БЕРЕМ СТРАНЫ СТРОГО ИЗ МАСТЕР-ДАННЫХ
+    const jurs = (project.catalogs?.jurisdictions || []).filter(j => j.enabled !== false && project.masterData[j.id]);
+    const usedCountryJurs = new Set(project.zones.filter(z => z.kind === 'country').map(z => z.jurisdiction));
     const available = jurs.filter(j => !usedCountryJurs.has(j.id));
 
-    if (available.length === 0) {
-      rdBody.innerHTML = '<div class="small" style="padding:20px; text-align:center;">Все доступные страны уже добавлены на канвас.</div>';
+    if (jurs.length === 0) {
+        rdBody.innerHTML = '<div class="small" style="padding:20px; text-align:center; color: var(--warn);">Справочник стран пуст. Сначала загрузите страны во вкладке "Мастер-данные".</div>';
+    } else if (available.length === 0) {
+        rdBody.innerHTML = '<div class="small" style="padding:20px; text-align:center;">Все загруженные страны уже добавлены на холст.</div>';
     } else {
-      available.forEach(j => {
+        available.forEach(j => {
+            const md = project.masterData[j.id];
+            const currency = md?.baseCurrency || 'USD';
+            const card = document.createElement('div');
+            card.className = 'draggable-card';
+            card.draggable = true;
+            card.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>${j.flag ? j.flag + ' ' : ''}${escapeHtml(j.name)}</div>
+                    <span class="badge ok">${escapeHtml(j.id)}</span>
+                </div>
+                <div class="dc-sub">Базовая валюта: ${escapeHtml(currency)}<br>Перетащите на пустой холст ✋</div>
+            `;
+            // Drag and Drop логика
+            card.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ type: 'country', jurisdictionId: j.id, jurisdictionName: j.name }));
+                e.dataTransfer.effectAllowed = 'copy';
+            });
+            rdBody.appendChild(card);
+        });
+    }
+  }
+  else if (mode === 'REGIMES') {
+    const jurId = contextId || drawerSelectedJurisdiction;
+    drawerSelectedJurisdiction = jurId;
+
+    const countryInfo = project.catalogs?.jurisdictions?.find(j => j.id === jurId);
+    rdTitle.textContent = countryInfo ? `Режимы: ${countryInfo.name}` : 'Добавить режим';
+
+    // БЕРЕМ РЕЖИМЫ СТРОГО ИЗ МАСТЕР-ДАННЫХ ДЛЯ ВЫБРАННОЙ СТРАНЫ
+    const countryData = project.masterData[jurId];
+    const regimes = countryData?.regimes || {};
+    const regimeCodes = Object.keys(regimes);
+
+    const usedRegimeCodes = new Set(project.zones.filter(z => z.kind === 'regime' && z.jurisdiction === jurId).map(z => z.code));
+    const availableCodes = regimeCodes.filter(code => !usedRegimeCodes.has(code));
+
+    if (regimeCodes.length === 0) {
+        rdBody.innerHTML = `<div class="small" style="padding:20px; text-align:center; color: var(--warn);">Для страны ${escapeHtml(jurId)} не загружены налоговые режимы. Перейдите в "Мастер-данные".</div>`;
+    } else if (availableCodes.length === 0) {
+        rdBody.innerHTML = '<div class="small" style="padding:20px; text-align:center;">Все режимы этой страны уже добавлены на холст.</div>';
+    } else {
+        availableCodes.forEach(code => {
+            const reg = regimes[code];
+            const card = document.createElement('div');
+            card.className = 'draggable-card';
+            card.draggable = true;
+            card.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="font-weight: 800;">${escapeHtml(reg.regimeName || code)}</div>
+                    <span class="badge warn">${escapeHtml(code)}</span>
+                </div>
+                <div class="dc-sub">КПН (CIT): ${(reg.citRateStandard * 100).toFixed(1)}% | НДС (VAT): ${(reg.vatRateStandard * 100).toFixed(1)}%<br>Перетащите внутрь страны ✋</div>
+            `;
+            // Drag and Drop логика
+            card.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({
+                    type: 'regime', jurisdiction: jurId, code: code, name: reg.regimeName || code, currency: countryData.baseCurrency || 'USD'
+                }));
+                e.dataTransfer.effectAllowed = 'copy';
+            });
+            rdBody.appendChild(card);
+        });
+    }
+  }
+  else if (mode === 'NODES') {
+    rdTitle.textContent = 'Добавить субъект';
+
+    const entities = [
+        { type: 'company', name: 'Юридическое лицо (Компания)', desc: 'Создает компанию в выбранном режиме' },
+        { type: 'person', name: 'Физическое лицо (UBO)', desc: 'Создает бенефициара или инвестора' }
+    ];
+
+    entities.forEach(ent => {
         const card = document.createElement('div');
         card.className = 'draggable-card';
         card.draggable = true;
         card.innerHTML = `
-          <div>${escapeHtml(j.name)}</div>
-          <div class="dc-sub">${escapeHtml(j.id)} · ${escapeHtml(JURISDICTION_CURRENCIES[j.id] || 'USD')} · Перетащите на канвас</div>
+            <div style="font-weight: 800; color: var(--accent);">${escapeHtml(ent.name)}</div>
+            <div class="dc-sub">${escapeHtml(ent.desc)}<br>Перетащите внутрь режима ✋</div>
         `;
         card.addEventListener('dragstart', (e) => {
-          e.dataTransfer.setData('application/json', JSON.stringify({
-            type: 'country',
-            jurisdictionId: j.id,
-            jurisdictionName: j.name
-          }));
-          e.dataTransfer.effectAllowed = 'copy';
-        });
-        rdBody.appendChild(card);
-      });
-    }
-  }
-  else if (mode === 'REGIMES') {
-    const jurId = jurisdictionId || drawerSelectedJurisdiction;
-    drawerSelectedJurisdiction = jurId;
-    rdTitle.textContent = 'Добавить режим';
-
-    const jurs = (project.catalogs?.jurisdictions || []).filter(j => j.enabled !== false);
-
-    // Селектор юрисдикции
-    const selWrap = document.createElement('div');
-    selWrap.style.cssText = 'margin-bottom: 10px;';
-    selWrap.innerHTML = `
-      <label>Страна</label>
-      <select id="rdJurSel">${jurs.map(j =>
-        `<option value="${j.id}" ${j.id === jurId ? 'selected' : ''}>${escapeHtml(j.name)} (${escapeHtml(j.id)})</option>`
-      ).join('')}</select>
-    `;
-    rdBody.appendChild(selWrap);
-
-    const cardsContainer = document.createElement('div');
-    cardsContainer.className = 'col';
-    cardsContainer.id = 'rdRegimeCards';
-    rdBody.appendChild(cardsContainer);
-
-    const renderRegimes = (selectedJurId) => {
-      cardsContainer.innerHTML = '';
-      const templates = REGIME_TEMPLATES[selectedJurId] || [];
-
-      // Фильтрация: исключить режимы, для которых уже есть зона с kind === 'regime' внутри этой страны
-      const usedRegimeCodes = new Set(
-        project.zones
-          .filter(z => z.kind === 'regime' && z.jurisdiction === selectedJurId)
-          .map(z => z.code)
-      );
-      const available = templates.filter(t => !usedRegimeCodes.has(t.code));
-
-      if (available.length === 0) {
-        cardsContainer.innerHTML = `<div class="small" style="padding:20px; text-align:center;">${
-          templates.length === 0
-            ? 'Нет предустановленных режимов для этой страны.'
-            : 'Все режимы этой страны уже добавлены.'
-        }</div>`;
-      } else {
-        available.forEach(tmpl => {
-          const card = document.createElement('div');
-          card.className = 'draggable-card';
-          card.draggable = true;
-          card.innerHTML = `
-            <div>${escapeHtml(tmpl.name)}</div>
-            <div class="dc-sub">${escapeHtml(tmpl.code)} · ${escapeHtml(tmpl.currency)} · Перетащите на страну</div>
-          `;
-          card.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('application/json', JSON.stringify({
-              type: 'regime',
-              jurisdiction: selectedJurId,
-              code: tmpl.code,
-              name: tmpl.name,
-              currency: tmpl.currency,
-              w: tmpl.w || 260,
-              h: tmpl.h || 200
+                type: 'node', nodeType: ent.type, nodeName: ent.type === 'company' ? 'Новая Компания' : 'Новое Физлицо', targetZoneId: contextId
             }));
             e.dataTransfer.effectAllowed = 'copy';
-
-            // Анимация камеры: фокус на целевой стране
-            const countryZone = project.zones.find(z =>
-              z.jurisdiction === selectedJurId && (z.kind === 'country' || !z.kind)
-            );
-            if (countryZone) {
-              saveCameraState();
-              animateCameraToZone(countryZone);
-            }
-          });
-          cardsContainer.appendChild(card);
         });
-      }
-    };
-
-    renderRegimes(jurId || jurs[0]?.id);
-
-    rdBody.querySelector('#rdJurSel')?.addEventListener('change', (ev) => {
-      drawerSelectedJurisdiction = ev.target.value;
-      renderRegimes(ev.target.value);
+        rdBody.appendChild(card);
     });
   }
 
   drawer.classList.add('open');
-
-  // Обработчик закрытия
   const closeBtn = document.getElementById('rdClose');
   if (closeBtn) closeBtn.onclick = () => closeRightDrawer();
 }
@@ -2899,66 +2884,14 @@ export function showYearEndWizard() {
   };
 }
 
-// --- ЛОГИКА СОЗДАНИЯ (Двойной клик и кнопка +) ---
+// --- ЛОГИКА СОЗДАНИЯ (Кнопка + открывает шторку) ---
 export function initCreation() {
-  const project = state.project;
-
-  const showCreationModal = (x, y) => {
-      if (project.readOnly) return toast("Read-only: изменения запрещены");
-      if (document.getElementById('createModal')) document.getElementById('createModal').remove();
-
-      const overlay = document.createElement('div');
-      overlay.id = 'createModal';
-      overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.4); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; z-index:9999;";
-
-      overlay.innerHTML = `
-          <div style="background: var(--panel); padding: 24px; border-radius: 16px; width: 340px; border: 1px solid var(--stroke); box-shadow: var(--shadow); color: var(--text);">
-              <h3 style="margin-top:0; color: var(--accent);">Добавить элемент</h3>
-              <div class="row" style="flex-direction: column; gap: 8px;">
-                  <button class="btn secondary" id="btnCrCo" style="width:100%; justify-content:flex-start;">🏢 Компания (Legal Entity)</button>
-                  <button class="btn secondary" id="btnCrPe" style="width:100%; justify-content:flex-start;">👤 Физлицо (Person)</button>
-              </div>
-              <div class="sep" style="margin: 16px 0;"></div>
-              <button class="btn" id="btnCrCancel" style="width:100%;">Отмена</button>
-          </div>
-      `;
-      document.body.appendChild(overlay);
-      document.getElementById('btnCrCancel').onclick = () => overlay.remove();
-
-      const makeAction = async (type) => {
-          const name = prompt("Название:", type === "company" ? "New Company" : "New Person");
-          if (!name) return;
-          const n = makeNode(name, type, x, y);
-          n.zoneId = detectZoneId(project, n);
-          // Строгая валидация: узел должен быть внутри режима
-          if (!n.zoneId) {
-              toast("Ошибка: Узел должен быть размещён внутри режима");
-              return;
-          }
-          project.nodes.push(n);
-          await auditAppend(project, 'NODE_CREATE', {entityType:'NODE', entityId:n.id}, {nodes:[]}, {nodes:[n]});
-          save(); render(); overlay.remove();
-      };
-
-      document.getElementById('btnCrCo').onclick = () => makeAction('company');
-      document.getElementById('btnCrPe').onclick = () => makeAction('person');
-  };
-
-  // Слушаем двойной клик от Канваса
-  window.addEventListener('open-creation-menu', (e) => {
-      showCreationModal(e.detail.x, e.detail.y);
-  });
-
-  // Слушаем плавающую кнопку "+"
+  // Привязываем кнопку "+" на канвасе к открытию шторки со странами
   const fab = document.getElementById('fabCreate');
   if (fab) {
       fab.onclick = () => {
-          // Создаем элемент в центре текущего экрана
-          const viewport = document.getElementById('viewport');
-          const rect = viewport.getBoundingClientRect();
-          const pseudoEvent = { clientX: rect.left + rect.width/2, clientY: rect.top + rect.height/2 };
-          const pt = pointerToCanvas(pseudoEvent);
-          showCreationModal(pt.x, pt.y);
+          // По умолчанию кнопка "+" открывает список стран
+          openRightDrawer('COUNTRIES');
       };
   }
 

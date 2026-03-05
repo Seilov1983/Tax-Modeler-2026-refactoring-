@@ -1,7 +1,7 @@
 import { escapeHtml, fmtMoney, toast } from './utils.js';
 import { state, uiState, save, auditAppend } from './state.js';
 import { getZone, getNode, isZoneEnabled, detectZoneId, clampToZoneExclusive, zoneArea, pointInZone, recomputeRisks } from './engine.js';
-import { render, openFlowInspector } from './ui.js';
+import { render, openFlowInspector, openRightDrawer } from './ui.js';
 
 // Глобальное состояние виртуальной камеры
 export const boardState = {
@@ -164,15 +164,25 @@ export function initBoardInteractions() {
         }
     }, { passive: false });
 
-    // Двойной клик по пустому месту — создать элемент
-    viewport.addEventListener('dblclick', (e) => {
-        // Если кликнули по существующему узлу или зоне - игнорируем
-        if (e.target.closest('.node') || e.target.closest('.zone')) return;
+    // --- УМНЫЙ ДВОЙНОЙ КЛИК ПО ХОЛСТУ ---
+    board.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        if (uiState.editMode !== 'zones' && uiState.editMode !== 'nodes') return;
 
-        // Вычисляем координаты клика на бесконечном холсте
         const pt = pointerToCanvas(e);
-        // Отправляем сигнал в UI для открытия меню
-        window.dispatchEvent(new CustomEvent('open-creation-menu', { detail: { x: pt.x, y: pt.y } }));
+        const project = state.project;
+        const hitZone = findZoneAtPoint(project, pt.x, pt.y);
+
+        if (!hitZone) {
+            // Клик в пустоту -> Предлагаем Страны
+            openRightDrawer('COUNTRIES');
+        } else if (hitZone.kind === 'country' || !hitZone.kind) {
+            // Клик по стране -> Предлагаем Режимы этой страны
+            openRightDrawer('REGIMES', hitZone.jurisdiction);
+        } else if (hitZone.kind === 'regime') {
+            // Клик по режиму -> Предлагаем Юрлицо/Физлицо
+            openRightDrawer('NODES', hitZone.id);
+        }
     });
 
     // Применяем стартовую позицию
