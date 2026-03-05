@@ -372,19 +372,19 @@ async function handleRegimeDrop(project, data, pt) {
 async function handleNodeDrop(project, data, pt) {
   if (project.readOnly) return toast("Read-only: изменения запрещены");
 
-  // Валидация: узел должен падать строго внутрь зоны с kind === 'regime' (или любой зоны)
-  const hitZone = findZoneAtPoint(project, pt.x, pt.y);
-  if (!hitZone) {
-    toast("Ошибка: Узел должен быть размещён внутри режима");
-    return;
+  // Находим все зоны под курсором и сортируем их по площади (от меньшей к большей).
+  // Вместо пропавшей zoneArea(a) просто умножаем ширину на высоту (a.w * a.h)
+  const hitZones = project.zones.filter(z =>
+      pt.x >= z.x && pt.x <= z.x + z.w && pt.y >= z.y && pt.y <= z.y + z.h
+  ).sort((a, b) => (a.w * a.h) - (b.w * b.h));
+
+  // Самая маленькая зона под курсором (это должен быть Режим)
+  const targetZone = hitZones.length > 0 ? hitZones[0] : null;
+
+  if (!targetZone || targetZone.kind !== 'regime') {
+      toast("Субъект должен быть помещен внутрь налогового режима!");
+      return;
   }
-
-  // Предпочтительно внутри зоны с kind === 'regime', но допустимо в любой зоне
-  const regimeZone = project.zones
-    .filter(z => isZoneEnabled(project, z) && pointInZone(pt.x, pt.y, z) && z.kind === 'regime')
-    .sort((a, b) => (zoneArea(a) - zoneArea(b)))[0];
-
-  const targetZone = regimeZone || hitZone;
 
   const nodeType = data.nodeType || 'company';
   const nodeName = data.nodeName || (nodeType === 'company' ? 'New Company' : 'New Person');

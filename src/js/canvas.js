@@ -165,23 +165,20 @@ export function initBoardInteractions() {
         }
     }, { passive: false });
 
-    // --- УМНЫЙ ДВОЙНОЙ КЛИК ПО ХОЛСТУ (Context-Aware) ---
+    // --- УМНЫЙ ДВОЙНОЙ КЛИК ПО ХОЛСТУ ---
     board.addEventListener('dblclick', (e) => {
         e.stopPropagation();
         const project = state.project;
-        if (project.ui?.editMode !== 'zones' && project.ui?.editMode !== 'nodes') return;
 
         const pt = pointerToCanvas(e);
         const hitZone = findZoneAtPoint(project, pt.x, pt.y);
 
+        // В зависимости от того, куда кликнули, открываем нужную шторку справа
         if (!hitZone) {
-            // Клик в пустоту -> Предлагаем Страны
             openRightDrawer('COUNTRIES');
         } else if (hitZone.kind === 'country' || !hitZone.kind) {
-            // Клик по стране -> Предлагаем Режимы этой страны
             openRightDrawer('REGIMES', hitZone.jurisdiction);
         } else if (hitZone.kind === 'regime') {
-            // Клик по режиму -> Предлагаем Юрлицо/Физлицо
             openRightDrawer('NODES', hitZone.id);
         }
     });
@@ -416,13 +413,27 @@ export function syncTXANodes(p){
 
 export function onZonePointerDown(ev, zoneId, mode, handle){
   const project = state.project;
-  if (project.readOnly || (project.ui?.editMode || 'nodes') !== 'zones') return;
+  if (project.readOnly) return; // <-- ВАЖНО: Убрана старая блокировка перемещения!
+
   const z = getZone(project, zoneId);
   if (!z) return;
-  uiState.dragZone.active = true; uiState.dragZone.zoneId = zoneId; uiState.dragZone.mode = mode; uiState.dragZone.handle = handle || null;
-  uiState.dragZone.orig = { x:z.x, y:z.y, w:z.w, h:z.h }; uiState.dragZone.parentId = findParentZoneId(project, z);
-  const pt = pointerToCanvas(ev); uiState.dragZone.startX = pt.x; uiState.dragZone.startY = pt.y;
-  document.getElementById('canvas-board').setPointerCapture(ev.pointerId); ev.preventDefault(); ev.stopPropagation();
+
+  uiState.dragZone.active = true;
+  uiState.dragZone.zoneId = zoneId;
+  uiState.dragZone.mode = mode;
+  uiState.dragZone.handle = handle || null;
+  uiState.dragZone.orig = { x:z.x, y:z.y, w:z.w, h:z.h };
+  uiState.dragZone.parentId = findZoneAtPoint(project, z.x + z.w/2, z.y + z.h/2)?.id || null;
+
+  const pt = pointerToCanvas(ev);
+  uiState.dragZone.startX = pt.x;
+  uiState.dragZone.startY = pt.y;
+
+  const board = document.getElementById('canvas-board');
+  if (board) board.setPointerCapture(ev.pointerId);
+
+  ev.preventDefault();
+  ev.stopPropagation();
 }
 
 export function onPointerDown(ev, nodeId){
