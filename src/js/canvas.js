@@ -1,6 +1,6 @@
 import { escapeHtml, fmtMoney, toast } from './utils.js';
 import { state, uiState, save, auditAppend } from './state.js';
-import { getZone, getNode, isZoneEnabled, detectZoneId, clampToZoneExclusive, zoneArea, pointInZone, recomputeRisks } from './engine.js';
+import { getZone, getNode, isZoneEnabled, detectZoneId, clampToZoneExclusive, recomputeRisks } from './engine.js';
 import { render, openFlowInspector, openRightDrawer } from './ui.js';
 
 export const boardState = { x: -2000, y: -2000, scale: 1, isPanning: false, startX: 0, startY: 0 };
@@ -39,10 +39,16 @@ export function animateCameraRestore(callback) {
     animateCameraTo(saved.x, saved.y, saved.scale, 400, callback);
 }
 
+// Простая и надежная математика для канваса
+export function pointInZone(x, y, z) {
+    return x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
+}
+
 export function findZoneAtPoint(project, x, y) {
     const hits = project.zones.filter(z => isZoneEnabled(project, z) && pointInZone(x, y, z));
     if (hits.length === 0) return null;
-    hits.sort((a, b) => (zoneArea(a) - zoneArea(b)) || ((b.zIndex || 0) - (a.zIndex || 0)));
+    // Сортируем от меньшей к большей через (w * h)
+    hits.sort((a, b) => (a.w * a.h) - (b.w * b.h) || ((b.zIndex || 0) - (a.zIndex || 0)));
     return hits[0];
 }
 
