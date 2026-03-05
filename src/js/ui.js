@@ -375,8 +375,8 @@ export function handleNodeDrop(e, data) {
 
     const pt = pointerToCanvas(e);
 
-    // Сортировка по площади через (w * h)
-    const hitZones = project.zones.filter(z =>
+    // Сортировка по площади через (w * h), чтобы падать в самую маленькую зону (Режим)
+    const hitZones = project.zones.filter(z => 
         pt.x >= z.x && pt.x <= z.x + z.w && pt.y >= z.y && pt.y <= z.y + z.h
     ).sort((a, b) => (a.w * a.h) - (b.w * b.h));
 
@@ -401,10 +401,10 @@ export function handleNodeDrop(e, data) {
 
     project.nodes.push(newNode);
     save();
-
+    
     if (typeof renderCanvas === 'function') renderCanvas();
     else import('./canvas.js').then(module => { if (module.renderCanvas) module.renderCanvas(); });
-
+    
     toast("Субъект успешно добавлен");
 }
 
