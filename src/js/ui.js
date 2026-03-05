@@ -3018,8 +3018,7 @@ export function initRouter() {
     });
 }
 
-// ── Рендер таблиц Master Data (Аккордеон и Инлайн-редактирование) ──
-// ── Рендер таблиц Master Data (Удаление, USD FX и Авто-загрузка) ──
+// ── Рендер таблиц Master Data (Сортировка, Заголовки, Удаление стран) ──
 export function renderMasterDataTables() {
     const project = state.project;
     if (!project) return;
@@ -3027,10 +3026,8 @@ export function renderMasterDataTables() {
     // 1. РЕНДЕР БАЗОВЫХ ВВОДНЫХ (FX - База USD + API)
     const fxContainer = document.getElementById('fxDataContainer');
     if (fxContainer) {
-        // Меняем структуру на rateToUSD
         project.fx = project.fx || { fxDate: isoDate(nowIso()), rateToUSD: { USD: 1, KZT: 500 }, source: "manual" };
         project.fx.rateToUSD = project.fx.rateToUSD || { USD: 1, KZT: 500 };
-
         const ccyKeys = Object.keys(project.fx.rateToUSD).filter(x => x && x !== 'USD').sort();
 
         let fxHtml = `
@@ -3053,7 +3050,7 @@ export function renderMasterDataTables() {
                             </div>
                         `).join('')}
                     </div>
-                    <div class="md-actions" id="fxActions" style="opacity:1; pointer-events:auto; display:none;">
+                    <div class="md-actions" id="fxActions" style="display:none; gap:6px;">
                         <button class="btn ok" style="padding:6px 12px;" id="fxSave">✓ Сохранить</button>
                         <button class="btn secondary" style="padding:6px 12px;" id="fxCancel">✕</button>
                     </div>
@@ -3073,49 +3070,35 @@ export function renderMasterDataTables() {
         };
         fxInputs.forEach(inp => inp.addEventListener('input', checkFxChanges));
 
-        document.getElementById('fxCancel').onclick = () => {
-            fxInputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkFxChanges();
-        };
-
+        document.getElementById('fxCancel').onclick = () => { fxInputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkFxChanges(); };
         document.getElementById('fxSave').onclick = () => {
             project.fx.fxDate = document.getElementById('fxDateInp').value;
-            ccyKeys.forEach(ccy => {
-                const val = Number(document.getElementById(`fx_${ccy}`).value);
-                if (isFinite(val) && val > 0) project.fx.rateToUSD[ccy] = val;
-            });
+            ccyKeys.forEach(ccy => { const val = Number(document.getElementById(`fx_${ccy}`).value); if (isFinite(val) && val > 0) project.fx.rateToUSD[ccy] = val; });
             if (project.flows) project.flows.forEach(f => updateFlowCompliance(project, f));
             recomputeFrozen(project); recomputeRisks(project); save();
-            fxInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkFxChanges();
-            toast("Курсы обновлены");
+            fxInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkFxChanges(); toast("Курсы обновлены");
         };
 
-        // ЛОГИКА АВТО-ЗАГРУЗКИ (API)
         document.getElementById('btnAutoFx').onclick = async () => {
             try {
                 toast("Загрузка курсов...");
                 const res = await fetch('https://open.er-api.com/v6/latest/USD');
                 if (!res.ok) throw new Error("API Error");
                 const data = await res.json();
-
                 ccyKeys.forEach(ccy => {
                     const el = document.getElementById(`fx_${ccy}`);
-                    if (el && data.rates[ccy]) {
-                        el.value = bankersRound2(data.rates[ccy]);
-                        el.dispatchEvent(new Event('input')); // Триггерим подсветку изменений
-                    }
+                    if (el && data.rates[ccy]) { el.value = bankersRound2(data.rates[ccy]); el.dispatchEvent(new Event('input')); }
                 });
                 toast("Курсы успешно загружены! Нажмите ✓ Сохранить");
-            } catch (err) {
-                toast("Ошибка загрузки курсов. Проверьте сеть.");
-            }
+            } catch (err) { toast("Ошибка загрузки курсов. Проверьте сеть."); }
         };
     }
 
-    // 2. РЕНДЕР СТРАН И РЕЖИМОВ (С КНОПКАМИ УДАЛЕНИЯ)
+    // 2. РЕНДЕР СТРАН И РЕЖИМОВ
     const container = document.getElementById('masterDataContainer');
     if (!container) return;
 
-    const jurisdictions = project.catalogs?.jurisdictions || [];
+    let jurisdictions = project.catalogs?.jurisdictions || [];
     const btnRegimes = document.getElementById('btnImportRegimes');
 
     if (jurisdictions.length === 0) {
@@ -3125,7 +3108,23 @@ export function renderMasterDataTables() {
     }
 
     if(btnRegimes) btnRegimes.disabled = false;
-    container.innerHTML = '';
+
+    // СОРТИРОВКА ПО АЛФАВИТУ
+    jurisdictions = jurisdictions.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    // ГЛОБАЛЬНЫЕ ЗАГОЛОВКИ ТАБЛИЦЫ
+    container.innerHTML = `
+        <div class="md-row" style="background: transparent; border: none; margin-bottom: 4px;">
+            <div class="md-header" style="padding: 4px 16px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;">
+                <div style="padding-left: 36px;">Страна / Юрисдикция</div>
+                <div>Базовая валюта</div>
+                <div>МРП (MCI)</div>
+                <div>Исковая давность</div>
+                <div>Режимы</div>
+                <div style="text-align: center; min-width: 40px;">Удалить</div>
+            </div>
+        </div>
+    `;
 
     jurisdictions.forEach(j => {
         const md = project.masterData[j.id] || {};
@@ -3136,39 +3135,66 @@ export function renderMasterDataTables() {
         const countryEl = document.createElement('div');
         countryEl.className = 'md-row';
         countryEl.innerHTML = `
-            <div class="md-header">
+            <div class="md-header" style="grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;">
                 <div style="display:flex; align-items:center; gap:8px;">
                     <button class="btn secondary" style="padding:4px 8px; font-size:10px; min-width: 28px;" id="toggle_${j.id}">${regimeKeys.length > 0 ? '▼' : '○'}</button>
                     ${j.flag ? `<span style="font-size: 16px;">${escapeHtml(j.flag)}</span>` : ''}
-                    <input class="md-input" style="font-weight:700;" value="${escapeHtml(j.name)}" data-orig="${escapeHtml(j.name)}" id="name_${j.id}"/>
+                    <input class="md-input" style="font-weight:700;" value="${escapeHtml(j.name)}" data-orig="${escapeHtml(j.name)}" id="name_${j.id}" title="Название страны"/>
                 </div>
                 <div><input class="md-input" value="${escapeHtml(md.baseCurrency || '')}" data-orig="${escapeHtml(md.baseCurrency || '')}" placeholder="Валюта" id="ccy_${j.id}"/></div>
                 <div><input class="md-input" type="number" value="${mc.mciValue || ''}" data-orig="${mc.mciValue || ''}" placeholder="MCI" id="mci_${j.id}"/></div>
-                <div><input class="md-input" type="number" value="${md.statuteOfLimitationsYears || ''}" data-orig="${md.statuteOfLimitationsYears || ''}" placeholder="Срок давности" id="sol_${j.id}"/></div>
-                <div class="small">Режимов: ${regimeKeys.length}</div>
+                <div><input class="md-input" type="number" value="${md.statuteOfLimitationsYears || ''}" data-orig="${md.statuteOfLimitationsYears || ''}" placeholder="Годы" id="sol_${j.id}"/></div>
+                <div class="small" style="display:flex; align-items:center;">Всего: ${regimeKeys.length}</div>
 
-                <div class="md-actions" id="actions_${j.id}">
-                    <button class="btn ok" style="padding:6px 12px;" id="save_${j.id}">✓</button>
-                    <button class="btn secondary" style="padding:6px 12px;" id="cancel_${j.id}">✕</button>
-                    <button class="btn danger" style="padding:6px 12px;" id="del_${j.id}" title="Удалить страну">🗑</button>
+                <div style="display:flex; gap:6px; justify-content: flex-end;">
+                    <div class="md-actions" id="actions_${j.id}" style="display:none; gap:6px;">
+                        <button class="btn ok" style="padding:6px 12px;" id="save_${j.id}">✓</button>
+                        <button class="btn secondary" style="padding:6px 12px;" id="cancel_${j.id}">✕</button>
+                    </div>
+                    <button class="btn danger" style="padding:6px 12px; display:flex; align-items:center;" id="cdel_${j.id}" title="Удалить страну полностью">🗑</button>
                 </div>
             </div>
-            <div class="regimes-wrapper" id="wrap_${j.id}"><div class="regimes-inner" id="inner_${j.id}"></div></div>
+            <div class="regimes-wrapper" id="wrap_${j.id}">
+                <div class="regimes-inner" id="inner_${j.id}">
+                    ${regimeKeys.length > 0 ? `
+                        <div class="regime-row" style="grid-template-columns: 2fr 1fr 1fr auto; background: var(--bg-grid); font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; border-bottom: 1px solid var(--stroke); padding-top: 6px; padding-bottom: 6px;">
+                            <div>Код и Название режима</div>
+                            <div>КПН (CIT, доля)</div>
+                            <div>НДС (VAT, доля)</div>
+                            <div style="text-align: right; min-width: 40px;">Удалить</div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
         `;
         container.appendChild(countryEl);
 
         const inputs = countryEl.querySelectorAll('.md-header .md-input');
-        const checkChanges = () => countryEl.classList.toggle('modified', Array.from(inputs).some(inp => inp.value !== inp.getAttribute('data-orig')));
+        const countryActs = countryEl.querySelector(`#actions_${j.id}`);
+
+        const checkChanges = () => {
+            const changed = Array.from(inputs).some(inp => inp.value !== inp.getAttribute('data-orig'));
+            countryEl.classList.toggle('modified', changed);
+            countryActs.style.display = changed ? 'flex' : 'none';
+        };
         inputs.forEach(inp => inp.addEventListener('input', checkChanges));
 
         countryEl.querySelector(`#cancel_${j.id}`).onclick = () => { inputs.forEach(inp => inp.value = inp.getAttribute('data-orig')); checkChanges(); };
 
-        // УДАЛЕНИЕ СТРАНЫ
-        countryEl.querySelector(`#del_${j.id}`).onclick = () => {
-            if(!confirm(`Внимание! Удалить страну ${j.name} и все её режимы?`)) return;
+        // ТОТАЛЬНОЕ УДАЛЕНИЕ СТРАНЫ И РЕЖИМОВ
+        countryEl.querySelector(`#cdel_${j.id}`).onclick = () => {
+            if(!confirm(`ВНИМАНИЕ!\nВы собираетесь полностью удалить страну «${j.name}» и все её налоговые режимы.\n\nПродолжить?`)) return;
+
             project.catalogs.jurisdictions = project.catalogs.jurisdictions.filter(x => x.id !== j.id);
             project.activeJurisdictions = project.activeJurisdictions.filter(x => x !== j.id);
             delete project.masterData[j.id];
+
+            // Очищаем канвас от зон этой страны
+            const removedZones = project.zones.filter(z => z.jurisdiction === j.id).map(z => z.id);
+            project.zones = project.zones.filter(z => z.jurisdiction !== j.id);
+            project.nodes = project.nodes.filter(n => !(n.type === 'txa' && removedZones.includes(n.zoneId)));
+            project.nodes.forEach(n => { if(removedZones.includes(n.zoneId)) n.zoneId = null; });
+
             save(); renderMasterDataTables(); toast(`Страна ${j.name} удалена`);
         };
 
@@ -3177,7 +3203,7 @@ export function renderMasterDataTables() {
             md.baseCurrency = countryEl.querySelector(`#ccy_${j.id}`).value;
             mc.mciValue = Number(countryEl.querySelector(`#mci_${j.id}`).value) || null;
             md.statuteOfLimitationsYears = Number(countryEl.querySelector(`#sol_${j.id}`).value) || 5;
-            save(); inputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkChanges(); toast(`Сохранено`);
+            save(); inputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkChanges(); toast(`Страна сохранена`);
         };
 
         const inner = countryEl.querySelector(`#inner_${j.id}`);
@@ -3186,31 +3212,32 @@ export function renderMasterDataTables() {
                 const reg = regimes[rCode];
                 const regEl = document.createElement('div');
                 regEl.className = 'regime-row';
+                regEl.style.gridTemplateColumns = "2fr 1fr 1fr auto";
                 regEl.innerHTML = `
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <span class="small" style="font-weight:700;">${escapeHtml(rCode)}</span>
-                        <input class="md-input" value="${escapeHtml(reg.regimeName)}" data-orig="${escapeHtml(reg.regimeName)}" id="rname_${rCode}"/>
+                        <span class="small" style="font-weight:700; width: 90px; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(rCode)}">${escapeHtml(rCode)}</span>
+                        <input class="md-input" value="${escapeHtml(reg.regimeName)}" data-orig="${escapeHtml(reg.regimeName)}" id="rname_${rCode}" title="Название режима"/>
                     </div>
-                    <div><input class="md-input" type="number" step="0.01" value="${reg.citRateStandard || 0}" data-orig="${reg.citRateStandard || 0}" title="CIT %" id="rcit_${rCode}"/></div>
-                    <div><input class="md-input" type="number" step="0.01" value="${reg.vatRateStandard || 0}" data-orig="${reg.vatRateStandard || 0}" title="VAT %" id="rvat_${rCode}"/></div>
+                    <div><input class="md-input" type="number" step="0.01" value="${reg.citRateStandard || 0}" data-orig="${reg.citRateStandard || 0}" title="CIT (Доля от 0 до 1)" id="rcit_${rCode}"/></div>
+                    <div><input class="md-input" type="number" step="0.01" value="${reg.vatRateStandard || 0}" data-orig="${reg.vatRateStandard || 0}" title="VAT (Доля от 0 до 1)" id="rvat_${rCode}"/></div>
 
-                    <div class="md-actions" id="ract_${rCode}" style="opacity:1; pointer-events:auto;">
-                        <button class="btn ok" style="padding:4px 8px; font-size:10px; display:none;" id="rsave_${rCode}">✓</button>
-                        <button class="btn secondary" style="padding:4px 8px; font-size:10px; display:none;" id="rcancel_${rCode}">✕</button>
-                        <button class="btn danger" style="padding:4px 8px; font-size:10px;" id="rdel_${rCode}" title="Удалить режим">🗑</button>
+                    <div style="display:flex; gap:6px; justify-content: flex-end;">
+                        <div class="md-actions" id="ract_${rCode}" style="display:none; gap:6px;">
+                            <button class="btn ok" style="padding:4px 8px; font-size:10px;" id="rsave_${rCode}">✓</button>
+                            <button class="btn secondary" style="padding:4px 8px; font-size:10px;" id="rcancel_${rCode}">✕</button>
+                        </div>
+                        <button class="btn danger" style="padding:4px 8px; font-size:10px; display:flex; align-items:center;" id="rdel_${rCode}" title="Удалить режим">🗑</button>
                     </div>
                 `;
                 inner.appendChild(regEl);
 
                 const rInputs = regEl.querySelectorAll('.md-input');
-                const btnS = regEl.querySelector(`#rsave_${rCode}`);
-                const btnC = regEl.querySelector(`#rcancel_${rCode}`);
+                const rActs = regEl.querySelector(`#ract_${rCode}`);
 
                 const checkRChanges = () => {
-                    const isChanged = Array.from(rInputs).some(inp => inp.value !== inp.getAttribute('data-orig'));
-                    regEl.classList.toggle('modified', isChanged);
-                    btnS.style.display = isChanged ? 'block' : 'none';
-                    btnC.style.display = isChanged ? 'block' : 'none';
+                    const changed = Array.from(rInputs).some(inp => inp.value !== inp.getAttribute('data-orig'));
+                    regEl.classList.toggle('modified', changed);
+                    rActs.style.display = changed ? 'flex' : 'none';
                 };
                 rInputs.forEach(inp => inp.addEventListener('input', checkRChanges));
 
@@ -3218,8 +3245,14 @@ export function renderMasterDataTables() {
 
                 // УДАЛЕНИЕ РЕЖИМА
                 regEl.querySelector(`#rdel_${rCode}`).onclick = () => {
-                    if(!confirm(`Удалить режим ${rCode}?`)) return;
+                    if(!confirm(`Удалить налоговый режим «${rCode}»?\nУзлы на канвасе потеряют эту привязку.`)) return;
                     delete regimes[rCode];
+
+                    const removedZoneIds = project.zones.filter(z => z.code === rCode).map(z => z.id);
+                    project.zones = project.zones.filter(z => z.code !== rCode);
+                    project.nodes = project.nodes.filter(n => !(n.type === 'txa' && removedZoneIds.includes(n.zoneId)));
+                    project.nodes.forEach(n => { if(removedZoneIds.includes(n.zoneId)) n.zoneId = null; });
+
                     save(); renderMasterDataTables(); toast(`Режим удален`);
                 };
 
@@ -3227,7 +3260,7 @@ export function renderMasterDataTables() {
                     reg.regimeName = regEl.querySelector(`#rname_${rCode}`).value;
                     reg.citRateStandard = Number(regEl.querySelector(`#rcit_${rCode}`).value);
                     reg.vatRateStandard = Number(regEl.querySelector(`#rvat_${rCode}`).value);
-                    save(); rInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkRChanges(); toast(`Сохранено`);
+                    save(); rInputs.forEach(inp => inp.setAttribute('data-orig', inp.value)); checkRChanges(); toast(`Режим сохранен`);
                 };
             });
 
@@ -3238,7 +3271,7 @@ export function renderMasterDataTables() {
     });
 }
 
-// ── Строгая валидация при загрузке CSV ──
+// ── СТАБИЛЬНАЯ ЗАГРУЗКА CSV (Upsert-логика) ──
 export function initCsvImporters() {
     const project = state.project;
     if (!project) return;
@@ -3249,8 +3282,7 @@ export function initCsvImporters() {
             let char = text[i];
             if (inQuotes) {
                 if (char === '"') {
-                    if (i + 1 < text.length && text[i+1] === '"') { cur += '"'; i++; }
-                    else inQuotes = false;
+                    if (i + 1 < text.length && text[i+1] === '"') { cur += '"'; i++; } else inQuotes = false;
                 } else cur += char;
             } else {
                 if (char === '"') inQuotes = true;
@@ -3271,14 +3303,10 @@ export function initCsvImporters() {
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     const lines = event.target.result.split(/\r\n|\n|\r/).map(l => l.trim()).filter(l => l);
-                    if (lines.length < 2) return toast('Файл пуст или имеет неверный формат');
+                    if (lines.length < 2) return toast('Файл пуст');
 
-                    // ВАЛИДАЦИЯ: Если в заголовке есть слово Regime или WHT — это файл режимов!
                     const header = lines[0].toLowerCase();
-                    if (header.includes('regime') || header.includes('режим') || header.includes('wht')) {
-                        alert('❌ Ошибка: Вы пытаетесь загрузить файл Режимов (Regimes) вместо Стран (Countries)!');
-                        return;
-                    }
+                    if (header.includes('regime') || header.includes('wht')) return alert('❌ Вы выбрали файл Режимов вместо Стран!');
 
                     let added = 0;
                     if (!project.catalogs) project.catalogs = {};
@@ -3293,14 +3321,20 @@ export function initCsvImporters() {
                         const code = parts[0].toUpperCase();
                         if (!code) return;
 
-                        if (!project.catalogs.jurisdictions.find(j => j.id === code)) {
+                        // Upsert логика: обновляем, если есть; создаем, если нет
+                        const existingJur = project.catalogs.jurisdictions.find(j => j.id === code);
+                        if (!existingJur) {
                             project.catalogs.jurisdictions.push({ id: code, name: parts[1], flag: parts[2], enabled: true });
                             if (!project.activeJurisdictions.includes(code)) project.activeJurisdictions.push(code);
+                        } else {
+                            existingJur.name = parts[1] || existingJur.name;
+                            if (parts[2]) existingJur.flag = parts[2];
                         }
 
                         project.masterData[code] = project.masterData[code] || {};
                         const md = project.masterData[code];
                         md.countryCode = code;
+
                         md.baseCurrency = parts[3];
                         md.statuteOfLimitationsYears = Number(parts[4]) || 5;
                         md.cfcRulesActive = String(parts[5]).toLowerCase() === 'true';
@@ -3310,8 +3344,6 @@ export function initCsvImporters() {
                         if (parts[7] && String(parts[7]).toLowerCase() !== 'null') md.macroConstants.mciValue = Number(parts[7]);
                         if (parts[8] && String(parts[8]).toLowerCase() !== 'null') md.macroConstants.minWage = Number(parts[8]);
 
-                        md.thresholds = md.thresholds || {};
-                        if (parts[9] && String(parts[9]).toLowerCase() !== 'null') md.thresholds.vatRegistrationBaseCurrency = Number(String(parts[9]).replace(/[^0-9]/g, ''));
                         added++;
                     });
                     toast(`✅ Загружено стран: ${added}`); save(); renderMasterDataTables();
@@ -3331,14 +3363,10 @@ export function initCsvImporters() {
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     const lines = event.target.result.split(/\r\n|\n|\r/).map(l => l.trim()).filter(l => l);
-                    if (lines.length < 2) return toast('Файл пуст или имеет неверный формат');
+                    if (lines.length < 2) return toast('Файл пуст');
 
-                    // ВАЛИДАЦИЯ: Проверяем, что это именно файл режимов
                     const header = lines[0].toLowerCase();
-                    if (!header.includes('regime') && !header.includes('режим') && !header.includes('wht')) {
-                        alert('❌ Ошибка: Похоже, вы выбрали файл Стран вместо Режимов!');
-                        return;
-                    }
+                    if (!header.includes('regime') && !header.includes('wht')) return alert('❌ Вы выбрали файл Стран вместо Режимов!');
 
                     let added = 0;
                     lines.slice(1).forEach(line => {
@@ -3349,7 +3377,6 @@ export function initCsvImporters() {
                         const countryCode = parts[1].toUpperCase();
                         if (!regimeCode || !countryCode) return;
 
-                        // Блокировка: Если страны нет в базе, мы не можем добавить к ней режим
                         if (!project.catalogs.jurisdictions.find(j => j.id === countryCode)) return;
 
                         project.masterData[countryCode] = project.masterData[countryCode] || {};
@@ -3362,15 +3389,7 @@ export function initCsvImporters() {
                             regimeName: parts[2],
                             citRateStandard: Number(parts[3]) || 0,
                             vatRateStandard: Number(parts[4]) || 0,
-                            wht: {
-                                dividends: whtDivBase,
-                                interest: Number(parts[6]) || 0,
-                                royalties: Number(parts[7]) || 0,
-                                services: Number(parts[8]) || 0
-                            },
-                            substanceRequired: String(parts[9]).toLowerCase() === 'true',
-                            cryptoAllowed: String(parts[10]).toLowerCase() === 'true',
-                            separateAccounting: String(parts[11]).toLowerCase() === 'true',
+                            wht: { dividends: whtDivBase, interest: Number(parts[6]) || 0, royalties: Number(parts[7]) || 0, services: Number(parts[8]) || 0 },
                             lossCarryforwardYears: String(parts[12]).toLowerCase() === 'unlimited' ? 999 : (Number(parts[12]) || 0)
                         };
                         added++;
