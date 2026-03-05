@@ -237,7 +237,7 @@ export function initCanvasDrop() {
     } else if (data.type === 'regime') {
       await handleRegimeDrop(project, data, pt);
     } else if (data.type === 'node') {
-      await handleNodeDrop(project, data, pt);
+      await handleNodeDrop(e, data);
     }
 
     // Возврат камеры после drop
@@ -369,33 +369,43 @@ async function handleRegimeDrop(project, data, pt) {
 }
 
 // ── Строгая валидация: Обработка drop узла (Компания/Физлицо) ──
-async function handleNodeDrop(project, data, pt) {
-  if (project.readOnly) return toast("Read-only: изменения запрещены");
+export function handleNodeDrop(e, data) {
+    const project = state.project;
+    if (!project || project.readOnly) return;
 
-  // Находим все зоны под курсором и сортируем их по площади (от меньшей к большей).
-  // Вместо пропавшей zoneArea(a) просто умножаем ширину на высоту (a.w * a.h)
-  const hitZones = project.zones.filter(z =>
-      pt.x >= z.x && pt.x <= z.x + z.w && pt.y >= z.y && pt.y <= z.y + z.h
-  ).sort((a, b) => (a.w * a.h) - (b.w * b.h));
+    const pt = pointerToCanvas(e);
 
-  // Самая маленькая зона под курсором (это должен быть Режим)
-  const targetZone = hitZones.length > 0 ? hitZones[0] : null;
+    // Сортировка по площади через (w * h)
+    const hitZones = project.zones.filter(z =>
+        pt.x >= z.x && pt.x <= z.x + z.w && pt.y >= z.y && pt.y <= z.y + z.h
+    ).sort((a, b) => (a.w * a.h) - (b.w * b.h));
 
-  if (!targetZone || targetZone.kind !== 'regime') {
-      toast("Субъект должен быть помещен внутрь налогового режима!");
-      return;
-  }
+    const targetZone = hitZones.length > 0 ? hitZones[0] : null;
 
-  const nodeType = data.nodeType || 'company';
-  const nodeName = data.nodeName || (nodeType === 'company' ? 'New Company' : 'New Person');
-  const n = makeNode(nodeName, nodeType, Math.round(pt.x - 95), Math.round(pt.y - 45));
-  n.zoneId = targetZone.id;
+    if (!targetZone || targetZone.kind !== 'regime') {
+        toast("Субъект должен быть помещен внутрь налогового режима!");
+        return;
+    }
 
-  project.nodes.push(n);
-  await auditAppend(project, 'NODE_CREATE', { entityType: 'NODE', entityId: n.id }, { nodes: [] }, { nodes: [n] }, { note: 'Node created via Smart Focus DnD' });
-  save();
-  toast(`${nodeType === 'company' ? 'Компания' : 'Физлицо'} создано в «${targetZone.name}»`);
-  render();
+    const newNode = {
+        id: 'n_' + Math.random().toString(36).substr(2, 9),
+        type: data.nodeType === 'person' ? 'person' : 'company',
+        name: data.nodeName || (data.nodeType === 'person' ? 'Физлицо' : 'Новая Компания'),
+        x: pt.x - 75,
+        y: pt.y - 30,
+        w: 150,
+        h: 60,
+        zoneId: targetZone.id,
+        riskFlags: []
+    };
+
+    project.nodes.push(newNode);
+    save();
+
+    if (typeof renderCanvas === 'function') renderCanvas();
+    else import('./canvas.js').then(module => { if (module.renderCanvas) module.renderCanvas(); });
+
+    toast("Субъект успешно добавлен");
 }
 
 export function render(){
