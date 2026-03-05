@@ -438,25 +438,50 @@ export function syncTXANodes(p){
 }
 
 // 2. ИНИЦИАЛИЗАЦИЯ ЗАХВАТА
-export function onZonePointerDown(ev, zoneId, mode, handle) {
+export function onZonePointerDown(ev, zoneId, mode) {
     const project = state.project;
-    if (project.readOnly) return;
+    if (!project || project.readOnly) return;
 
     const z = project.zones.find(x => x.id === zoneId);
     if (!z) return;
 
-    uiState.dragZone = {
-        active: true,
-        zoneId: zoneId,
-        mode: mode,
-        handle: handle || null,
-        orig: { x: z.x, y: z.y, w: z.w, h: z.h },
-        startX: pointerToCanvas(ev).x,
-        startY: pointerToCanvas(ev).y
-    };
-
+    // Останавливаем событие, чтобы канвас не начал двигать камеру (Pan)
     ev.preventDefault();
     ev.stopPropagation();
+
+    // Запоминаем стартовые координаты мыши и зоны
+    const startPt = pointerToCanvas(ev);
+    const origX = z.x;
+    const origY = z.y;
+    const origW = z.w;
+    const origH = z.h;
+
+    // Функция, которая двигает или растягивает зону (работает только пока мышь зажата)
+    const onMove = (moveEv) => {
+        const currentPt = pointerToCanvas(moveEv);
+        const dx = currentPt.x - startPt.x;
+        const dy = currentPt.y - startPt.y;
+
+        if (mode === 'move') {
+            z.x = origX + dx;
+            z.y = origY + dy;
+        } else if (mode === 'resize') {
+            z.w = Math.max(200, origW + dx);
+            z.h = Math.max(150, origH + dy);
+        }
+        renderCanvas();
+    };
+
+    // Функция, которая срабатывает при отпускании мыши
+    const onUp = () => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        save();
+    };
+
+    // Вешаем слушатели на глобальный window, чтобы мышь не "соскальзывала" при быстром движении
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
 }
 
 export function onPointerDown(ev, nodeId){
@@ -609,9 +634,13 @@ export function renderCanvas(){
     const header = el.querySelector('.zone-header');
     const resize = el.querySelector('.zone-resize-handle');
 
-    // Вешаем mousedown на элементы управления
-    header.addEventListener('mousedown', (ev) => onZonePointerDown(ev, z.id, 'move'));
-    resize.addEventListener('mousedown', (ev) => onZonePointerDown(ev, z.id, 'resize', 'se'));
+    // ВАЖНО: Используем 'pointerdown', так как он надежнее 'mousedown' и работает на тачпадах
+    if (header) {
+        header.addEventListener('pointerdown', (ev) => onZonePointerDown(ev, z.id, 'move'));
+    }
+    if (resize) {
+        resize.addEventListener('pointerdown', (ev) => onZonePointerDown(ev, z.id, 'resize'));
+    }
 
     zonesLayer.appendChild(el);
   });
