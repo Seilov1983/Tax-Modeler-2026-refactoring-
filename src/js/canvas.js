@@ -213,6 +213,77 @@ export function initBoardInteractions() {
 
     // Применяем стартовую позицию
     updateBoardTransform();
+
+    // --- ВОССТАНОВЛЕНИЕ ЛОГИКИ ПЕРЕТАСКИВАНИЯ (ДРАГ И РЕСАЙЗ) ---
+    board.addEventListener('pointermove', (e) => {
+        const project = state.project;
+        if (!project || project.readOnly) return;
+
+        const pt = pointerToCanvas(e);
+
+        // 1. Драг и Ресайз Зон (Стран и Режимов)
+        if (uiState.dragZone && uiState.dragZone.active) {
+            e.preventDefault();
+            const z = project.zones.find(x => x.id === uiState.dragZone.zoneId);
+            if (z) {
+                const dx = pt.x - uiState.dragZone.startX;
+                const dy = pt.y - uiState.dragZone.startY;
+
+                if (uiState.dragZone.mode === 'move') {
+                    // Двигаем за заголовок
+                    z.x = uiState.dragZone.orig.x + dx;
+                    z.y = uiState.dragZone.orig.y + dy;
+                } else if (uiState.dragZone.mode === 'resize') {
+                    // Растягиваем за правый нижний угол (ограничиваем минимальный размер)
+                    z.w = Math.max(200, uiState.dragZone.orig.w + dx);
+                    z.h = Math.max(150, uiState.dragZone.orig.h + dy);
+                }
+                renderCanvas(); // Мгновенная перерисовка
+            }
+            return;
+        }
+
+        // 2. Драг Узлов (Компаний и Физлиц)
+        if (uiState.dragNode && uiState.dragNode.active) {
+            e.preventDefault();
+            const n = project.nodes.find(x => x.id === uiState.dragNode.nodeId);
+            if (n) {
+                n.x = pt.x - uiState.dragNode.offsetX;
+                n.y = pt.y - uiState.dragNode.offsetY;
+                renderCanvas();
+            }
+        }
+    });
+
+    board.addEventListener('pointerup', (e) => {
+        // Завершение перетаскивания зоны
+        if (uiState.dragZone && uiState.dragZone.active) {
+            uiState.dragZone.active = false;
+            board.releasePointerCapture(e.pointerId);
+            save(); // Сохраняем новые координаты
+        }
+
+        // Завершение перетаскивания узла
+        if (uiState.dragNode && uiState.dragNode.active) {
+            uiState.dragNode.active = false;
+
+            // Умная привязка: проверяем, в какой режим бросили компанию/физлицо
+            const project = state.project;
+            const pt = pointerToCanvas(e);
+            const hitZones = project.zones.filter(z =>
+                pt.x >= z.x && pt.x <= z.x + z.w && pt.y >= z.y && pt.y <= z.y + z.h
+            ).sort((a, b) => (a.w * a.h) - (b.w * b.h)); // Выбираем самую маленькую зону под курсором
+
+            if (hitZones.length > 0 && hitZones[0].kind === 'regime') {
+                const n = project.nodes.find(x => x.id === uiState.dragNode.nodeId);
+                if (n) n.zoneId = hitZones[0].id; // Перепривязываем к новому режиму
+            }
+
+            board.releasePointerCapture(e.pointerId);
+            save();
+            renderCanvas();
+        }
+    });
 }
 
 export function calculateOrthogonalPath(a, b, totalFlows, flowIdx, allNodes) {
