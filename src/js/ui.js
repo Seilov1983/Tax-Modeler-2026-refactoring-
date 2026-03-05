@@ -2574,27 +2574,152 @@ function renderFlows(panel){
   });
 }
 
-// --- АНАЛИТИЧЕСКИЙ ДАШБОРД (Vanilla SVG) ---
+// --- ГЕНЕРАТОР TAX MEMO (МОДАЛЬНОЕ ОКНО И ПЕЧАТЬ) ---
+export function openTaxMemoModal() {
+    const project = state.project;
+    if (!project) return;
+
+    // 1. Сбор данных для отчета
+    const companies = listCompanies(project);
+    const flows = project.flows || [];
+    const taxes = (project.taxes || []).filter(t => !['written_off', 'exempted', 'offset_cleared'].includes(t.status));
+
+    let totalIncomeKZT = 0;
+    let totalTaxKZT = 0;
+
+    companies.forEach(co => totalIncomeKZT += Number(co.annualIncome || 0));
+    taxes.forEach(t => totalTaxKZT += (convert(project, t.amountFunctional, t.functionalCurrency, 'KZT') || 0));
+    const etr = totalIncomeKZT > 0 ? (totalTaxKZT / totalIncomeKZT) * 100 : 0;
+
+    // Сбор рисков со всех узлов
+    const riskFlags = [];
+    project.nodes.forEach(n => {
+        if (n.riskFlags && n.riskFlags.length > 0) {
+            n.riskFlags.forEach(r => riskFlags.push({ node: n.name, risk: r }));
+        }
+    });
+
+    // 2. Генерация HTML-структуры Меморандума
+    const overlay = document.createElement('div');
+    overlay.className = 'memo-modal-overlay';
+
+    let html = `
+        <div class="memo-document">
+            <div class="no-print" style="position: absolute; top: 20px; right: 20px; display: flex; gap: 10px;">
+                <button class="btn" id="btnMemoPrint" style="background: #000;">🖨 Печать / PDF</button>
+                <button class="btn secondary" id="btnMemoClose">✕ Закрыть</button>
+            </div>
+
+            <div class="memo-header">
+                <div class="memo-title">Tax Structure Memorandum</div>
+                <div class="memo-meta">
+                    <strong>Project:</strong> ${escapeHtml(project.title || 'Untitled')}<br>
+                    <strong>Date:</strong> ${isoDate(nowIso())}<br>
+                    <strong>Engine Version:</strong> ${project.engineVersion} (Law-as-Code Validated)
+                </div>
+            </div>
+
+            <div class="memo-section-title">1. Executive Summary</div>
+            <div class="memo-text">
+                Данный меморандум содержит анализ налоговой структуры группы компаний.
+                Совокупная консолидированная выручка группы оценивается в <strong>${formatMoney(totalIncomeKZT)} KZT</strong>.
+                Общая расчетная налоговая нагрузка (Tax Burden) составляет <strong>${formatMoney(totalTaxKZT)} KZT</strong>,
+                что формирует глобальную эффективную ставку (Global ETR) на уровне <strong>${bankersRound2(etr)}%</strong>.
+            </div>
+
+            <div class="memo-section-title">2. Corporate Structure & Jurisdictions</div>
+            <table class="memo-table">
+                <thead><tr><th>Entity Name</th><th>Jurisdiction</th><th>Regime / Zone</th><th>Gross Income (KZT)</th></tr></thead>
+                <tbody>
+                    ${companies.map(co => {
+                        const z = getZone(project, co.zoneId);
+                        return `<tr>
+                            <td>${escapeHtml(co.name)}</td>
+                            <td>${z ? escapeHtml(z.jurisdiction) : 'N/A'}</td>
+                            <td>${z ? escapeHtml(z.name) : 'N/A'}</td>
+                            <td>${formatMoney(co.annualIncome)}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+
+            <div class="memo-section-title">3. Cross-Border Transactions & WHT Analysis</div>
+            <table class="memo-table">
+                <thead><tr><th>Payer</th><th>Receiver</th><th>Type</th><th>Gross Amount</th><th>WHT Applied</th></tr></thead>
+                <tbody>
+                    ${flows.length === 0 ? '<tr><td colspan="5" style="text-align:center;">No transactions modeled.</td></tr>' : flows.map(f => {
+                        const from = getNode(project, f.fromId);
+                        const to = getNode(project, f.toId);
+                        const whtTax = taxes.find(t => t.dueFromFlowId === f.id && t.taxType === 'WHT');
+                        const whtAmount = whtTax ? `${formatMoney(whtTax.amountFunctional)} ${whtTax.functionalCurrency}` : '0.00';
+                        return `<tr>
+                            <td>${from ? escapeHtml(from.name) : 'Unknown'}</td>
+                            <td>${to ? escapeHtml(to.name) : 'Unknown'}</td>
+                            <td>${escapeHtml(f.flowType)}</td>
+                            <td>${formatMoney(f.grossAmount)} ${escapeHtml(f.currency)}</td>
+                            <td>${whtAmount}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+
+            <div class="memo-section-title">4. Compliance & Risk Assessment (D-MACE)</div>
+            <div class="memo-text">
+                Движок Law-as-Code провел автоматический комплаенс-анализ транзакций (включая правила CFC/КИК, Substance CIGA и лимиты дивидендов).
+                Выявлены следующие флаги:
+            </div>
+            ${riskFlags.length === 0 ? '<div class="memo-text"><em>Низкий риск. Критических нарушений не выявлено.</em></div>' : riskFlags.map(r => `
+                <div class="memo-risk-flag">
+                    <strong>Entity: ${escapeHtml(r.node)}</strong><br>
+                    ${escapeHtml(r.risk)}
+                </div>
+            `).join('')}
+
+            <div style="margin-top: 50px; font-size: 11px; color: #777; border-top: 1px solid #eee; padding-top: 10px;">
+                <strong>Disclaimer:</strong> This memorandum is automatically generated by TSM26 Risk Engine.
+                It does not constitute formal legal advice. Please consult with a certified tax advisor before executing transactions.
+            </div>
+        </div>
+    `;
+
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+
+    // Логика кнопок
+    document.getElementById('btnMemoClose').onclick = () => overlay.remove();
+    document.getElementById('btnMemoPrint').onclick = () => {
+        window.print();
+    };
+}
+
+
+// --- ОБНОВЛЕННЫЙ АНАЛИТИЧЕСКИЙ ДАШБОРД (С КНОПКОЙ МЕМОРАНДУМА) ---
 export function renderDashboard(panel) {
     const project = state.project;
     if (!project) return;
 
     let totalIncomeKZT = 0;
     const incomeByZone = {};
+
     listCompanies(project).forEach(co => {
-        const incomeKZT = Number(co.annualIncome || 0); totalIncomeKZT += incomeKZT;
-        const z = getZone(project, co.zoneId); const jur = z ? z.jurisdiction : 'Вне юрисдикции';
+        const incomeKZT = Number(co.annualIncome || 0);
+        totalIncomeKZT += incomeKZT;
+        const z = getZone(project, co.zoneId);
+        const jur = z ? z.jurisdiction : 'Вне юрисдикции';
         incomeByZone[jur] = (incomeByZone[jur] || 0) + incomeKZT;
     });
 
     let totalTaxKZT = 0;
-    const taxesByType = { 'CIT': 0, 'WHT': 0, 'VAT': 0 };
+    const taxesByType = { 'Корпоративный налог (CIT)': 0, 'Налог у источника (WHT)': 0, 'НДС (VAT)': 0 };
+
     (project.taxes || []).forEach(t => {
         if (['written_off', 'exempted', 'offset_cleared'].includes(t.status)) return;
-        const taxKZT = convert(project, t.amountFunctional, t.functionalCurrency, 'KZT') || 0; totalTaxKZT += taxKZT;
-        if (t.taxType.includes('CIT')) taxesByType['CIT'] += taxKZT;
-        else if (t.taxType.includes('WHT')) taxesByType['WHT'] += taxKZT;
-        else if (t.taxType.includes('VAT')) taxesByType['VAT'] += taxKZT;
+        const taxKZT = convert(project, t.amountFunctional, t.functionalCurrency, 'KZT') || 0;
+        totalTaxKZT += taxKZT;
+
+        if (t.taxType.includes('CIT')) taxesByType['Корпоративный налог (CIT)'] += taxKZT;
+        else if (t.taxType.includes('WHT')) taxesByType['Налог у источника (WHT)'] += taxKZT;
+        else if (t.taxType.includes('VAT')) taxesByType['НДС (VAT)'] += taxKZT;
     });
 
     const globalEtr = totalIncomeKZT > 0 ? (totalTaxKZT / totalIncomeKZT) * 100 : 0;
@@ -2603,27 +2728,48 @@ export function renderDashboard(panel) {
         const data = Object.entries(dataObj).filter(([_, val]) => val > 0).map(([label, value], i) => ({ label, value, color: ['accent', 'warn', 'ok', 'danger'][i % 4] }));
         const center = size / 2, strokeW = 30, radius = center - strokeW / 2, circ = 2 * Math.PI * radius;
         const total = data.reduce((s, d) => s + d.value, 0);
+
         if (total === 0) return `<svg width="${size}" height="${size}"><circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--stroke)" stroke-width="${strokeW}"/></svg>`;
+
         let offset = 0;
         const circles = data.map(d => {
-            const fraction = d.value / total, dashArray = `${fraction * circ} ${circ}`, dashOffset = -offset; offset += fraction * circ;
+            const fraction = d.value / total, dashArray = `${fraction * circ} ${circ}`, dashOffset = -offset;
+            offset += fraction * circ;
             return `<circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="var(--${d.color})" stroke-width="${strokeW}" stroke-dasharray="${dashArray}" stroke-dashoffset="${dashOffset}" transform="rotate(-90 ${center} ${center})" style="transition: all 0.5s ease;"></circle>`;
         }).join('');
+
         const legend = data.map(d => `<div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600; margin-bottom:4px;"><div style="display:flex; gap:6px; align-items:center;"><div style="width:10px;height:10px;border-radius:50%;background:var(--${d.color})"></div>${d.label}</div><span>${formatMoney(d.value)}</span></div>`).join('');
+
         return `<div style="display:flex; gap:20px; align-items:center; justify-content:center; flex-wrap:wrap;"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${circles}<text x="${center}" y="${center}" text-anchor="middle" dominant-baseline="middle" fill="var(--text)" font-size="14" font-weight="800">${formatMoney(total)}</text></svg><div style="min-width: 200px;">${legend}</div></div>`;
     };
 
     const c = document.createElement('div');
     c.className = 'col'; c.style.gap = '20px';
     c.innerHTML = `
-        <div class="row" style="gap: 16px; flex-wrap: wrap;">
-            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid var(--ok);"><div class="small">Консолидированная выручка</div><div style="font-size: 20px; font-weight: 800; color: var(--text);">${formatMoney(totalIncomeKZT)} <span style="font-size:12px; color:var(--muted)">KZT</span></div></div>
-            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid var(--danger);"><div class="small">Налоговая нагрузка</div><div style="font-size: 20px; font-weight: 800; color: var(--danger);">${formatMoney(totalTaxKZT)} <span style="font-size:12px; color:var(--muted)">KZT</span></div></div>
-            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};"><div class="small">Global ETR</div><div style="display: flex; align-items: baseline; gap: 8px;"><div style="font-size: 20px; font-weight: 800; color: ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};">${bankersRound2(globalEtr)}%</div></div></div>
+        <div style="display: flex; justify-content: flex-end; margin-bottom: -10px;">
+            <button class="btn" id="btnGenerateMemo" style="background: var(--text); color: var(--bg-color);">📄 Сгенерировать Tax Memo</button>
         </div>
-        <div class="item" style="margin-top: 10px;"><div class="title" style="margin-bottom: 20px; text-align:center;">Структура налогов группы</div>${createDonutChart(taxesByType)}</div>
+
+        <div class="row" style="gap: 16px; flex-wrap: wrap;">
+            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid var(--ok);">
+                <div class="small">Консолидированная выручка</div><div style="font-size: 20px; font-weight: 800; color: var(--text);">${formatMoney(totalIncomeKZT)} <span style="font-size:12px; color:var(--muted)">KZT</span></div>
+            </div>
+            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid var(--danger);">
+                <div class="small">Налоговая нагрузка</div><div style="font-size: 20px; font-weight: 800; color: var(--danger);">${formatMoney(totalTaxKZT)} <span style="font-size:12px; color:var(--muted)">KZT</span></div>
+            </div>
+            <div class="item" style="flex:1; min-width: 200px; border-left: 4px solid ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};">
+                <div class="small">Global ETR</div><div style="display: flex; align-items: baseline; gap: 8px;"><div style="font-size: 20px; font-weight: 800; color: ${globalEtr > 15 ? 'var(--warn)' : 'var(--ok)'};">${bankersRound2(globalEtr)}%</div></div>
+            </div>
+        </div>
+        <div class="item" style="margin-top: 10px;">
+            <div class="title" style="margin-bottom: 20px; text-align:center;">Структура налогов группы</div>
+            ${createDonutChart(taxesByType)}
+        </div>
     `;
     panel.appendChild(c);
+
+    // Привязываем вызов модалки
+    document.getElementById('btnGenerateMemo').onclick = openTaxMemoModal;
 }
 
 function renderAudit(panel){
