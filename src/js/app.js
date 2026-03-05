@@ -10,7 +10,7 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
 
   const project = state.project;
 
-  project.fx = project.fx || { fxDate: "2026-01-15", rateToKZT: { KZT:1 }, source:"manual" };
+  project.fx = project.fx || { fxDate: "2026-01-15", rateToUSD: { USD: 1, KZT: 500 }, source:"manual" };
   project.catalogs = project.catalogs || defaultCatalogs();
   project.catalogs.jurisdictions = project.catalogs.jurisdictions || defaultCatalogs().jurisdictions;
   if (!Array.isArray(project.activeJurisdictions)) project.activeJurisdictions = (project.catalogs.jurisdictions||[]).filter(j=>j.enabled !== false).map(j=>j.id);
@@ -91,7 +91,25 @@ import { onPointerCancel, initBoardInteractions } from './canvas.js';
           document.getElementById('mdlBtnImport').onclick = () => { importJson(); overlay.remove(); };
           document.getElementById('mdlBtnTheme').onclick = () => { document.body.classList.toggle('dark-mode'); overlay.remove(); };
           document.getElementById('mdlBtnClear').onclick = () => {
-              if(confirm("Создать пустой холст?")) { localStorage.removeItem(STORAGE_KEY); state.project = emptyProject(); save(); toast("Проект очищен"); render(); overlay.remove(); }
+              if(confirm("Очистить холст? (Ваши Мастер-данные и курсы валют будут сохранены)")) {
+                  // 1. Запоминаем текущие справочники
+                  const preservedMD = JSON.parse(JSON.stringify(state.project.masterData || {}));
+                  const preservedCat = JSON.parse(JSON.stringify(state.project.catalogs || defaultCatalogs()));
+                  const preservedFx = JSON.parse(JSON.stringify(state.project.fx || {}));
+                  const preservedActiveJur = JSON.parse(JSON.stringify(state.project.activeJurisdictions || []));
+
+                  // 2. Очищаем проект
+                  localStorage.removeItem(STORAGE_KEY);
+                  state.project = emptyProject();
+
+                  // 3. Возвращаем справочники на место
+                  state.project.masterData = preservedMD;
+                  state.project.catalogs = preservedCat;
+                  state.project.fx = preservedFx;
+                  state.project.activeJurisdictions = preservedActiveJur;
+
+                  save(); toast("Холст очищен"); render(); overlay.remove();
+              }
           };
       };
   }

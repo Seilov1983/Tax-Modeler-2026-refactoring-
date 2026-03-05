@@ -62,7 +62,7 @@ export function defaultProject() {
 
   const p = {
     schemaVersion: SCHEMA_VERSION, engineVersion: ENGINE_VERSION, projectId: "demo_" + uid(), title: "Demo Project", userId: "user_demo", createdAt: nowIso(), updatedAt: nowIso(), readOnly: false,
-    masterData: defaultMasterData(), fx: { fxDate: "2026-01-15", rateToKZT: { KZT: 1, USD: 500, HKD: 64, AED: 136, EUR: 540, GBP: 620, SGD: 370 }, source: "manual" },
+    masterData: defaultMasterData(), fx: { fxDate: "2026-01-15", rateToUSD: { USD: 1, KZT: 500, HKD: 7.8, AED: 3.67, EUR: 0.92, GBP: 0.79, SGD: 1.34 }, source: "manual" },
     zones, nodes, ownership, catalogs: defaultCatalogs(), activeJurisdictions: defaultCatalogs().jurisdictions.filter(j=>j.enabled).map(j=>j.id),
     ui: { canvasW: 1400, canvasH: 1000, editMode: "nodes", gridSize: 10, snapToGrid: true, flowLegend: { show: true, mode: "ALL", selectedTypes: [], showTaxes: true } },
     flows: [], taxes: [], audit: { entries: [], lastHash: "GENESIS" }, periods: { closedYears: [] }, group: { consolidatedRevenueEur: null }, accounting: { years: {} },
@@ -78,7 +78,7 @@ export function emptyProject() {
   cat.jurisdictions = [];
   const p = {
     schemaVersion: SCHEMA_VERSION, engineVersion: ENGINE_VERSION, projectId: "proj_" + uid(), title: "New Project", userId: "user_" + uid(), createdAt: nowIso(), updatedAt: nowIso(), readOnly: false,
-    masterData: {}, fx: { fxDate: nowIso().slice(0,10), rateToKZT: { KZT: 1, USD: 500, EUR: 540 }, source: "manual" },
+    masterData: {}, fx: { fxDate: nowIso().slice(0,10), rateToUSD: { USD: 1, KZT: 500, EUR: 0.92 }, source: "manual" },
     zones: [], nodes: [], ownership: [], catalogs: cat, activeJurisdictions: [],
     ui: { canvasW: 1400, canvasH: 1000, editMode: "zones", gridSize: 10, snapToGrid: true, flowLegend: { show: true, mode: "ALL", selectedTypes: [], showTaxes: true } },
     flows: [], taxes: [], audit: { entries: [], lastHash: "GENESIS" }, periods: { closedYears: [] }, group: { consolidatedRevenueEur: null }, accounting: { years: {} },
