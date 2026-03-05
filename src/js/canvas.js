@@ -185,6 +185,34 @@ export function initBoardInteractions() {
         }
     });
 
+    // --- ПЕРЕТАСКИВАНИЕ ЗОН ЗА ЗАГОЛОВОК И РЕСАЙЗ ЗА УГОЛОК ---
+    board.addEventListener('pointerdown', (ev) => {
+      const project = state.project;
+      if (project.readOnly) return;
+
+      const headerHit = ev.target.closest('.zone-header');
+      const resizeHit = ev.target.closest('.zone-resize-handle');
+
+      if (headerHit || resizeHit) {
+        ev.stopPropagation();
+        const pt = pointerToCanvas(ev);
+        const zoneId = (headerHit || resizeHit).getAttribute('data-id');
+        const z = project.zones.find(x => x.id === zoneId);
+        if (z) {
+          uiState.dragZone = {
+            active: true, zoneId,
+            mode: resizeHit ? 'resize' : 'move',
+            handle: 'br', // bottom-right для ресайза
+            startX: pt.x, startY: pt.y,
+            orig: { x: z.x, y: z.y, w: z.w, h: z.h }
+          };
+          board.setPointerCapture(ev.pointerId);
+          ev.preventDefault();
+        }
+        return;
+      }
+    });
+
     // Применяем стартовую позицию
     updateBoardTransform();
 }
@@ -531,17 +559,18 @@ export function renderCanvas(){
     el.style.width = z.w + "px"; el.style.height = z.h + "px";
     el.style.borderColor = z.jurisdiction === "KZ" ? "rgba(79,140,255,.55)" : "rgba(151,163,179,.35)";
     el.style.background = z.jurisdiction === "KZ" ? "rgba(79,140,255,.06)" : "rgba(151,163,179,.05)";
-    el.style.pointerEvents = (editMode === "zones") ? "auto" : "none";
-    const t = document.createElement('div'); t.className = 'zoneTitle';
-    t.textContent = z.name + (editMode === "zones" ? " (drag / resize)" : "");
-    if (editMode === "zones") t.addEventListener('pointerdown', (ev)=>onZonePointerDown(ev, z.id, 'move'));
-    el.appendChild(t);
-    if (editMode === "zones"){
-      ["nw","n","ne","e","se","s","sw","w"].forEach(h=>{
-        const hd = document.createElement('div'); hd.className = 'zHandle ' + h;
-        hd.dataset.handle = h; hd.title = 'Resize'; hd.addEventListener('pointerdown', (ev)=>onZonePointerDown(ev, z.id, 'resize', h)); el.appendChild(hd);
-      });
-    }
+
+    // Отрисовка умной зоны
+    const flag = project.catalogs?.jurisdictions?.find(j => j.id === z.jurisdiction)?.flag || '';
+    const titleText = z.kind === 'country' ? `${flag} ${z.name}` : z.name;
+
+    el.innerHTML = `
+      <div class="zone-header" data-id="${z.id}" title="Потяните, чтобы переместить">
+         ${escapeHtml(titleText)}
+      </div>
+      <div class="zone-resize-handle" data-id="${z.id}" title="Потяните, чтобы изменить размер"></div>
+    `;
+
     zonesLayer.appendChild(el);
   });
 
