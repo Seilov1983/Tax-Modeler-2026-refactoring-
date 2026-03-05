@@ -108,15 +108,14 @@ export function updateBoardTransform() {
     }
 }
 
-// Инициализация движка навигации (pan & zoom)
+// 1. МОНОЛИТНЫЙ КОНТРОЛЛЕР ВЗАИМОДЕЙСТВИЙ
 export function initBoardInteractions() {
     const viewport = document.getElementById('viewport');
     const board = document.getElementById('canvas-board');
     if (!viewport || !board) return;
 
-    // Pan: хватаем полотно
+    // Сдвиг камеры (Pan)
     viewport.addEventListener('mousedown', (e) => {
-        // Игнорируем клики по зонам и узлам
         if (e.target.closest('.node') || e.target.closest('.zone-header') || e.target.closest('.zone-resize-handle')) return;
         e.preventDefault();
         boardState.isPanning = true;
@@ -125,125 +124,57 @@ export function initBoardInteractions() {
         viewport.style.cursor = 'grabbing';
     });
 
-    // Pan: тащим полотно
-    window.addEventListener('mousemove', (e) => {
-        if (!boardState.isPanning) return;
-        boardState.x = e.clientX - boardState.startX;
-        boardState.y = e.clientY - boardState.startY;
-        updateBoardTransform();
-    });
-
-    // Pan: отпускаем полотно
-    window.addEventListener('mouseup', () => {
-        if (boardState.isPanning) {
-            boardState.isPanning = false;
-            viewport.style.cursor = 'grab';
-        }
-    });
-
-    // Zoom: Ctrl/Cmd + колесико (зум к курсору)
+    // Зум камеры
     viewport.addEventListener('wheel', (e) => {
         if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
             const rect = viewport.getBoundingClientRect();
             const mx = e.clientX - rect.left;
             const my = e.clientY - rect.top;
-
-            // Точка на доске под курсором ДО зума
             const bx = (mx - boardState.x) / boardState.scale;
             const by = (my - boardState.y) / boardState.scale;
-
             const delta = e.deltaY > 0 ? -0.05 : 0.05;
             const newScale = Math.max(0.2, Math.min(boardState.scale + delta, 3));
-
-            // Сдвигаем так, чтобы точка под курсором осталась на месте
             boardState.x = mx - bx * newScale;
             boardState.y = my - by * newScale;
             boardState.scale = newScale;
-
             updateBoardTransform();
         }
     }, { passive: false });
 
-    // --- УМНЫЙ ДВОЙНОЙ КЛИК ПО ХОЛСТУ ---
-    board.addEventListener('dblclick', (e) => {
-        e.stopPropagation();
-        const project = state.project;
-
-        const pt = pointerToCanvas(e);
-        const hitZone = findZoneAtPoint(project, pt.x, pt.y);
-
-        // В зависимости от того, куда кликнули, открываем нужную шторку справа
-        if (!hitZone) {
-            openRightDrawer('COUNTRIES');
-        } else if (hitZone.kind === 'country' || !hitZone.kind) {
-            openRightDrawer('REGIMES', hitZone.jurisdiction);
-        } else if (hitZone.kind === 'regime') {
-            openRightDrawer('NODES', hitZone.id);
+    // Глобальное движение мыши (Pan + Drag Zones + Resize + Drag Nodes)
+    window.addEventListener('mousemove', (e) => {
+        if (boardState.isPanning) {
+            boardState.x = e.clientX - boardState.startX;
+            boardState.y = e.clientY - boardState.startY;
+            updateBoardTransform();
+            return;
         }
-    });
 
-    // --- ПЕРЕТАСКИВАНИЕ ЗОН ЗА ЗАГОЛОВОК И РЕСАЙЗ ЗА УГОЛОК ---
-    board.addEventListener('pointerdown', (ev) => {
-      const project = state.project;
-      if (project.readOnly) return;
-
-      const headerHit = ev.target.closest('.zone-header');
-      const resizeHit = ev.target.closest('.zone-resize-handle');
-
-      if (headerHit || resizeHit) {
-        ev.stopPropagation();
-        const pt = pointerToCanvas(ev);
-        const zoneId = (headerHit || resizeHit).getAttribute('data-id');
-        const z = project.zones.find(x => x.id === zoneId);
-        if (z) {
-          uiState.dragZone = {
-            active: true, zoneId,
-            mode: resizeHit ? 'resize' : 'move',
-            handle: 'br', // bottom-right для ресайза
-            startX: pt.x, startY: pt.y,
-            orig: { x: z.x, y: z.y, w: z.w, h: z.h }
-          };
-          board.setPointerCapture(ev.pointerId);
-          ev.preventDefault();
-        }
-        return;
-      }
-    });
-
-    // Применяем стартовую позицию
-    updateBoardTransform();
-
-    // --- ВОССТАНОВЛЕНИЕ ЛОГИКИ ПЕРЕТАСКИВАНИЯ (ДРАГ И РЕСАЙЗ) ---
-    board.addEventListener('pointermove', (e) => {
         const project = state.project;
         if (!project || project.readOnly) return;
-
         const pt = pointerToCanvas(e);
 
-        // 1. Драг и Ресайз Зон (Стран и Режимов)
+        // Перетаскивание и ресайз Страны/Режима
         if (uiState.dragZone && uiState.dragZone.active) {
             e.preventDefault();
             const z = project.zones.find(x => x.id === uiState.dragZone.zoneId);
             if (z) {
                 const dx = pt.x - uiState.dragZone.startX;
                 const dy = pt.y - uiState.dragZone.startY;
-
                 if (uiState.dragZone.mode === 'move') {
-                    // Двигаем за заголовок
                     z.x = uiState.dragZone.orig.x + dx;
                     z.y = uiState.dragZone.orig.y + dy;
                 } else if (uiState.dragZone.mode === 'resize') {
-                    // Растягиваем за правый нижний угол (ограничиваем минимальный размер)
                     z.w = Math.max(200, uiState.dragZone.orig.w + dx);
                     z.h = Math.max(150, uiState.dragZone.orig.h + dy);
                 }
-                renderCanvas(); // Мгновенная перерисовка
+                renderCanvas();
             }
             return;
         }
 
-        // 2. Драг Узлов (Компаний и Физлиц)
+        // Перетаскивание субъекта (Компании)
         if (uiState.dragNode && uiState.dragNode.active) {
             e.preventDefault();
             const n = project.nodes.find(x => x.id === uiState.dragNode.nodeId);
@@ -255,35 +186,59 @@ export function initBoardInteractions() {
         }
     });
 
-    board.addEventListener('pointerup', (e) => {
-        // Завершение перетаскивания зоны
-        if (uiState.dragZone && uiState.dragZone.active) {
-            uiState.dragZone.active = false;
-            board.releasePointerCapture(e.pointerId);
-            save(); // Сохраняем новые координаты
+    // Глобальное отпускание мыши
+    window.addEventListener('mouseup', (e) => {
+        if (boardState.isPanning) {
+            boardState.isPanning = false;
+            viewport.style.cursor = 'grab';
         }
 
-        // Завершение перетаскивания узла
+        if (uiState.dragZone && uiState.dragZone.active) {
+            uiState.dragZone.active = false;
+            save();
+        }
+
         if (uiState.dragNode && uiState.dragNode.active) {
             uiState.dragNode.active = false;
-
-            // Умная привязка: проверяем, в какой режим бросили компанию/физлицо
             const project = state.project;
             const pt = pointerToCanvas(e);
             const hitZones = project.zones.filter(z =>
                 pt.x >= z.x && pt.x <= z.x + z.w && pt.y >= z.y && pt.y <= z.y + z.h
-            ).sort((a, b) => (a.w * a.h) - (b.w * b.h)); // Выбираем самую маленькую зону под курсором
+            ).sort((a, b) => (a.w * a.h) - (b.w * b.h));
 
+            // Если уронили в новый режим - перепривязываем
             if (hitZones.length > 0 && hitZones[0].kind === 'regime') {
                 const n = project.nodes.find(x => x.id === uiState.dragNode.nodeId);
-                if (n) n.zoneId = hitZones[0].id; // Перепривязываем к новому режиму
+                if (n) n.zoneId = hitZones[0].id;
             }
-
-            board.releasePointerCapture(e.pointerId);
             save();
             renderCanvas();
         }
     });
+
+    // Умный двойной клик (Открытие панелей)
+    board.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        const project = state.project;
+        const pt = pointerToCanvas(e);
+
+        // Находим самую глубокую зону (отдаем приоритет режиму перед страной)
+        const hitZones = project.zones.filter(z =>
+            pt.x >= z.x && pt.x <= z.x + z.w && pt.y >= z.y && pt.y <= z.y + z.h
+        ).sort((a, b) => (a.w * a.h) - (b.w * b.h));
+
+        const hitZone = hitZones.length > 0 ? hitZones[0] : null;
+
+        if (!hitZone) {
+            openRightDrawer('COUNTRIES');
+        } else if (hitZone.kind === 'country' || !hitZone.kind) {
+            openRightDrawer('REGIMES', hitZone.jurisdiction);
+        } else if (hitZone.kind === 'regime') {
+            openRightDrawer('NODES', hitZone.id);
+        }
+    });
+
+    updateBoardTransform();
 }
 
 export function calculateOrthogonalPath(a, b, totalFlows, flowIdx, allNodes) {
@@ -482,29 +437,26 @@ export function syncTXANodes(p){
   }
 }
 
-export function onZonePointerDown(ev, zoneId, mode, handle){
-  const project = state.project;
-  if (project.readOnly) return; // <-- ВАЖНО: Убрана старая блокировка перемещения!
+// 2. ИНИЦИАЛИЗАЦИЯ ЗАХВАТА
+export function onZonePointerDown(ev, zoneId, mode, handle) {
+    const project = state.project;
+    if (project.readOnly) return;
 
-  const z = getZone(project, zoneId);
-  if (!z) return;
+    const z = project.zones.find(x => x.id === zoneId);
+    if (!z) return;
 
-  uiState.dragZone.active = true;
-  uiState.dragZone.zoneId = zoneId;
-  uiState.dragZone.mode = mode;
-  uiState.dragZone.handle = handle || null;
-  uiState.dragZone.orig = { x:z.x, y:z.y, w:z.w, h:z.h };
-  uiState.dragZone.parentId = findZoneAtPoint(project, z.x + z.w/2, z.y + z.h/2)?.id || null;
+    uiState.dragZone = {
+        active: true,
+        zoneId: zoneId,
+        mode: mode,
+        handle: handle || null,
+        orig: { x: z.x, y: z.y, w: z.w, h: z.h },
+        startX: pointerToCanvas(ev).x,
+        startY: pointerToCanvas(ev).y
+    };
 
-  const pt = pointerToCanvas(ev);
-  uiState.dragZone.startX = pt.x;
-  uiState.dragZone.startY = pt.y;
-
-  const board = document.getElementById('canvas-board');
-  if (board) board.setPointerCapture(ev.pointerId);
-
-  ev.preventDefault();
-  ev.stopPropagation();
+    ev.preventDefault();
+    ev.stopPropagation();
 }
 
 export function onPointerDown(ev, nodeId){
@@ -635,32 +587,31 @@ export function renderCanvas(){
   board.style.width = W + "px"; board.style.height = H + "px";
   const editMode = (project.ui?.editMode || "nodes");
 
+  // 3. ОТРИСОВКА ЗОН
   project.zones.filter(z=>isZoneEnabled(project,z)).forEach(z=>{
     const el = document.createElement('div');
     el.className = 'zone' + (z.id === uiState.hoverZoneId ? ' hover' : '');
     el.dataset.zoneId = z.id;
     el.style.left = z.x + "px"; el.style.top = z.y + "px";
     el.style.width = z.w + "px"; el.style.height = z.h + "px";
-
-    // Делаем саму зону прозрачной для кликов
-    el.style.pointerEvents = "none";
+    el.style.pointerEvents = "none"; // Прозрачность для кликов
 
     const flag = project.catalogs?.jurisdictions?.find(j => j.id === z.jurisdiction)?.flag || '';
     const titleText = z.kind === 'country' ? `${flag} ${z.name}` : z.name;
 
     el.innerHTML = `
-      <div class="zone-header" data-id="${z.id}" title="Потяните, чтобы переместить">
+      <div class="zone-header" data-id="${z.id}" title="Потяните, чтобы переместить" style="pointer-events: auto;">
          ${escapeHtml(titleText)}
       </div>
-      <div class="zone-resize-handle" data-id="${z.id}" title="Потяните, чтобы изменить размер"></div>
+      <div class="zone-resize-handle" data-id="${z.id}" title="Потяните, чтобы изменить размер" style="pointer-events: auto;"></div>
     `;
 
-    // Вешаем логику Drag & Resize ТОЛЬКО на заголовок и уголок
     const header = el.querySelector('.zone-header');
     const resize = el.querySelector('.zone-resize-handle');
 
-    header.addEventListener('pointerdown', (ev) => onZonePointerDown(ev, z.id, 'move'));
-    resize.addEventListener('pointerdown', (ev) => onZonePointerDown(ev, z.id, 'resize', 'se'));
+    // Вешаем mousedown на элементы управления
+    header.addEventListener('mousedown', (ev) => onZonePointerDown(ev, z.id, 'move'));
+    resize.addEventListener('mousedown', (ev) => onZonePointerDown(ev, z.id, 'resize', 'se'));
 
     zonesLayer.appendChild(el);
   });
