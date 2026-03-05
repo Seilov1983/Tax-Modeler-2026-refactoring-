@@ -296,10 +296,6 @@ async function handleCountryDrop(project, data, pt) {
     project.catalogs.jurisdictions.push({ id: jurId, name: jurName, enabled: true });
   }
 
-  // Создать TXA ноду
-  const txa = makeTXA(z);
-  if (!getNode(project, txa.id)) project.nodes.push(txa);
-
   normalizeZoneCascade(project, uniqueId);
   syncTXANodes(project);
   bootstrapNormalizeZones(project);
@@ -359,9 +355,6 @@ async function handleRegimeDrop(project, data, pt) {
     zIndex: maxZI + 1, kind: 'regime', tax: {}
   };
   project.zones.push(z);
-
-  const txa = makeTXA(z);
-  if (!getNode(project, txa.id)) project.nodes.push(txa);
 
   normalizeZoneCascade(project, uniqueId);
   syncTXANodes(project);
@@ -3014,8 +3007,8 @@ export function renderMasterDataTables() {
     // 1. РЕНДЕР БАЗОВЫХ ВВОДНЫХ (FX)
     const fxContainer = document.getElementById('fxDataContainer');
     if (fxContainer && !isBatchMode) {
-        project.fx = project.fx || { fxDate: isoDate(nowIso()), rateToUSD: { USD: 1, KZT: 500 }, source: "manual" };
-        project.fx.rateToUSD = project.fx.rateToUSD || { USD: 1, KZT: 500 };
+        project.fx = project.fx || { fxDate: isoDate(nowIso()), rateToUSD: { USD: 1, KZT: 500, CNY: 7.2, AED: 3.67, HKD: 7.8, GBP: 0.79, SGD: 1.34 }, source: "manual" };
+        project.fx.rateToUSD = project.fx.rateToUSD || { USD: 1, KZT: 500, CNY: 7.2, AED: 3.67, HKD: 7.8, GBP: 0.79, SGD: 1.34 };
         const ccyKeys = Object.keys(project.fx.rateToUSD).filter(x => x && x !== 'USD').sort();
 
         let fxHtml = `
