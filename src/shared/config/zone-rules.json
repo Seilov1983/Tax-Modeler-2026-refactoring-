@@ -1,0 +1,82 @@
+{
+  "$schema": "zone-rules-schema",
+  "$version": "2026-03-06",
+  "$description": "Declarative zone tax overrides — Law-as-Code. AI Legal Parser can update this file when legislation changes without touching engine code.",
+
+  "zoneOverrides": {
+    "KZ_HUB": {
+      "jurisdiction": "KZ",
+      "taxOverride": {
+        "vatRate": 0.00,
+        "cit": { "mode": "flat", "rate": 0.00 },
+        "wht": { "dividends": 0.05, "interest": 0.00, "royalties": 0.00, "services": 0.00 },
+        "payroll": { "pitRate": 0.00, "socialTaxEmployerRate": 0.00 }
+      },
+      "lawRef": "KZ_ASTANA_HUB_2026",
+      "effectiveFrom": "2026-01-01"
+    },
+    "KZ_AIFC": {
+      "jurisdiction": "KZ",
+      "taxOverride": {
+        "vatRate": 0.00,
+        "cit": { "mode": "flat", "rate": 0.00 }
+      },
+      "lawRef": "KZ_AIFC_ACT_2026",
+      "effectiveFrom": "2026-01-01"
+    },
+    "UAE_FREEZONE_QFZP": {
+      "jurisdiction": "UAE",
+      "taxOverride": {
+        "cit": { "mode": "qfzp", "qualifyingRate": 0.00, "nonQualifyingRate": 0.09, "currency": "AED" }
+      },
+      "lawRef": "UAE_CT_LAW_2023_QFZP",
+      "effectiveFrom": "2024-06-01"
+    },
+    "UAE_FREEZONE_NONQFZP": {
+      "jurisdiction": "UAE",
+      "taxOverride": {
+        "cit": { "mode": "threshold", "zeroUpTo": 375000, "zeroRate": 0.00, "mainRate": 0.09, "currency": "AED" }
+      },
+      "lawRef": "UAE_CT_LAW_2023_NONQFZP",
+      "effectiveFrom": "2024-06-01"
+    },
+    "HK_OFFSHORE": {
+      "jurisdiction": "HK",
+      "taxOverride": {
+        "cit": { "mode": "flat", "rate": 0.00 }
+      },
+      "lawRef": "HK_IRO_OFFSHORE_CLAIM",
+      "effectiveFrom": "2023-01-01"
+    }
+  },
+
+  "whtExemptionRules": [
+    {
+      "id": "KZ_SERVICES_GOODS_EQUIPMENT_EXEMPT",
+      "match": {
+        "flowTypes": ["Goods", "Equipment", "Services"]
+      },
+      "effect": {
+        "rate": 0,
+        "lawRef": "KZ_NK_2026_ART_680_P1_S4"
+      }
+    },
+    {
+      "id": "DOMESTIC_SAME_JURISDICTION",
+      "match": {
+        "sameJurisdiction": true
+      },
+      "effect": {
+        "rate": 0,
+        "lawRef": "DOMESTIC_WHT_EXEMPTION"
+      }
+    }
+  ],
+
+  "aifcPresenceRule": {
+    "zoneCode": "KZ_AIFC",
+    "condition": "usesCITBenefit && !cigaInZone",
+    "fallbackCitRate": 0.20,
+    "lawRef": "APP_G_G4_AIFC_PRESENCE"
+  }
+}
