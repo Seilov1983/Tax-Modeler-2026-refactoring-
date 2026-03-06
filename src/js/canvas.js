@@ -1,7 +1,7 @@
 import { escapeHtml, fmtMoney, toast } from './utils.js';
 import { state, uiState, save, auditAppend } from './state.js';
 import { getZone, getNode, isZoneEnabled, detectZoneId, clampToZoneExclusive, recomputeRisks } from './engine.js';
-import { render, openFlowInspector, openRightDrawer } from './ui.js';
+import { openFlowInspector, openRightDrawer } from './ui.js';
 
 export const boardState = { x: -2000, y: -2000, scale: 1, isPanning: false, startX: 0, startY: 0 };
 
@@ -256,12 +256,7 @@ export function syncTXANodes(p){
   }
 }
 
-// Заглушки, чтобы app.js не падал при импорте
 export function onPointerCancel() { boardState.isPanning = false; }
-export function onPointerMove() {}
-export function onPointerUp() {}
-export function onPointerDown() {}
-export function onZonePointerDown() {}
 
 // 4. ГЛАВНЫЙ РЕНДЕР И ИЗОЛИРОВАННАЯ ЛОГИКА
 export function renderCanvas(){
