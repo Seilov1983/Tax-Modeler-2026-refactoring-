@@ -1,0 +1,200 @@
+/* ─── Base Reset ──────────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface-hover: #252833;
+  --border: #2d3140;
+  --text: #e4e6ed;
+  --text-muted: #8b8fa3;
+  --accent: #4f8cff;
+  --danger: #ff4f6d;
+  --warning: #ffb84f;
+  --success: #4fdb7b;
+
+  --zone-bg: rgba(79, 140, 255, 0.05);
+  --zone-border: rgba(79, 140, 255, 0.2);
+  --node-company-bg: #1e2a3a;
+  --node-person-bg: #2a1e3a;
+  --node-txa-bg: #1e3a2a;
+
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ─── Canvas ──────────────────────────────────────────────────────────────── */
+
+#viewport {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+#canvas-board {
+  position: absolute;
+  transform-origin: 0 0;
+}
+
+/* ─── Zones ───────────────────────────────────────────────────────────────── */
+
+.zone {
+  background: var(--zone-bg);
+  border: 1px solid var(--zone-border);
+  border-radius: 8px;
+}
+
+.zone-label {
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Nodes ───────────────────────────────────────────────────────────────── */
+
+.canvas-node {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: box-shadow 0.15s ease;
+}
+
+.canvas-node:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.canvas-node:active {
+  cursor: grabbing;
+}
+
+.node-company {
+  background: var(--node-company-bg);
+  border-color: rgba(79, 140, 255, 0.3);
+}
+
+.node-person {
+  background: var(--node-person-bg);
+  border-color: rgba(160, 79, 255, 0.3);
+}
+
+.node-txa {
+  background: var(--node-txa-bg);
+  border-color: rgba(79, 255, 140, 0.2);
+  opacity: 0.7;
+}
+
+.node-frozen {
+  border-color: var(--danger);
+  box-shadow: 0 0 12px rgba(255, 79, 109, 0.2);
+}
+
+.node-has-risks {
+  border-color: var(--warning);
+}
+
+/* ─── Node Inner ──────────────────────────────────────────────────────────── */
+
+.node-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.node-type-badge {
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+}
+
+.node-name {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node-badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+}
+
+.badge-frozen {
+  background: rgba(255, 79, 109, 0.15);
+  color: var(--danger);
+}
+
+.badge-risk {
+  background: rgba(255, 184, 79, 0.15);
+  color: var(--warning);
+}
+
+.badge-cfc {
+  background: rgba(255, 79, 109, 0.15);
+  color: var(--danger);
+}
+
+/* ─── Recalculation Indicator ─────────────────────────────────────────────── */
+
+.recalculating-indicator {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 9999;
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--accent);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
