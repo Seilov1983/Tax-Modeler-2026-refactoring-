@@ -1,1 +1,1 @@
-export { nodesAtom, nodeAtomsAtom, nodeByIdAtom, selectedNodeIdAtom, selectedNodeAtom } from './model/atoms';
+export { nodesAtom, nodeAtomsAtom, nodeByIdAtom, nodeFamily, selectedNodeIdAtom, selectedNodeAtom } from './model/atoms';

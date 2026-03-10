@@ -9,7 +9,7 @@
  */
 
 import { atom } from 'jotai';
-import { splitAtom } from 'jotai/utils';
+import { splitAtom, atomFamily } from 'jotai/utils';
 import type { NodeDTO } from '@shared/types';
 
 // ─── Base atoms ──────────────────────────────────────────────────────────────
@@ -30,6 +30,26 @@ export const nodeByIdAtom = atom((get) => {
   nodes.forEach((n) => map.set(n.id, n));
   return map;
 });
+
+// ─── atomFamily: keyed O(1) access per node ─────────────────────────────────
+
+/**
+ * atomFamily creates a unique atom for each node ID.
+ * Provides O(1) keyed access — ideal for panels, inspectors, and
+ * any component that needs a specific node without scanning the array.
+ *
+ * Usage: const nodeAtom = nodeFamily(nodeId); // stable reference per ID
+ */
+export const nodeFamily = atomFamily((id: string) =>
+  atom(
+    (get) => get(nodeByIdAtom).get(id) ?? null,
+    (get, set, update: Partial<NodeDTO>) => {
+      set(nodesAtom, (prev) =>
+        prev.map((n) => (n.id === id ? { ...n, ...update } : n)),
+      );
+    },
+  ),
+);
 
 // ─── Selection state ─────────────────────────────────────────────────────────
 
