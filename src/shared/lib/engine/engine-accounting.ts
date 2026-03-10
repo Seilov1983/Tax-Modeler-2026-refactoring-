@@ -6,6 +6,7 @@
 import { uid, nowIso, bankersRound2, fmtMoney } from './utils';
 import { getZone, listCompanies, convert, detectZoneId, defaultLawReferences } from './engine-core';
 import { effectiveZoneTax, computeCITAmount } from './engine-tax';
+import { recomputeFrozen, recomputeRisks } from './engine-risks';
 import type { Project, CITConfig } from '@shared/types';
 
 // ─── Year Utilities ──────────────────────────────────────────────────────────
@@ -159,6 +160,35 @@ export function runPipeline(p: Project, context?: string) {
   pipelineStep(run, 'Separate Accounting', () => separateAccountingAIFC(p, year));
   pipelineStep(run, 'Recalculate ETR', () => recalculateEtrMvp(p, year));
   return run;
+}
+
+// ─── Batch Recompute (State-Batching Facade) ────────────────────────────────
+
+/**
+ * Pure computation facade: deep-clones the project, runs the full pipeline
+ * (frozen → risks → accounting), and returns the resulting slices.
+ *
+ * The caller commits the returned data to Jotai in a single `setNodes()` call
+ * (+ flows/taxes), so splitAtom only re-renders the cards that actually changed.
+ *
+ * NO state mutations happen here — all math runs in memory on the clone.
+ */
+export function recomputeAll(project: Project, context?: string) {
+  // 1. Deep-clone to avoid mutating the live state during concurrent render
+  const p = JSON.parse(JSON.stringify(project)) as Project;
+
+  // 2. Run the full computation pipeline in memory
+  recomputeFrozen(p);
+  recomputeRisks(p);
+  runPipeline(p, context || 'user_action');
+
+  // 3. Return the computed slices — caller decides how to commit to state
+  return {
+    project: p,
+    nodes: p.nodes,
+    flows: p.flows,
+    taxes: p.taxes,
+  };
 }
 
 // ─── Snapshots ───────────────────────────────────────────────────────────────
