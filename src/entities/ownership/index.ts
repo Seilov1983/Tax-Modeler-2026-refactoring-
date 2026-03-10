@@ -1,1 +1,1 @@
-export { ownershipAtom } from './model/atoms';
+export { ownershipAtom, ownershipAtomsAtom } from './model/atoms';
