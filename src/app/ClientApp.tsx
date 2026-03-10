@@ -16,8 +16,9 @@ import { flowsAtom } from '@entities/flow';
 import { ownershipAtom } from '@entities/ownership';
 import { taxEntriesAtom } from '@features/tax-calculator';
 import { CanvasBoard } from '@widgets/canvas-board';
+import { defaultProject } from '@entities/project/model/defaultData';
 import {
-  defaultProject, ensureMasterData, ensureZoneTaxDefaults,
+  ensureMasterData, ensureZoneTaxDefaults,
   bootstrapNormalizeZones, recomputeRisks, recomputeFrozen,
 } from '@shared/lib/engine';
 import { SCHEMA_VERSION } from '@shared/lib/engine/engine-core';
