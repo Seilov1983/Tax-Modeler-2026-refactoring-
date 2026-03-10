@@ -9,14 +9,9 @@
 
 import { Provider, useSetAtom, useAtomValue } from 'jotai';
 import { useEffect } from 'react';
-import { projectAtom } from '@features/canvas';
-import { nodesAtom } from '@entities/node';
-import { zonesAtom } from '@entities/zone';
-import { flowsAtom } from '@entities/flow';
-import { ownershipAtom } from '@entities/ownership';
-import { taxEntriesAtom } from '@features/tax-calculator';
+import { projectAtom, hydrateProjectAtom } from '@features/canvas';
 import { CanvasBoard } from '@widgets/canvas-board';
-import { defaultProject } from '@entities/project/model/defaultData';
+import { defaultProject } from '@entities/project';
 import {
   ensureMasterData, ensureZoneTaxDefaults,
   bootstrapNormalizeZones, recomputeRisks, recomputeFrozen,
@@ -27,12 +22,7 @@ import type { Project } from '@shared/types';
 const STORAGE_KEY = 'tsm26_onefile_project_v2';
 
 function AppContent() {
-  const setProject = useSetAtom(projectAtom);
-  const setNodes = useSetAtom(nodesAtom);
-  const setZones = useSetAtom(zonesAtom);
-  const setFlows = useSetAtom(flowsAtom);
-  const setOwnership = useSetAtom(ownershipAtom);
-  const setTaxEntries = useSetAtom(taxEntriesAtom);
+  const hydrate = useSetAtom(hydrateProjectAtom);
   const project = useAtomValue(projectAtom);
 
   useEffect(() => {
@@ -59,14 +49,9 @@ function AppContent() {
     recomputeFrozen(p);
     recomputeRisks(p);
 
-    // Hydrate all atoms
-    setProject(p);
-    setNodes(p.nodes);
-    setZones(p.zones);
-    setFlows(p.flows);
-    setOwnership(p.ownership);
-    setTaxEntries(p.taxes);
-  }, [setProject, setNodes, setZones, setFlows, setOwnership, setTaxEntries]);
+    // Single batched commit to all entity atoms
+    hydrate(p);
+  }, [hydrate]);
 
   // Persist to localStorage on project change
   useEffect(() => {
