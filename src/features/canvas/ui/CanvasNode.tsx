@@ -13,11 +13,26 @@
  * even when the tax engine is computing in the background via useTransition.
  */
 
-import { useAtom } from 'jotai';
-import { useRef, useCallback, memo, type RefObject } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
+import { useRef, useCallback, memo, Suspense, type RefObject } from 'react';
 import type { PrimitiveAtom } from 'jotai';
 import type { NodeDTO } from '@shared/types';
 import type { ViewportState } from './useCanvasViewport';
+import { nodeTaxAtomFamily } from '@features/tax-calculator/model/atoms';
+
+// ─── Micro-component: isolates Suspense per node for CIT display ────────────
+
+function NodeTaxDisplay({ nodeId }: { nodeId: string }) {
+  const citAmount = useAtomValue(nodeTaxAtomFamily(nodeId));
+
+  if (citAmount === null || citAmount === 0) return null;
+
+  return (
+    <div className="badge badge-tax">
+      CIT: {citAmount.toFixed(2)}
+    </div>
+  );
+}
 
 interface CanvasNodeProps {
   nodeAtom: PrimitiveAtom<NodeDTO>;
@@ -114,6 +129,11 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
         )}
         {node.riskFlags?.some((r) => r.type === 'CFC_RISK') && (
           <span className="badge badge-cfc">CFC</span>
+        )}
+        {isCompany && (
+          <Suspense fallback={<span className="badge badge-tax-loading">calc...</span>}>
+            <NodeTaxDisplay nodeId={node.id} />
+          </Suspense>
         )}
       </div>
     </div>

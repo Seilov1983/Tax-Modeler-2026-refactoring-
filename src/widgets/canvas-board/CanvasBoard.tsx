@@ -6,21 +6,22 @@
  * Integrates:
  * - Jotai splitAtom for per-node rendering isolation
  * - Transient drag state pattern (via CanvasNode)
- * - Async taxCalculationAtom for reactive tax recalculation via Suspense
+ * - Local Suspense per node/flow for async tax badge rendering
  * - useCanvasViewport for 60 FPS pan & zoom via direct DOM manipulation
  */
 
 import { useAtomValue } from 'jotai';
-import { Suspense, useRef } from 'react';
-import { nodeAtomsAtom } from '@entities/node';
+import { useRef } from 'react';
+import { nodeAtomsAtom, nodesAtom } from '@entities/node';
+import { flowsAtom } from '@entities/flow';
 import { zonesAtom } from '@entities/zone';
-import { CanvasNode, useCanvasViewport } from '@features/canvas';
-import { useTaxRecalculation } from '@features/tax-calculator';
+import { CanvasNode, CanvasFlow, useCanvasViewport } from '@features/canvas';
 
-function CanvasBoardInner() {
+export function CanvasBoard() {
   const zones = useAtomValue(zonesAtom);
   const nodeAtoms = useAtomValue(nodeAtomsAtom);
-  const taxResults = useTaxRecalculation();
+  const nodes = useAtomValue(nodesAtom);
+  const flows = useAtomValue(flowsAtom);
 
   // ─── Viewport refs (pan & zoom via direct DOM mutation, zero re-renders) ──
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -70,17 +71,28 @@ function CanvasBoardInner() {
           ))}
         </div>
 
-        {/* Arrows Layer (SVG) */}
-        <svg id="arrows-layer" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
+        {/* Arrows Layer (SVG) — each flow has local Suspense for WHT badge */}
+        <svg
+          id="arrows-layer"
+          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+        >
+          <defs>
+            <marker
+              id="arrowhead"
+              markerWidth="8"
+              markerHeight="6"
+              refX="8"
+              refY="3"
+              orient="auto"
+            >
+              <polygon points="0 0, 8 3, 0 6" fill="var(--stroke, #94a3b8)" />
+            </marker>
+          </defs>
+          {flows.map((flow) => (
+            <CanvasFlow key={flow.id} flow={flow} nodes={nodes} />
+          ))}
+        </svg>
       </div>
     </div>
-  );
-}
-
-export function CanvasBoard() {
-  return (
-    <Suspense fallback={<div className="recalculating-indicator">Recalculating taxes...</div>}>
-      <CanvasBoardInner />
-    </Suspense>
   );
 }

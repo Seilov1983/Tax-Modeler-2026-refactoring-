@@ -1,4 +1,5 @@
 import { atom } from 'jotai';
+import { atomFamily } from 'jotai/utils';
 import type { TaxEntry } from '@shared/types';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { computeWht, computeCITAmount } from '@shared/lib/engine/engine-tax';
@@ -75,3 +76,23 @@ export const taxCalculationAtom = atom(async (get) => {
     timestamp: Date.now(),
   };
 });
+
+// ─── Per-node CIT selector (O(1) subscription per node) ─────────────────────
+
+export const nodeTaxAtomFamily = atomFamily((nodeId: string) =>
+  atom(async (get) => {
+    const taxResults = await get(taxCalculationAtom);
+    const nodeTax = taxResults.cit.find((c) => c.nodeId === nodeId);
+    return nodeTax ? nodeTax.citAmount : null;
+  }),
+);
+
+// ─── Per-flow WHT selector (O(1) subscription per flow) ─────────────────────
+
+export const flowTaxAtomFamily = atomFamily((flowId: string) =>
+  atom(async (get) => {
+    const taxResults = await get(taxCalculationAtom);
+    const flowTax = taxResults.wht.find((f) => f.flowId === flowId);
+    return flowTax ? flowTax.whtAmount : null;
+  }),
+);
