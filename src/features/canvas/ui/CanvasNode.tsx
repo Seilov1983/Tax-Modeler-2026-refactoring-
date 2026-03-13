@@ -19,6 +19,7 @@ import type { PrimitiveAtom } from 'jotai';
 import type { NodeDTO } from '@shared/types';
 import type { ViewportState } from './useCanvasViewport';
 import { nodeTaxAtomFamily } from '@features/tax-calculator/model/atoms';
+import { nodeRiskAtomFamily } from '@features/risk-analyzer/model/atoms';
 
 // ─── Micro-component: isolates Suspense per node for CIT display ────────────
 
@@ -31,6 +32,35 @@ function NodeTaxDisplay({ nodeId }: { nodeId: string }) {
     <div className="badge badge-tax">
       CIT: {citAmount.toFixed(2)}
     </div>
+  );
+}
+
+// ─── Micro-component: isolates Suspense per node for risk display ───────────
+
+function NodeRiskDisplay({ nodeId }: { nodeId: string }) {
+  const risks = useAtomValue(nodeRiskAtomFamily(nodeId));
+
+  if (!risks || risks.length === 0) return null;
+
+  const tooltip = risks.map((r) => `${r.type}${r.lawRef ? ` (${r.lawRef})` : ''}`).join('\n');
+
+  return (
+    <span
+      className="badge badge-risk-engine"
+      title={tooltip}
+      style={{
+        background: '#eab308',
+        color: '#fff',
+        fontSize: '10px',
+        fontWeight: 'bold',
+        padding: '1px 5px',
+        borderRadius: '9px',
+        border: '1px solid #ca8a04',
+        cursor: 'help',
+      }}
+    >
+      ! {risks.length}
+    </span>
   );
 }
 
@@ -135,6 +165,9 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
             <NodeTaxDisplay nodeId={node.id} />
           </Suspense>
         )}
+        <Suspense fallback={null}>
+          <NodeRiskDisplay nodeId={node.id} />
+        </Suspense>
       </div>
     </div>
   );
