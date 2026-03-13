@@ -10,13 +10,15 @@
  * - useCanvasViewport for 60 FPS pan & zoom via direct DOM manipulation
  */
 
-import { useAtomValue } from 'jotai';
-import { useRef } from 'react';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { useRef, useCallback } from 'react';
 import { nodeAtomsAtom, nodesAtom } from '@entities/node';
 import { flowsAtom } from '@entities/flow';
 import { zonesAtom } from '@entities/zone';
 import { CanvasNode, CanvasFlow, useCanvasViewport } from '@features/canvas';
 import { AuditLogPanel } from '@features/audit-log/ui/AuditLogPanel';
+import { selectionAtom } from '@features/entity-editor/model/atoms';
+import { EditorSidebar } from '@features/entity-editor/ui/EditorSidebar';
 
 export function CanvasBoard() {
   const zones = useAtomValue(zonesAtom);
@@ -24,15 +26,23 @@ export function CanvasBoard() {
   const nodes = useAtomValue(nodesAtom);
   const flows = useAtomValue(flowsAtom);
 
+  const setSelection = useSetAtom(selectionAtom);
+
   // ─── Viewport refs (pan & zoom via direct DOM mutation, zero re-renders) ──
   const viewportRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const { stateRef: viewportStateRef } = useCanvasViewport(viewportRef, boardRef);
 
+  // Deselect when clicking empty canvas area
+  const handleBackgroundClick = useCallback(() => {
+    setSelection(null);
+  }, [setSelection]);
+
   return (
     <div
       ref={viewportRef}
       id="viewport"
+      onClick={handleBackgroundClick}
       style={{ position: 'relative', overflow: 'hidden', width: '100%', height: '100%' }}
     >
       <div
@@ -97,6 +107,9 @@ export function CanvasBoard() {
 
       {/* Audit Log Panel — outside zoom/pan area, fixed to bottom of viewport */}
       <AuditLogPanel />
+
+      {/* Property Panel — right sidebar for editing selected entity */}
+      <EditorSidebar />
     </div>
   );
 }

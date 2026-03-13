@@ -13,13 +13,14 @@
  * even when the tax engine is computing in the background via useTransition.
  */
 
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useRef, useCallback, memo, Suspense, type RefObject } from 'react';
 import type { PrimitiveAtom } from 'jotai';
 import type { NodeDTO } from '@shared/types';
 import type { ViewportState } from './useCanvasViewport';
 import { nodeTaxAtomFamily } from '@features/tax-calculator/model/atoms';
 import { nodeRiskAtomFamily } from '@features/risk-analyzer/model/atoms';
+import { selectionAtom } from '@features/entity-editor/model/atoms';
 
 // ─── Micro-component: isolates Suspense per node for CIT display ────────────
 
@@ -72,19 +73,24 @@ interface CanvasNodeProps {
 
 export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef }: CanvasNodeProps) {
   const [node, setNode] = useAtom(nodeAtom);
+  const setSelection = useSetAtom(selectionAtom);
   const domRef = useRef<HTMLDivElement>(null);
   // Track the live position during drag without triggering re-renders
   const livePos = useRef({ x: node.x, y: node.y });
+  // Distinguish click from drag
+  const hasDragged = useRef(false);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
+      hasDragged.current = false;
 
       // Snapshot starting position
       livePos.current = { x: node.x, y: node.y };
 
       const onPointerMove = (moveEvent: PointerEvent) => {
+        hasDragged.current = true;
         // Compensate for zoom: divide pixel movement by current scale
         const scale = viewportStateRef.current?.scale ?? 1;
         // DIRECT DOM MUTATION — bypasses React render cycle
@@ -100,16 +106,27 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
         target.removeEventListener('pointerup', onPointerUp);
         target.releasePointerCapture(upEvent.pointerId);
 
-        // COMMIT to Jotai — triggers React re-render + background tax recalculation
-        const finalX = Math.round(livePos.current.x);
-        const finalY = Math.round(livePos.current.y);
-        setNode((prev) => ({ ...prev, x: finalX, y: finalY }));
+        if (hasDragged.current) {
+          // COMMIT to Jotai — triggers React re-render + background tax recalculation
+          const finalX = Math.round(livePos.current.x);
+          const finalY = Math.round(livePos.current.y);
+          setNode((prev) => ({ ...prev, x: finalX, y: finalY }));
+        }
       };
 
       target.addEventListener('pointermove', onPointerMove);
       target.addEventListener('pointerup', onPointerUp);
     },
     [node.x, node.y, setNode, viewportStateRef],
+  );
+
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (hasDragged.current) return; // was a drag, not a click
+      e.stopPropagation();
+      setSelection({ type: 'node', id: node.id });
+    },
+    [node.id, setSelection],
   );
 
   const riskCount = node.riskFlags?.length || 0;
@@ -121,6 +138,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
     <div
       ref={domRef}
       onPointerDown={isTxa ? undefined : handlePointerDown}
+      onClick={handleClick}
       data-node-id={node.id}
       style={{
         position: 'absolute',
