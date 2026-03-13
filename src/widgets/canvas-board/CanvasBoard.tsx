@@ -6,34 +6,26 @@
  * Integrates:
  * - Jotai splitAtom for per-node rendering isolation
  * - Transient drag state pattern (via CanvasNode)
- * - useTransition tax recalculation on node drop
+ * - Async taxCalculationAtom for reactive tax recalculation via Suspense
  * - useCanvasViewport for 60 FPS pan & zoom via direct DOM manipulation
  */
 
 import { useAtomValue } from 'jotai';
-import { useEffect, useRef } from 'react';
-import { nodeAtomsAtom, nodesAtom } from '@entities/node';
+import { Suspense, useRef } from 'react';
+import { nodeAtomsAtom } from '@entities/node';
 import { zonesAtom } from '@entities/zone';
 import { CanvasNode, useCanvasViewport } from '@features/canvas';
 import { useTaxRecalculation } from '@features/tax-calculator';
 
-export function CanvasBoard() {
+function CanvasBoardInner() {
   const zones = useAtomValue(zonesAtom);
   const nodeAtoms = useAtomValue(nodeAtomsAtom);
-  const nodes = useAtomValue(nodesAtom);
-  const { recalculate, isPending } = useTaxRecalculation();
+  const taxResults = useTaxRecalculation();
 
   // ─── Viewport refs (pan & zoom via direct DOM mutation, zero re-renders) ──
   const viewportRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const { stateRef: viewportStateRef } = useCanvasViewport(viewportRef, boardRef);
-
-  // Recalculate when nodes change (e.g. after drop)
-  useEffect(() => {
-    if (nodes.length > 0) {
-      recalculate('canvas_update');
-    }
-  }, [nodes, recalculate]);
 
   return (
     <div
@@ -41,12 +33,6 @@ export function CanvasBoard() {
       id="viewport"
       style={{ position: 'relative', overflow: 'hidden', width: '100%', height: '100%' }}
     >
-      {isPending && (
-        <div className="recalculating-indicator">
-          Recalculating taxes...
-        </div>
-      )}
-
       <div
         ref={boardRef}
         id="canvas-board"
@@ -88,5 +74,13 @@ export function CanvasBoard() {
         <svg id="arrows-layer" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
       </div>
     </div>
+  );
+}
+
+export function CanvasBoard() {
+  return (
+    <Suspense fallback={<div className="recalculating-indicator">Recalculating taxes...</div>}>
+      <CanvasBoardInner />
+    </Suspense>
   );
 }

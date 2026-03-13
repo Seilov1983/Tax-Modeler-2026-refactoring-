@@ -80,7 +80,7 @@ export function ensureZoneTaxDefaults(p: Project): void {
 // ─── effectiveZoneTax ────────────────────────────────────────────────────────
 
 export function effectiveZoneTax(p: Project, zone: Zone) {
-  return deepMerge(defaultZoneTax(p, zone), zone?.tax ?? {});
+  return deepMerge(defaultZoneTax(p, zone), (zone?.tax ?? {}) as Partial<ReturnType<typeof defaultZoneTax>>);
 }
 
 // ─── WHT Percentage Lookup ───────────────────────────────────────────────────
