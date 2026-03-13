@@ -16,6 +16,7 @@ import { nodeAtomsAtom, nodesAtom } from '@entities/node';
 import { flowsAtom } from '@entities/flow';
 import { zonesAtom } from '@entities/zone';
 import { CanvasNode, CanvasFlow, useCanvasViewport } from '@features/canvas';
+import { AuditLogPanel } from '@features/audit-log/ui/AuditLogPanel';
 
 export function CanvasBoard() {
   const zones = useAtomValue(zonesAtom);
@@ -93,6 +94,9 @@ export function CanvasBoard() {
           ))}
         </svg>
       </div>
+
+      {/* Audit Log Panel — outside zoom/pan area, fixed to bottom of viewport */}
+      <AuditLogPanel />
     </div>
   );
 }
