@@ -21,6 +21,8 @@ import type { ViewportState } from './useCanvasViewport';
 import { nodeTaxAtomFamily } from '@features/tax-calculator/model/atoms';
 import { nodeRiskAtomFamily } from '@features/risk-analyzer/model/atoms';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
+import { draftConnectionAtom } from '../model/draft-connection-atom';
+import { addFlowAtom } from '../model/graph-actions-atom';
 
 // ─── Micro-component: isolates Suspense per node for CIT display ────────────
 
@@ -74,6 +76,8 @@ interface CanvasNodeProps {
 export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef }: CanvasNodeProps) {
   const [node, setNode] = useAtom(nodeAtom);
   const setSelection = useSetAtom(selectionAtom);
+  const [draft, setDraft] = useAtom(draftConnectionAtom);
+  const addFlow = useSetAtom(addFlowAtom);
   const domRef = useRef<HTMLDivElement>(null);
   // Track the live position during drag without triggering re-renders
   const livePos = useRef({ x: node.x, y: node.y });
@@ -129,6 +133,28 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
     [node.id, setSelection],
   );
 
+  // ─── Connection port: start drawing a flow ────────────────────────────────
+  const handlePortPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      setDraft({ sourceNodeId: node.id });
+    },
+    [node.id, setDraft],
+  );
+
+  // ─── Drop target: complete the flow when pointer is released on this node ─
+  const handleNodePointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (draft && draft.sourceNodeId !== node.id) {
+        e.stopPropagation();
+        addFlow({ fromId: draft.sourceNodeId, toId: node.id });
+        setDraft(null);
+      }
+    },
+    [draft, node.id, addFlow, setDraft],
+  );
+
   const riskCount = node.riskFlags?.length || 0;
   const isCompany = node.type === 'company';
   const isPerson = node.type === 'person';
@@ -138,6 +164,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
     <div
       ref={domRef}
       onPointerDown={isTxa ? undefined : handlePointerDown}
+      onPointerUp={handleNodePointerUp}
       onClick={handleClick}
       data-node-id={node.id}
       style={{
@@ -187,6 +214,28 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
           <NodeRiskDisplay nodeId={node.id} />
         </Suspense>
       </div>
+
+      {/* Connection port — drag from here to another node to create a flow */}
+      {!isTxa && (
+        <div
+          onPointerDown={handlePortPointerDown}
+          title="Drag to create flow"
+          style={{
+            position: 'absolute',
+            right: -6,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 12,
+            height: 12,
+            background: '#3b82f6',
+            borderRadius: '50%',
+            border: '2px solid #fff',
+            cursor: 'crosshair',
+            zIndex: 5,
+            transition: 'transform 0.15s',
+          }}
+        />
+      )}
     </div>
   );
 });
