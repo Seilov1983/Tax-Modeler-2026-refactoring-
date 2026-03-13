@@ -13,17 +13,26 @@ export const isoDate = (d: string | Date): string =>
 // ─── Financial Math ──────────────────────────────────────────────────────────
 
 /** Banker's rounding (round-half-to-even) to 2 decimal places */
-export const bankersRound2 = (n: number | undefined | null): number => {
-  const x = Number(n || 0);
-  const scaled = x * 100;
-  const f = Math.floor(scaled);
-  const diff = scaled - f;
-  let r: number;
-  if (diff > 0.5) r = f + 1;
-  else if (diff < 0.5) r = f;
-  else r = f % 2 === 0 ? f : f + 1;
-  return r / 100;
-};
+export function bankersRound2(num: number): number {
+  if (num === 0) return 0;
+  const sign = Math.sign(num);
+  const absNum = Math.abs(num);
+
+  const d = absNum * 100;
+  const floor = Math.floor(d);
+  const diff = d - floor;
+
+  let roundedAbs: number;
+  if (diff < 0.5) {
+    roundedAbs = floor;
+  } else if (diff > 0.5) {
+    roundedAbs = floor + 1;
+  } else {
+    roundedAbs = floor % 2 === 0 ? floor : floor + 1;
+  }
+
+  return (sign * roundedAbs) / 100;
+}
 
 export const numOrNull = (v: unknown): number | null => {
   if (v === null || v === undefined || v === '') return null;

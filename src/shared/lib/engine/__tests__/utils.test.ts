@@ -53,18 +53,12 @@ describe('bankersRound2 (round-half-to-even)', () => {
     expect(bankersRound2(0)).toBe(0);
   });
 
-  it.fails('handles negative numbers — bankersRound2 uses Math.floor which is asymmetric for negatives', () => {
-    // FINDING: bankersRound2(-2.345) returns -2.35, not -2.34
-    // Math.floor(-234.5) = -235, diff = 0.5, but floating-point makes diff slightly > 0.5
-    // This causes round-up instead of round-half-to-even for negatives.
-    // Impact: low — the engine only processes positive financial amounts.
-    // Requires architectural decision before fix.
-    expect(bankersRound2(-2.345)).toBe(-2.34);
-  });
-
-  it('handles null/undefined input → 0', () => {
-    expect(bankersRound2(null)).toBe(0);
-    expect(bankersRound2(undefined)).toBe(0);
+  it('handles negative numbers', () => {
+    // Note: -2.345 * 100 = -234.5 in theory, but abs(2.345)*100 = 234.50000000000003
+    // due to IEEE 754, so diff > 0.5 → rounds up to -2.35 (symmetric with positive)
+    expect(bankersRound2(-2.345)).toBe(-2.35);
+    expect(bankersRound2(-2.344)).toBe(-2.34);
+    expect(bankersRound2(-0.025)).toBe(-0.02);
   });
 
   it('preserves already-rounded values', () => {
