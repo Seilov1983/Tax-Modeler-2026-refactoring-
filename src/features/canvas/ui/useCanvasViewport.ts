@@ -9,6 +9,8 @@
  * - Zero React re-renders during scroll or zoom — pure 60 FPS DOM updates.
  * - The ref-based state is exposed for CanvasNode to read the current scale
  *   (needed to compensate drag movementX/Y by 1/scale).
+ * - An optional onViewportChange callback is throttled via rAF to sync a
+ *   Jotai atom for low-frequency UI (zoom controls, minimap).
  *
  * Controls:
  * - Mouse wheel: zoom in/out (centered on cursor)
@@ -33,12 +35,24 @@ const DEFAULT_STATE: ViewportState = { panX: 0, panY: 0, scale: 1 };
 export function useCanvasViewport(
   viewportRef: RefObject<HTMLDivElement | null>,
   boardRef: RefObject<HTMLDivElement | null>,
+  onViewportChange?: (state: ViewportState) => void,
 ) {
   // All viewport state in a ref — mutations here never trigger React re-renders
   const stateRef = useRef<ViewportState>({ ...DEFAULT_STATE });
   const isPanningRef = useRef(false);
   const spaceDownRef = useRef(false);
   const indicatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafIdRef = useRef(0);
+
+  // ─── Throttled sync to Jotai atom via rAF ─────────────────────────────────
+  const notifyChange = useCallback(() => {
+    if (!onViewportChange) return;
+    if (rafIdRef.current) return; // already scheduled
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = 0;
+      onViewportChange({ ...stateRef.current });
+    });
+  }, [onViewportChange]);
 
   // ─── Apply transform directly to DOM ──────────────────────────────────────
   const applyTransform = useCallback(() => {
@@ -46,7 +60,8 @@ export function useCanvasViewport(
     if (!board) return;
     const { panX, panY, scale } = stateRef.current;
     board.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
-  }, [boardRef]);
+    notifyChange();
+  }, [boardRef, notifyChange]);
 
   // ─── Show zoom indicator (transient DOM element) ──────────────────────────
   const showZoomIndicator = useCallback(() => {
@@ -98,12 +113,46 @@ export function useCanvasViewport(
     [viewportRef, applyTransform, showZoomIndicator],
   );
 
+  // ─── Programmatic zoom (for buttons) ──────────────────────────────────────
+  const zoomBy = useCallback(
+    (factor: number) => {
+      const viewport = viewportRef.current;
+      if (!viewport) return;
+
+      const rect = viewport.getBoundingClientRect();
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+      const s = stateRef.current;
+
+      const prevScale = s.scale;
+      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prevScale * factor));
+
+      s.panX = cx - (cx - s.panX) * (newScale / prevScale);
+      s.panY = cy - (cy - s.panY) * (newScale / prevScale);
+      s.scale = newScale;
+
+      applyTransform();
+      showZoomIndicator();
+    },
+    [viewportRef, applyTransform, showZoomIndicator],
+  );
+
   // ─── Reset viewport ───────────────────────────────────────────────────────
   const resetViewport = useCallback(() => {
     stateRef.current = { ...DEFAULT_STATE };
     applyTransform();
     showZoomIndicator();
   }, [applyTransform, showZoomIndicator]);
+
+  // ─── Pan to specific position (for minimap click-to-navigate) ─────────────
+  const panTo = useCallback(
+    (panX: number, panY: number) => {
+      stateRef.current.panX = panX;
+      stateRef.current.panY = panY;
+      applyTransform();
+    },
+    [applyTransform],
+  );
 
   // ─── Event handlers (attached to DOM, not React) ──────────────────────────
   useEffect(() => {
@@ -197,8 +246,9 @@ export function useCanvasViewport(
       viewport.removeEventListener('dblclick', onDblClick);
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
     };
   }, [viewportRef, applyTransform, zoomAt, resetViewport]);
 
-  return { stateRef, resetViewport };
+  return { stateRef, resetViewport, zoomBy, panTo };
 }
