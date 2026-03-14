@@ -3,8 +3,8 @@
 import { useAtom, useSetAtom } from 'jotai';
 import { selectionAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
-import { deleteNodeAtom, deleteFlowAtom } from '@features/canvas/model/graph-actions-atom';
-import type { NodeDTO, FlowDTO, FlowType } from '@shared/types';
+import { deleteNodeAtom, deleteFlowAtom, deleteOwnershipAtom } from '@features/canvas/model/graph-actions-atom';
+import type { NodeDTO, FlowDTO, OwnershipEdge, FlowType } from '@shared/types';
 
 const ZONE_OPTIONS = [
   { value: 'KZ_HUB', label: 'Kazakhstan Astana Hub' },
@@ -197,6 +197,48 @@ function FlowEditor({
   );
 }
 
+// ─── Ownership editor ───────────────────────────────────────────────────────
+
+function OwnershipEditor({
+  edge,
+  onChange,
+}: {
+  edge: OwnershipEdge;
+  onChange: (field: string, value: unknown) => void;
+}) {
+  return (
+    <>
+      <Field label="Ownership (%)">
+        <input
+          style={inputStyle}
+          type="number"
+          min={0}
+          max={100}
+          step={0.01}
+          value={edge.percent}
+          onChange={(e) => onChange('percent', parseFloat(e.target.value) || 0)}
+        />
+      </Field>
+
+      <Field label="Manual Adjustment">
+        <input
+          style={inputStyle}
+          type="number"
+          step={0.01}
+          value={edge.manualAdjustment}
+          onChange={(e) => onChange('manualAdjustment', parseFloat(e.target.value) || 0)}
+        />
+      </Field>
+
+      <div style={{ marginTop: '12px', padding: '8px', background: '#f9fafb', borderRadius: '4px', fontSize: '11px', color: '#9ca3af' }}>
+        ID: {edge.id}<br />
+        Parent: {edge.fromId}<br />
+        Subsidiary: {edge.toId}
+      </div>
+    </>
+  );
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -208,6 +250,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+const ENTITY_LABELS: Record<string, string> = {
+  node: 'Node',
+  flow: 'Flow',
+  ownership: 'Ownership',
+};
+
 // ─── Main sidebar ───────────────────────────────────────────────────────────
 
 export function EditorSidebar() {
@@ -215,13 +263,19 @@ export function EditorSidebar() {
   const [project, setProject] = useAtom(projectAtom);
   const deleteNode = useSetAtom(deleteNodeAtom);
   const deleteFlow = useSetAtom(deleteFlowAtom);
+  const deleteOwnership = useSetAtom(deleteOwnershipAtom);
 
   if (!selection || !project) return null;
 
-  const entity =
-    selection.type === 'node'
-      ? project.nodes.find((n) => n.id === selection.id)
-      : project.flows.find((f) => f.id === selection.id);
+  // Look up the selected entity from the correct collection
+  let entity: NodeDTO | FlowDTO | OwnershipEdge | undefined;
+  if (selection.type === 'node') {
+    entity = project.nodes.find((n) => n.id === selection.id);
+  } else if (selection.type === 'flow') {
+    entity = project.flows.find((f) => f.id === selection.id);
+  } else {
+    entity = project.ownership.find((o) => o.id === selection.id);
+  }
 
   if (!entity) return null;
 
@@ -236,14 +290,30 @@ export function EditorSidebar() {
           ),
         };
       }
+      if (selection.type === 'flow') {
+        return {
+          ...prev,
+          flows: prev.flows.map((f) =>
+            f.id === selection.id ? { ...f, [field]: value } : f,
+          ),
+        };
+      }
       return {
         ...prev,
-        flows: prev.flows.map((f) =>
-          f.id === selection.id ? { ...f, [field]: value } : f,
+        ownership: prev.ownership.map((o) =>
+          o.id === selection.id ? { ...o, [field]: value } : o,
         ),
       };
     });
   };
+
+  const handleDelete = () => {
+    if (selection.type === 'node') deleteNode(selection.id);
+    else if (selection.type === 'flow') deleteFlow(selection.id);
+    else deleteOwnership(selection.id);
+  };
+
+  const label = ENTITY_LABELS[selection.type] ?? selection.type;
 
   return (
     <div
@@ -273,7 +343,7 @@ export function EditorSidebar() {
         }}
       >
         <span style={{ fontWeight: 700, fontSize: '15px' }}>
-          Edit {selection.type === 'node' ? 'Node' : 'Flow'}
+          Edit {label}
         </span>
         <button
           onClick={() => setSelection(null)}
@@ -286,26 +356,27 @@ export function EditorSidebar() {
             lineHeight: 1,
           }}
         >
-          \u00d7
+          {'\u00d7'}
         </button>
       </div>
 
       {/* Body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-        {selection.type === 'node' ? (
+        {selection.type === 'node' && (
           <NodeEditor node={entity as NodeDTO} onChange={updateField} />
-        ) : (
+        )}
+        {selection.type === 'flow' && (
           <FlowEditor flow={entity as FlowDTO} onChange={updateField} />
+        )}
+        {selection.type === 'ownership' && (
+          <OwnershipEditor edge={entity as OwnershipEdge} onChange={updateField} />
         )}
       </div>
 
       {/* Footer — delete action */}
       <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb' }}>
         <button
-          onClick={() => {
-            if (selection.type === 'node') deleteNode(selection.id);
-            else deleteFlow(selection.id);
-          }}
+          onClick={handleDelete}
           style={{
             width: '100%',
             padding: '8px 0',
@@ -318,7 +389,7 @@ export function EditorSidebar() {
             cursor: 'pointer',
           }}
         >
-          Delete {selection.type === 'node' ? 'Node' : 'Flow'}
+          Delete {label}
         </button>
       </div>
     </div>
