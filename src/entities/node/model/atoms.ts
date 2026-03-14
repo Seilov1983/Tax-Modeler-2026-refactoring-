@@ -9,8 +9,7 @@
  */
 
 import { atom } from 'jotai';
-import { splitAtom } from 'jotai/utils';
-import { atomFamily } from 'jotai-family';
+import { splitAtom, atomFamily } from 'jotai/utils';
 import type { NodeDTO } from '@shared/types';
 
 // ─── Base atoms ──────────────────────────────────────────────────────────────

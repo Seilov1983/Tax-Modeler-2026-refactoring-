@@ -1,2 +1,2 @@
-export { taxEntriesAtom, isRecalculatingAtom, taxSummaryAtom } from './model/atoms';
+export { taxEntriesAtom, isRecalculatingAtom, taxSummaryAtom, taxCalculationAtom, nodeTaxAtomFamily, flowTaxAtomFamily } from './model/atoms';
 export { useTaxRecalculation } from './ui/useTaxRecalculation';

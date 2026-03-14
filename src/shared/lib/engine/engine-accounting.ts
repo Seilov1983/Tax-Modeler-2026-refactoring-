@@ -91,8 +91,8 @@ export function separateAccountingAIFC(p: Project, year: number) {
   const aifcCos: Array<{ node: typeof p.nodes[0]; ci: Record<string, unknown> }> = [];
 
   listCompanies(p).forEach((co) => {
-    (co as Record<string, unknown>).accountingYears = (co as Record<string, unknown>).accountingYears || {};
-    const accYears = (co as Record<string, unknown>).accountingYears as Record<string, Record<string, unknown>>;
+    (co as unknown as Record<string, unknown>).accountingYears = (co as unknown as Record<string, unknown>).accountingYears || {};
+    const accYears = (co as unknown as Record<string, unknown>).accountingYears as Record<string, Record<string, unknown>>;
     const ci = accYears[y] || (accYears[y] = { totalIncomeKZT: 0, preferentialIncomeKZT: 0, allocatedIndirectKZT: 0 });
     const ti = Number(ci.totalIncomeKZT || 0);
     groupIncome += isFinite(ti) ? ti : 0;

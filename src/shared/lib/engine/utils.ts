@@ -110,7 +110,7 @@ export function deepMerge<T>(base: T, override: Partial<T> | undefined): T {
   for (const k of Object.keys(override as Record<string, unknown>)) {
     out[k] = deepMerge(
       (base as Record<string, unknown>)[k],
-      (override as Record<string, unknown>)[k],
+      (override as Record<string, unknown>)[k] as Partial<unknown>,
     );
   }
   return out as T;
