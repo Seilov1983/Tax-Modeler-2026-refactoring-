@@ -18,22 +18,25 @@ import { useRef, useCallback, memo, Suspense, type RefObject } from 'react';
 import type { PrimitiveAtom } from 'jotai';
 import type { NodeDTO } from '@shared/types';
 import type { ViewportState } from './useCanvasViewport';
-import { nodeTaxAtomFamily } from '@features/tax-calculator/model/atoms';
+import { nodeTaxAtomFamily, taxCalculationAtom } from '@features/tax-calculator/model/atoms';
 import { nodeRiskAtomFamily } from '@features/risk-analyzer/model/atoms';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { draftConnectionAtom } from '../model/draft-connection-atom';
 import { addFlowAtom, addOwnershipAtom } from '../model/graph-actions-atom';
+import { fmtMoney, currencySymbol } from '@shared/lib/engine/utils';
 
 // ─── Micro-component: isolates Suspense per node for CIT display ────────────
 
 function NodeTaxDisplay({ nodeId }: { nodeId: string }) {
   const citAmount = useAtomValue(nodeTaxAtomFamily(nodeId));
+  const taxResults = useAtomValue(taxCalculationAtom);
+  const ccy = taxResults?.baseCurrency || 'USD';
 
   if (citAmount === null || citAmount === 0) return null;
 
   return (
     <div className="badge badge-tax">
-      CIT: {citAmount.toFixed(2)}
+      CIT: {currencySymbol(ccy)} {fmtMoney(citAmount)}
     </div>
   );
 }

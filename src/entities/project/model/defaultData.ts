@@ -87,6 +87,7 @@ export function defaultProject(): Project {
     createdAt: nowIso(),
     updatedAt: nowIso(),
     readOnly: false,
+    baseCurrency: 'USD' as CurrencyCode,
     masterData: defaultMasterData(),
     fx: {
       fxDate: '2026-01-15',

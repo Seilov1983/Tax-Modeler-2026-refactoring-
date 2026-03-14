@@ -10,7 +10,7 @@ function formatAmount(amount: number, currency: string): string {
 }
 
 function AuditLogTable() {
-  const { entries, pipelineSteps } = useAtomValue(accountingLedgerAtom);
+  const { entries, pipelineSteps, baseCurrency } = useAtomValue(accountingLedgerAtom);
 
   if (!entries || entries.length === 0) {
     return (
@@ -33,6 +33,7 @@ function AuditLogTable() {
             <th style={thStyle}>Tax Type</th>
             <th style={thStyle}>Payer</th>
             <th style={thStyle}>Zone</th>
+            <th style={thStyle}>Amount ({baseCurrency})</th>
             <th style={thStyle}>Amount (Func.)</th>
             <th style={thStyle}>Amount (Orig.)</th>
             <th style={thStyle}>FX Date</th>
@@ -45,6 +46,9 @@ function AuditLogTable() {
               <td style={tdStyle}><code>{tx.taxType}</code></td>
               <td style={tdStyle}>{tx.payerId}</td>
               <td style={tdStyle}>{tx.zoneId}</td>
+              <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
+                {formatAmount(tx.amountBase, baseCurrency)}
+              </td>
               <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'monospace' }}>
                 {formatAmount(tx.amountFunctional, tx.functionalCurrency)}
               </td>

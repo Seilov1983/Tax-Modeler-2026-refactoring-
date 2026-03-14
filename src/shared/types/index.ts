@@ -324,6 +324,7 @@ export interface Project {
   createdAt: string;
   updatedAt: string;
   readOnly: boolean;
+  baseCurrency: CurrencyCode;
   masterData: MasterData;
   fx: FXConfig;
   zones: Zone[];

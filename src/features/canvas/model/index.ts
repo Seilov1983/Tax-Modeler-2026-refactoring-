@@ -1,4 +1,4 @@
-export { projectAtom, fxConfigAtom, auditLogAtom, projectRiskFlagsAtom, activeTabAtom } from './project-atom';
+export { projectAtom, fxConfigAtom, baseCurrencyAtom, auditLogAtom, projectRiskFlagsAtom, activeTabAtom } from './project-atom';
 export { hydrateProjectAtom } from './hydrate-atom';
 export { draftConnectionAtom } from './draft-connection-atom';
 export { addNodeAtom, addFlowAtom, addOwnershipAtom, deleteNodeAtom, deleteFlowAtom, deleteOwnershipAtom } from './graph-actions-atom';

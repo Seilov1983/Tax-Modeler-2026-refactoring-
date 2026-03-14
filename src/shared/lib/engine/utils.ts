@@ -63,6 +63,15 @@ export const formatMoney = (n: number | undefined | null): string => {
   });
 };
 
+/** Map currency code → compact symbol for badge display. */
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$', EUR: '\u20ac', KZT: '\u20b8', AED: 'AED', GBP: '\u00a3',
+  HKD: 'HK$', SGD: 'S$', SCR: 'SCR', CNY: '\u00a5',
+};
+
+export const currencySymbol = (code: string): string =>
+  CURRENCY_SYMBOLS[code] || code;
+
 // ─── IDs ─────────────────────────────────────────────────────────────────────
 
 export const uid = (): string =>
