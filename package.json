@@ -13,6 +13,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "html-to-image": "^1.11.13",
     "jotai": "^2.12.0",
     "jotai-effect": "^1.1.0",
     "next": "^15.2.0",

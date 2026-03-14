@@ -23,6 +23,7 @@ import { EditorSidebar } from '@features/entity-editor/ui/EditorSidebar';
 import { draftConnectionAtom } from '@features/canvas/model/draft-connection-atom';
 import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { CanvasToolbar } from '@features/canvas/ui/CanvasToolbar';
+import { ProjectHeader } from '@features/project-management';
 
 export function CanvasBoard() {
   const zones = useAtomValue(zonesAtom);
@@ -95,17 +96,21 @@ export function CanvasBoard() {
   }, [draft, sourceNode, clientToCanvas, setDraft]);
 
   return (
-    <div
-      ref={viewportRef}
-      id="viewport"
-      onClick={handleBackgroundClick}
-      style={{ position: 'relative', overflow: 'hidden', width: '100%', height: '100%' }}
-    >
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Project header — outside viewport, excluded from export */}
+      <ProjectHeader />
+
       <div
-        ref={boardRef}
-        id="canvas-board"
-        style={{ position: 'absolute', transformOrigin: '0 0' }}
+        ref={viewportRef}
+        id="viewport"
+        onClick={handleBackgroundClick}
+        style={{ position: 'absolute', top: '48px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
       >
+        <div
+          ref={boardRef}
+          id="canvas-render-area"
+          style={{ position: 'absolute', transformOrigin: '0 0' }}
+        >
         {/* Zones Layer */}
         <div id="zones-layer">
           {zones.map((zone) => (
@@ -174,14 +179,15 @@ export function CanvasBoard() {
         </svg>
       </div>
 
-      {/* Toolbar — outside zoom/pan area, fixed to top-left */}
-      <CanvasToolbar viewportRef={viewportRef} viewportStateRef={viewportStateRef} />
+        {/* Toolbar — outside zoom/pan area, fixed to top-left */}
+        <CanvasToolbar viewportRef={viewportRef} viewportStateRef={viewportStateRef} />
 
-      {/* Audit Log Panel — outside zoom/pan area, fixed to bottom of viewport */}
-      <AuditLogPanel />
+        {/* Audit Log Panel — outside zoom/pan area, fixed to bottom of viewport */}
+        <AuditLogPanel />
 
-      {/* Property Panel — right sidebar for editing selected entity */}
-      <EditorSidebar />
+        {/* Property Panel — right sidebar for editing selected entity */}
+        <EditorSidebar />
+      </div>
     </div>
   );
 }
