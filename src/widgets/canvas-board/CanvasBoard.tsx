@@ -1,7 +1,8 @@
 'use client';
 
 /**
- * CanvasBoard Widget — renders all zones, nodes, flow arrows, and ownership lines.
+ * CanvasBoard Widget — renders all zones, nodes, flow arrows, ownership lines,
+ * minimap, and zoom controls.
  *
  * Integrates:
  * - Jotai splitAtom for per-node rendering isolation
@@ -9,6 +10,7 @@
  * - Local Suspense per node/flow for async tax badge rendering
  * - useCanvasViewport for 60 FPS pan & zoom via direct DOM manipulation
  * - Draft connection line for interactive flow/ownership creation
+ * - viewportAtom sync (rAF-throttled) for minimap + zoom controls
  */
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
@@ -19,10 +21,13 @@ import { zonesAtom } from '@entities/zone';
 import { ownershipAtom } from '@entities/ownership';
 import { CanvasNode, CanvasFlow, useCanvasViewport } from '@features/canvas';
 import { CanvasOwnership } from '@features/canvas/ui/CanvasOwnership';
+import { CanvasControls } from '@features/canvas/ui/CanvasControls';
+import { Minimap } from '@features/canvas/ui/Minimap';
 import { AuditLogPanel } from '@features/audit-log/ui/AuditLogPanel';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { EditorSidebar } from '@features/entity-editor/ui/EditorSidebar';
 import { draftConnectionAtom } from '@features/canvas/model/draft-connection-atom';
+import { viewportAtom } from '@features/canvas/model/viewport-atom';
 import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
 import { CanvasToolbar } from '@features/canvas/ui/CanvasToolbar';
@@ -37,11 +42,22 @@ export function CanvasBoard() {
 
   const setSelection = useSetAtom(selectionAtom);
   const [draft, setDraft] = useAtom(draftConnectionAtom);
+  const setViewport = useSetAtom(viewportAtom);
 
   // ─── Viewport refs (pan & zoom via direct DOM mutation, zero re-renders) ──
   const viewportRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
-  const { stateRef: viewportStateRef } = useCanvasViewport(viewportRef, boardRef);
+
+  // Sync imperative ref → Jotai atom (rAF-throttled inside the hook)
+  const { stateRef: viewportStateRef, zoomBy, panTo, resetViewport } = useCanvasViewport(
+    viewportRef,
+    boardRef,
+    setViewport,
+  );
+
+  // ─── Zoom callbacks for CanvasControls ────────────────────────────────────
+  const handleZoomIn = useCallback(() => zoomBy(1.25), [zoomBy]);
+  const handleZoomOut = useCallback(() => zoomBy(0.8), [zoomBy]);
 
   // ─── Draft connection path ref (transient DOM mutation for 60 FPS) ────────
   const draftPathRef = useRef<SVGPathElement>(null);
@@ -209,6 +225,12 @@ export function CanvasBoard() {
 
         {/* Toolbar — outside zoom/pan area, fixed to top-left */}
         <CanvasToolbar viewportRef={viewportRef} viewportStateRef={viewportStateRef} />
+
+        {/* Zoom Controls — bottom-left */}
+        <CanvasControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={resetViewport} />
+
+        {/* Minimap — bottom-right */}
+        <Minimap onNavigate={panTo} viewportRef={viewportRef} />
 
         {/* Audit Log Panel — outside zoom/pan area, fixed to bottom of viewport */}
         <AuditLogPanel />
