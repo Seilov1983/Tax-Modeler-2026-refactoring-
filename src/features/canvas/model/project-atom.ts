@@ -12,6 +12,7 @@ export const projectAtom = atom<Project | null>(null);
 
 // Derived read-only slices
 export const fxConfigAtom = atom<FXConfig | null>((get) => get(projectAtom)?.fx ?? null);
+export const baseCurrencyAtom = atom((get) => get(projectAtom)?.baseCurrency ?? 'USD');
 export const auditLogAtom = atom<AuditLog | null>((get) => get(projectAtom)?.audit ?? null);
 export const projectRiskFlagsAtom = atom((get) => get(projectAtom)?.projectRiskFlags ?? []);
 

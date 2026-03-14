@@ -17,8 +17,9 @@
 import { useAtomValue, useSetAtom } from 'jotai';
 import { memo, Suspense, useCallback } from 'react';
 import type { FlowDTO, NodeDTO } from '@shared/types';
-import { flowTaxAtomFamily } from '@features/tax-calculator/model/atoms';
+import { flowTaxAtomFamily, taxCalculationAtom } from '@features/tax-calculator/model/atoms';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
+import { fmtMoney, currencySymbol } from '@shared/lib/engine/utils';
 
 // ─── Bezier path builder ────────────────────────────────────────────────────
 
@@ -43,11 +44,15 @@ interface CanvasFlowProps {
 
 function FlowTaxDisplay({ flowId, midX, midY }: { flowId: string; midX: number; midY: number }) {
   const whtAmount = useAtomValue(flowTaxAtomFamily(flowId));
+  const taxResults = useAtomValue(taxCalculationAtom);
+  const ccy = taxResults?.baseCurrency || 'USD';
 
   if (whtAmount === null || whtAmount === 0) return null;
 
+  const label = `WHT: ${currencySymbol(ccy)} ${fmtMoney(whtAmount)}`;
+
   return (
-    <foreignObject x={midX - 35} y={midY + 8} width="70" height="20">
+    <foreignObject x={midX - 45} y={midY + 8} width="90" height="20">
       <div
         style={{
           background: 'rgba(255, 237, 213, 0.95)',
@@ -60,7 +65,7 @@ function FlowTaxDisplay({ flowId, midX, midY }: { flowId: string; midX: number; 
           whiteSpace: 'nowrap',
         }}
       >
-        WHT: {whtAmount.toFixed(2)}
+        {label}
       </div>
     </foreignObject>
   );

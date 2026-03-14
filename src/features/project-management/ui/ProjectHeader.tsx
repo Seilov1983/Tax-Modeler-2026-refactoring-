@@ -8,9 +8,10 @@
  * to keep all entity atoms in sync.
  */
 
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useRef, useCallback } from 'react';
 import { projectAtom, hydrateProjectAtom } from '@features/canvas';
+import { baseCurrencyAtom } from '@features/canvas/model/project-atom';
 import {
   ensureMasterData, ensureZoneTaxDefaults,
   bootstrapNormalizeZones, recomputeRisks, recomputeFrozen,
@@ -18,10 +19,30 @@ import {
 import type { Project } from '@shared/types';
 import { downloadProjectJson, importProjectJson, exportCanvasToPng } from '../model/export-actions';
 
+const CURRENCY_OPTIONS = [
+  { code: 'USD', label: 'USD ($)' },
+  { code: 'EUR', label: 'EUR (\u20ac)' },
+  { code: 'KZT', label: 'KZT (\u20b8)' },
+  { code: 'AED', label: 'AED (\u062f.\u0625)' },
+  { code: 'GBP', label: 'GBP (\u00a3)' },
+  { code: 'HKD', label: 'HKD ($)' },
+  { code: 'SGD', label: 'SGD ($)' },
+] as const;
+
 export function ProjectHeader() {
-  const project = useAtomValue(projectAtom);
+  const [project, setProject] = useAtom(projectAtom);
+  const baseCurrency = useAtomValue(baseCurrencyAtom);
   const hydrate = useSetAtom(hydrateProjectAtom);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCurrencyChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      setProject((prev) =>
+        prev ? { ...prev, baseCurrency: e.target.value as typeof baseCurrency } : prev,
+      );
+    },
+    [setProject],
+  );
 
   const handleSave = useCallback(() => {
     if (!project) return;
@@ -80,7 +101,7 @@ export function ProjectHeader() {
         zIndex: 50,
       }}
     >
-      {/* Left: branding + title */}
+      {/* Left: branding + title + base currency */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <span style={{ fontWeight: 700, fontSize: '15px', color: '#1f2937', letterSpacing: '-0.02em' }}>
           Tax-Modeler 2026
@@ -88,6 +109,30 @@ export function ProjectHeader() {
         <span style={{ fontSize: '12px', color: '#9ca3af' }}>
           {project.title}
         </span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px', paddingLeft: '12px', borderLeft: '1px solid #d1d5db' }}>
+          <label style={{ fontSize: '11px', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase' as const }}>
+            Base Currency:
+          </label>
+          <select
+            value={baseCurrency}
+            onChange={handleCurrencyChange}
+            data-testid="select-base-currency"
+            style={{
+              fontSize: '13px',
+              border: '1px solid #d1d5db',
+              borderRadius: '4px',
+              background: '#f9fafb',
+              padding: '2px 6px',
+              cursor: 'pointer',
+              outline: 'none',
+            }}
+          >
+            {CURRENCY_OPTIONS.map((c) => (
+              <option key={c.code} value={c.code}>{c.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Right: actions */}

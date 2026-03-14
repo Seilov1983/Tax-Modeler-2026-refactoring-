@@ -4,7 +4,7 @@ import type { TaxEntry } from '@shared/types';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { computeWht, computeCITAmount } from '@shared/lib/engine/engine-tax';
 import { effectiveZoneTax } from '@shared/lib/engine/engine-tax';
-import { ensureMasterData, getZone } from '@shared/lib/engine/engine-core';
+import { ensureMasterData, getZone, convert } from '@shared/lib/engine/engine-core';
 import type { Project } from '@shared/types';
 
 // ─── Existing atoms (backward compat) ────────────────────────────────────────
@@ -29,7 +29,7 @@ export const taxCalculationAtom = atom(async (get) => {
   const project = get(projectAtom);
 
   if (!project || !project.nodes || !project.flows) {
-    return { wht: [], cit: [], totals: {} };
+    return { wht: [], cit: [], baseCurrency: 'USD' as const };
   }
 
   // Yield to main thread before heavy computation
@@ -39,17 +39,22 @@ export const taxCalculationAtom = atom(async (get) => {
   const p = JSON.parse(JSON.stringify(project)) as Project;
   ensureMasterData(p);
 
+  const baseCurrency = project.baseCurrency || 'USD';
+
   const whtResults: Array<{ flowId: string; whtAmount: number; currency: string }> = [];
   const citResults: Array<{ nodeId: string; citAmount: number }> = [];
 
-  // WHT pass — compute for applicable flow types
+  // WHT pass — compute for applicable flow types, convert to baseCurrency
   for (const flow of p.flows) {
     if (['Dividends', 'Royalties', 'Interest', 'Services'].includes(flow.flowType)) {
       const wht = computeWht(p, flow);
+      const rawAmount = wht.amountOriginal ?? wht.amount ?? 0;
+      const rawCurrency = wht.currency ?? wht.originalCurrency ?? flow.currency;
+      const convertedAmount = convert(p, rawAmount, rawCurrency, baseCurrency);
       whtResults.push({
         flowId: flow.id,
-        whtAmount: wht.amountOriginal ?? wht.amount ?? 0,
-        currency: wht.currency ?? wht.originalCurrency ?? flow.currency,
+        whtAmount: convertedAmount,
+        currency: baseCurrency,
       });
     }
   }
@@ -57,15 +62,20 @@ export const taxCalculationAtom = atom(async (get) => {
   // Yield before next heavy block
   await yieldTask();
 
-  // CIT pass — compute for company nodes
+  // CIT pass — compute for company nodes, convert to baseCurrency
   for (const node of p.nodes) {
     if (node.type === 'company') {
       const zone = getZone(p, node.zoneId);
       if (zone) {
         const zoneTax = effectiveZoneTax(p, zone);
         const income = Number(node.annualIncome || 0);
-        const cit = computeCITAmount(income, zoneTax.cit);
-        citResults.push({ nodeId: node.id, citAmount: cit });
+        const rawCit = computeCITAmount(income, zoneTax.cit);
+        // CIT is computed in the zone's functional currency; derive it from masterData
+        const jurisdictionCode = zone.jurisdictionCode || 'KZ';
+        const mdEntry = p.masterData?.[jurisdictionCode];
+        const localCurrency = mdEntry?.baseCurrency || 'KZT';
+        const convertedCit = convert(p, rawCit, localCurrency, baseCurrency);
+        citResults.push({ nodeId: node.id, citAmount: convertedCit });
       }
     }
   }
@@ -73,6 +83,7 @@ export const taxCalculationAtom = atom(async (get) => {
   return {
     wht: whtResults,
     cit: citResults,
+    baseCurrency,
     timestamp: Date.now(),
   };
 });
