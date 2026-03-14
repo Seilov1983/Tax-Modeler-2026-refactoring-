@@ -60,7 +60,7 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
       <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 700, textAlign: 'center', marginBottom: '2px' }}>
         TOOLS
       </div>
-      <button onClick={handleAddCompany} style={btnStyle}>
+      <button onClick={handleAddCompany} data-testid="btn-add-company" style={btnStyle}>
         + Company
       </button>
       <button onClick={handleAddPerson} style={{ ...btnStyle, background: '#f0fdf4', color: '#16a34a' }}>

@@ -182,6 +182,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
       onPointerUp={handleNodePointerUp}
       onClick={handleClick}
       data-node-id={node.id}
+      data-testid="canvas-node"
       style={{
         position: 'absolute',
         transform: `translate(${node.x}px, ${node.y}px) translateZ(0)`,
@@ -234,6 +235,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
       {!isTxa && (
         <div
           onPointerDown={handleFlowPortDown}
+          data-testid="port-flow"
           title="Drag to create flow"
           style={{
             position: 'absolute',
@@ -256,6 +258,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
       {!isTxa && (
         <div
           onPointerDown={handleOwnershipPortDown}
+          data-testid="port-ownership"
           title="Drag down to create ownership"
           style={{
             position: 'absolute',

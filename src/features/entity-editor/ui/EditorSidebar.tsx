@@ -377,6 +377,7 @@ export function EditorSidebar() {
       <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb' }}>
         <button
           onClick={handleDelete}
+          data-testid="btn-delete-entity"
           style={{
             width: '100%',
             padding: '8px 0',
