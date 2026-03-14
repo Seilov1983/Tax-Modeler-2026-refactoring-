@@ -9,6 +9,7 @@ import { atom } from 'jotai';
 import { projectAtom } from './project-atom';
 import { nodesAtom } from '@entities/node';
 import { flowsAtom } from '@entities/flow';
+import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { uid } from '@shared/lib/engine/utils';
 import type { NodeDTO, FlowDTO, NodeType } from '@shared/types';
 
@@ -85,5 +86,47 @@ export const addFlowAtom = atom(
       if (!prev) return prev;
       return { ...prev, flows: [...prev.flows, newFlow] };
     });
+  },
+);
+
+// ─── Delete Flow (simple) ───────────────────────────────────────────────────
+
+export const deleteFlowAtom = atom(
+  null,
+  (get, set, flowId: string) => {
+    set(flowsAtom, (prev) => prev.filter((f) => f.id !== flowId));
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return { ...prev, flows: prev.flows.filter((f) => f.id !== flowId) };
+    });
+
+    // Clear selection if deleted entity was selected
+    const sel = get(selectionAtom);
+    if (sel?.type === 'flow' && sel.id === flowId) {
+      set(selectionAtom, null);
+    }
+  },
+);
+
+// ─── Delete Node (cascading — removes all connected flows) ──────────────────
+
+export const deleteNodeAtom = atom(
+  null,
+  (get, set, nodeId: string) => {
+    set(nodesAtom, (prev) => prev.filter((n) => n.id !== nodeId));
+    set(flowsAtom, (prev) => prev.filter((f) => f.fromId !== nodeId && f.toId !== nodeId));
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        nodes: prev.nodes.filter((n) => n.id !== nodeId),
+        flows: prev.flows.filter((f) => f.fromId !== nodeId && f.toId !== nodeId),
+      };
+    });
+
+    const sel = get(selectionAtom);
+    if (sel?.type === 'node' && sel.id === nodeId) {
+      set(selectionAtom, null);
+    }
   },
 );
