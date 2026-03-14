@@ -1,8 +1,9 @@
 'use client';
 
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { selectionAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
+import { deleteNodeAtom, deleteFlowAtom } from '@features/canvas/model/graph-actions-atom';
 import type { NodeDTO, FlowDTO, FlowType } from '@shared/types';
 
 const ZONE_OPTIONS = [
@@ -212,6 +213,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function EditorSidebar() {
   const [selection, setSelection] = useAtom(selectionAtom);
   const [project, setProject] = useAtom(projectAtom);
+  const deleteNode = useSetAtom(deleteNodeAtom);
+  const deleteFlow = useSetAtom(deleteFlowAtom);
 
   if (!selection || !project) return null;
 
@@ -294,6 +297,29 @@ export function EditorSidebar() {
         ) : (
           <FlowEditor flow={entity as FlowDTO} onChange={updateField} />
         )}
+      </div>
+
+      {/* Footer — delete action */}
+      <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb' }}>
+        <button
+          onClick={() => {
+            if (selection.type === 'node') deleteNode(selection.id);
+            else deleteFlow(selection.id);
+          }}
+          style={{
+            width: '100%',
+            padding: '8px 0',
+            background: '#fef2f2',
+            color: '#dc2626',
+            fontWeight: 600,
+            fontSize: '13px',
+            border: '1px solid #fecaca',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Delete {selection.type === 'node' ? 'Node' : 'Flow'}
+        </button>
       </div>
     </div>
   );

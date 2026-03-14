@@ -21,6 +21,7 @@ import { AuditLogPanel } from '@features/audit-log/ui/AuditLogPanel';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { EditorSidebar } from '@features/entity-editor/ui/EditorSidebar';
 import { draftConnectionAtom } from '@features/canvas/model/draft-connection-atom';
+import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { CanvasToolbar } from '@features/canvas/ui/CanvasToolbar';
 
 export function CanvasBoard() {
@@ -37,8 +38,8 @@ export function CanvasBoard() {
   const boardRef = useRef<HTMLDivElement>(null);
   const { stateRef: viewportStateRef } = useCanvasViewport(viewportRef, boardRef);
 
-  // ─── Draft connection line ref (transient DOM mutation for 60 FPS) ────────
-  const draftLineRef = useRef<SVGLineElement>(null);
+  // ─── Draft connection path ref (transient DOM mutation for 60 FPS) ────────
+  const draftPathRef = useRef<SVGPathElement>(null);
 
   // Deselect when clicking empty canvas area
   const handleBackgroundClick = useCallback(() => {
@@ -62,15 +63,22 @@ export function CanvasBoard() {
     [viewportRef, viewportStateRef],
   );
 
-  // Track pointer movement and update the draft line via direct DOM mutation
+  // Compute source node port (right-edge center) for the draft path start
+  const sourceNode = draft ? nodes.find((n) => n.id === draft.sourceNodeId) : null;
+  const srcX = sourceNode ? sourceNode.x + sourceNode.w : 0;
+  const srcY = sourceNode ? sourceNode.y + sourceNode.h / 2 : 0;
+
+  // Track pointer movement and update the draft Bezier path via direct DOM mutation
   useEffect(() => {
-    if (!draft) return;
+    if (!draft || !sourceNode) return;
+
+    const sx = sourceNode.x + sourceNode.w;
+    const sy = sourceNode.y + sourceNode.h / 2;
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!draftLineRef.current) return;
+      if (!draftPathRef.current) return;
       const canvas = clientToCanvas(e.clientX, e.clientY);
-      draftLineRef.current.setAttribute('x2', String(canvas.x));
-      draftLineRef.current.setAttribute('y2', String(canvas.y));
+      draftPathRef.current.setAttribute('d', buildBezierPath(sx, sy, canvas.x, canvas.y));
     };
 
     const onPointerUp = () => {
@@ -84,12 +92,7 @@ export function CanvasBoard() {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [draft, clientToCanvas, setDraft]);
-
-  // Compute source node center for the draft line start point
-  const sourceNode = draft ? nodes.find((n) => n.id === draft.sourceNodeId) : null;
-  const srcX = sourceNode ? sourceNode.x + sourceNode.w / 2 : 0;
-  const srcY = sourceNode ? sourceNode.y + sourceNode.h / 2 : 0;
+  }, [draft, sourceNode, clientToCanvas, setDraft]);
 
   return (
     <div
@@ -156,17 +159,15 @@ export function CanvasBoard() {
             <CanvasFlow key={flow.id} flow={flow} nodes={nodes} />
           ))}
 
-          {/* Draft connection line — transient, mutated via ref */}
+          {/* Draft connection path — transient Bezier, mutated via ref */}
           {draft && sourceNode && (
-            <line
-              ref={draftLineRef}
-              x1={srcX}
-              y1={srcY}
-              x2={srcX}
-              y2={srcY}
+            <path
+              ref={draftPathRef}
+              d={buildBezierPath(srcX, srcY, srcX, srcY)}
               stroke="#3b82f6"
               strokeWidth={2}
               strokeDasharray="6 3"
+              fill="none"
               pointerEvents="none"
             />
           )}
