@@ -14,7 +14,7 @@
  * FROZEN: SVG Hit-Areas — visible stroke 2px, invisible hit-area 12px.
  */
 
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue, useAtom } from 'jotai';
 import { memo, Suspense, useCallback } from 'react';
 import type { FlowDTO, NodeDTO } from '@shared/types';
 import { flowTaxAtomFamily, taxCalculationAtom } from '@features/tax-calculator/model/atoms';
@@ -76,7 +76,8 @@ function FlowTaxDisplay({ flowId, midX, midY }: { flowId: string; midX: number; 
 export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowProps) {
   const fromNode = nodes.find((n) => n.id === flow.fromId);
   const toNode = nodes.find((n) => n.id === flow.toId);
-  const setSelection = useSetAtom(selectionAtom);
+  const [selection, setSelection] = useAtom(selectionAtom);
+  const isSelected = selection?.type === 'flow' && selection.id === flow.id;
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -105,11 +106,11 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowPr
       {/* Invisible wider hit area for easier clicking (FROZEN: 12px) */}
       <path d={pathData} stroke="transparent" strokeWidth={12} fill="none" />
 
-      {/* Visible Bezier curve */}
+      {/* Visible Bezier curve — highlighted when selected */}
       <path
         d={pathData}
-        stroke="var(--stroke, #94a3b8)"
-        strokeWidth={1.5}
+        stroke={isSelected ? '#2563eb' : 'var(--stroke, #94a3b8)'}
+        strokeWidth={isSelected ? 4 : 1.5}
         fill="none"
         markerEnd="url(#arrowhead)"
       />

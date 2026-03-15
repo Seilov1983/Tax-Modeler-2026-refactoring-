@@ -67,6 +67,17 @@ export function CanvasBoard() {
   const handleZoomIn = useCallback(() => zoomBy(1.25), [zoomBy]);
   const handleZoomOut = useCallback(() => zoomBy(0.8), [zoomBy]);
 
+  // ─── Center camera when project has no nodes (empty canvas first load) ───
+  const centeredRef = useRef(false);
+  useEffect(() => {
+    if (centeredRef.current) return;
+    if (nodes.length === 0 && viewportRef.current) {
+      centeredRef.current = true;
+      const rect = viewportRef.current.getBoundingClientRect();
+      panTo(rect.width / 2, rect.height / 2);
+    }
+  }, [nodes.length, panTo]);
+
   // ─── Draft connection path ref (transient DOM mutation for 60 FPS) ────────
   const draftPathRef = useRef<SVGPathElement>(null);
 

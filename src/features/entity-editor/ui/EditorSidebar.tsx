@@ -41,10 +41,14 @@ const selectStyle: React.CSSProperties = { ...inputStyle, background: '#fff' };
 function NodeEditor({
   node,
   onChange,
+  onBlur,
 }: {
   node: NodeDTO;
   onChange: (field: string, value: unknown) => void;
+  onBlur: () => void;
 }) {
+  const blurOnEnter = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
+
   return (
     <>
       <Field label="Name">
@@ -53,6 +57,8 @@ function NodeEditor({
           type="text"
           value={node.name}
           onChange={(e) => onChange('name', e.target.value)}
+          onBlur={onBlur}
+          onKeyDown={blurOnEnter}
         />
       </Field>
 
@@ -61,6 +67,7 @@ function NodeEditor({
           style={selectStyle}
           value={node.zoneId || ''}
           onChange={(e) => onChange('zoneId', e.target.value || null)}
+          onBlur={onBlur}
         >
           <option value="">— none —</option>
           {ZONE_OPTIONS.map((z) => (
@@ -75,6 +82,8 @@ function NodeEditor({
           type="number"
           value={node.annualIncome}
           onChange={(e) => onChange('annualIncome', parseFloat(e.target.value) || 0)}
+          onBlur={onBlur}
+          onKeyDown={blurOnEnter}
         />
       </Field>
 
@@ -88,6 +97,8 @@ function NodeEditor({
             max="1"
             value={node.etr}
             onChange={(e) => onChange('etr', parseFloat(e.target.value) || 0)}
+            onBlur={onBlur}
+            onKeyDown={blurOnEnter}
           />
         </Field>
       )}
@@ -104,6 +115,8 @@ function NodeEditor({
                 e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
               )
             }
+            onBlur={onBlur}
+            onKeyDown={blurOnEnter}
           />
         </Field>
       )}
@@ -124,10 +137,14 @@ function NodeEditor({
 function FlowEditor({
   flow,
   onChange,
+  onBlur,
 }: {
   flow: FlowDTO;
   onChange: (field: string, value: unknown) => void;
+  onBlur: () => void;
 }) {
+  const blurOnEnter = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
+
   return (
     <>
       <Field label="Flow Type">
@@ -135,6 +152,7 @@ function FlowEditor({
           style={selectStyle}
           value={flow.flowType}
           onChange={(e) => onChange('flowType', e.target.value)}
+          onBlur={onBlur}
         >
           {FLOW_TYPE_OPTIONS.map((ft) => (
             <option key={ft} value={ft}>{ft}</option>
@@ -148,6 +166,8 @@ function FlowEditor({
           type="number"
           value={flow.grossAmount}
           onChange={(e) => onChange('grossAmount', parseFloat(e.target.value) || 0)}
+          onBlur={onBlur}
+          onKeyDown={blurOnEnter}
         />
       </Field>
 
@@ -156,6 +176,7 @@ function FlowEditor({
           style={selectStyle}
           value={flow.currency}
           onChange={(e) => onChange('currency', e.target.value)}
+          onBlur={onBlur}
         >
           {CURRENCY_OPTIONS.map((c) => (
             <option key={c} value={c}>{c}</option>
@@ -172,6 +193,8 @@ function FlowEditor({
           max="1"
           value={flow.whtRate}
           onChange={(e) => onChange('whtRate', parseFloat(e.target.value) || 0)}
+          onBlur={onBlur}
+          onKeyDown={blurOnEnter}
         />
       </Field>
 
@@ -180,6 +203,7 @@ function FlowEditor({
           style={selectStyle}
           value={flow.paymentMethod}
           onChange={(e) => onChange('paymentMethod', e.target.value)}
+          onBlur={onBlur}
         >
           <option value="bank">Bank</option>
           <option value="cash">Cash</option>
@@ -204,10 +228,14 @@ function FlowEditor({
 function OwnershipEditor({
   edge,
   onChange,
+  onBlur,
 }: {
   edge: OwnershipEdge;
   onChange: (field: string, value: unknown) => void;
+  onBlur: () => void;
 }) {
+  const blurOnEnter = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
+
   return (
     <>
       <Field label="Ownership (%)">
@@ -219,6 +247,8 @@ function OwnershipEditor({
           step={0.01}
           value={edge.percent}
           onChange={(e) => onChange('percent', parseFloat(e.target.value) || 0)}
+          onBlur={onBlur}
+          onKeyDown={blurOnEnter}
         />
       </Field>
 
@@ -229,6 +259,8 @@ function OwnershipEditor({
           step={0.01}
           value={edge.manualAdjustment}
           onChange={(e) => onChange('manualAdjustment', parseFloat(e.target.value) || 0)}
+          onBlur={onBlur}
+          onKeyDown={blurOnEnter}
         />
       </Field>
 
@@ -246,10 +278,14 @@ function OwnershipEditor({
 function ZoneEditor({
   zone,
   onChange,
+  onBlur,
 }: {
   zone: Zone;
   onChange: (field: string, value: unknown) => void;
+  onBlur: () => void;
 }) {
+  const blurOnEnter = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
+
   return (
     <>
       <Field label="Name">
@@ -258,6 +294,8 @@ function ZoneEditor({
           type="text"
           value={zone.name || ''}
           onChange={(e) => onChange('name', e.target.value)}
+          onBlur={onBlur}
+          onKeyDown={blurOnEnter}
         />
       </Field>
 
@@ -269,6 +307,8 @@ function ZoneEditor({
             step={50}
             value={zone.w || 0}
             onChange={(e) => onChange('w', parseInt(e.target.value) || 600)}
+            onBlur={onBlur}
+            onKeyDown={blurOnEnter}
           />
         </Field>
         <Field label="Height">
@@ -278,6 +318,8 @@ function ZoneEditor({
             step={50}
             value={zone.h || 0}
             onChange={(e) => onChange('h', parseInt(e.target.value) || 400)}
+            onBlur={onBlur}
+            onKeyDown={blurOnEnter}
           />
         </Field>
       </div>
@@ -290,6 +332,8 @@ function ZoneEditor({
             step={10}
             value={zone.x || 0}
             onChange={(e) => onChange('x', parseInt(e.target.value) || 0)}
+            onBlur={onBlur}
+            onKeyDown={blurOnEnter}
           />
         </Field>
         <Field label="Y">
@@ -299,6 +343,8 @@ function ZoneEditor({
             step={10}
             value={zone.y || 0}
             onChange={(e) => onChange('y', parseInt(e.target.value) || 0)}
+            onBlur={onBlur}
+            onKeyDown={blurOnEnter}
           />
         </Field>
       </div>
@@ -341,20 +387,15 @@ export function EditorSidebar() {
   const deleteZone = useSetAtom(deleteZoneAtom);
   const commitHistory = useSetAtom(commitHistoryAtom);
 
-  // Tracks whether we already committed for the current editing session.
-  // Resets on blur so each focus→edit→blur cycle saves exactly one snapshot.
-  const committedRef = useRef(false);
-
-  const commitOnce = useCallback(() => {
-    if (!committedRef.current) {
-      committedRef.current = true;
-      commitHistory();
-    }
-  }, [commitHistory]);
+  // Track whether the field was actually edited during focus → blur cycle
+  const dirtyRef = useRef(false);
 
   const handleBlur = useCallback(() => {
-    committedRef.current = false;
-  }, []);
+    if (dirtyRef.current) {
+      commitHistory();
+      dirtyRef.current = false;
+    }
+  }, [commitHistory]);
 
   if (!selection || !project) return null;
 
@@ -384,7 +425,7 @@ export function EditorSidebar() {
   const entityId = (selection.type === 'flow' || selection.type === 'ownership' || selection.type === 'zone') ? selection.id : null;
 
   const updateField = (field: string, value: unknown) => {
-    commitOnce();
+    dirtyRef.current = true;
     setProject((prev) => {
       if (!prev) return prev;
       if (singleNodeId) {
@@ -483,7 +524,7 @@ export function EditorSidebar() {
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }} onBlur={handleBlur}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
         {isMultiNode ? (
           <div style={{ padding: '12px', background: '#eff6ff', borderRadius: '6px', fontSize: '13px', color: '#1e40af' }}>
             <strong>{selection.ids.length} nodes</strong> selected.
@@ -493,16 +534,16 @@ export function EditorSidebar() {
         ) : (
           <>
             {selection.type === 'node' && entity && (
-              <NodeEditor node={entity as NodeDTO} onChange={updateField} />
+              <NodeEditor node={entity as NodeDTO} onChange={updateField} onBlur={handleBlur} />
             )}
             {selection.type === 'flow' && (
-              <FlowEditor flow={entity as FlowDTO} onChange={updateField} />
+              <FlowEditor flow={entity as FlowDTO} onChange={updateField} onBlur={handleBlur} />
             )}
             {selection.type === 'ownership' && (
-              <OwnershipEditor edge={entity as OwnershipEdge} onChange={updateField} />
+              <OwnershipEditor edge={entity as OwnershipEdge} onChange={updateField} onBlur={handleBlur} />
             )}
             {selection.type === 'zone' && (
-              <ZoneEditor zone={entity as Zone} onChange={updateField} />
+              <ZoneEditor zone={entity as Zone} onChange={updateField} onBlur={handleBlur} />
             )}
           </>
         )}
