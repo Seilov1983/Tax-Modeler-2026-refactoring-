@@ -248,7 +248,7 @@ export function CanvasBoard() {
           {/* Zones Layer (lowest z-index — behind nodes and edges) */}
           <div id="zones-layer">
             {zones.map((zone) => (
-              <CanvasZone key={zone.id} zone={zone} />
+              <CanvasZone key={zone.id} zone={zone} viewportStateRef={viewportStateRef} />
             ))}
           </div>
 

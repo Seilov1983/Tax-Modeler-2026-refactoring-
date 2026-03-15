@@ -436,6 +436,8 @@ export function EditorSidebar() {
 
   return (
     <div
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
       style={{
         position: 'absolute',
         top: 0,
