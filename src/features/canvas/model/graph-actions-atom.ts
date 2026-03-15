@@ -15,8 +15,10 @@ import { flowsAtom } from '@entities/flow';
 import { ownershipAtom } from '@entities/ownership';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
+import { zonesAtom } from '@entities/zone';
 import { uid } from '@shared/lib/engine/utils';
-import type { NodeDTO, FlowDTO, OwnershipEdge, NodeType } from '@shared/types';
+import { detectZoneId } from '@shared/lib/engine/engine-core';
+import type { NodeDTO, FlowDTO, OwnershipEdge, NodeType, Zone, JurisdictionCode, CurrencyCode } from '@shared/types';
 
 // ─── Add Node ───────────────────────────────────────────────────────────────
 
@@ -30,9 +32,10 @@ export interface AddNodePayload {
 
 export const addNodeAtom = atom(
   null,
-  (_get, set, payload: AddNodePayload) => {
+  (get, set, payload: AddNodePayload) => {
     set(commitHistoryAtom);
 
+    const project = get(projectAtom);
     const newNode: NodeDTO = {
       id: 'n_' + uid(),
       name: payload.name,
@@ -48,6 +51,11 @@ export const addNodeAtom = atom(
       etr: 0,
       balances: {},
     };
+
+    // Spatial inheritance: auto-detect zone from spawn position if no explicit zoneId
+    if (!newNode.zoneId && project) {
+      newNode.zoneId = detectZoneId(project, newNode);
+    }
 
     set(nodesAtom, (prev) => [...prev, newNode]);
     set(projectAtom, (prev) => {
@@ -207,22 +215,24 @@ export const moveNodesAtom = atom(
   (get, set, entries: MoveNodeEntry[]) => {
     set(commitHistoryAtom);
 
+    const project = get(projectAtom);
     const idMap = new Map(entries.map((e) => [e.id, e]));
-    set(nodesAtom, (prev) =>
-      prev.map((n) => {
-        const entry = idMap.get(n.id);
-        return entry ? { ...n, x: entry.x, y: entry.y } : n;
-      }),
-    );
+
+    // Update position + auto-detect zone (spatial inheritance)
+    const updateNode = (n: NodeDTO) => {
+      const entry = idMap.get(n.id);
+      if (!entry) return n;
+      const moved = { ...n, x: entry.x, y: entry.y };
+      if (project && n.type !== 'txa') {
+        moved.zoneId = detectZoneId(project, moved);
+      }
+      return moved;
+    };
+
+    set(nodesAtom, (prev) => prev.map(updateNode));
     set(projectAtom, (prev) => {
       if (!prev) return prev;
-      return {
-        ...prev,
-        nodes: prev.nodes.map((n) => {
-          const entry = idMap.get(n.id);
-          return entry ? { ...n, x: entry.x, y: entry.y } : n;
-        }),
-      };
+      return { ...prev, nodes: prev.nodes.map(updateNode) };
     });
   },
 );
@@ -248,5 +258,58 @@ export const deleteNodesAtom = atom(
       };
     });
     set(selectionAtom, null);
+  },
+);
+
+// ─── Add Zone ────────────────────────────────────────────────────────────────
+
+export interface AddZonePayload {
+  jurisdiction: JurisdictionCode;
+  name: string;
+  code: string;
+  currency: CurrencyCode;
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+}
+
+const ZONE_DEFAULTS: Record<string, { w: number; h: number }> = {
+  KZ: { w: 600, h: 500 },
+  UAE: { w: 600, h: 500 },
+  HK: { w: 500, h: 400 },
+  CY: { w: 500, h: 400 },
+  SG: { w: 500, h: 400 },
+  UK: { w: 500, h: 400 },
+  US: { w: 500, h: 400 },
+  BVI: { w: 400, h: 350 },
+};
+
+export const addZoneAtom = atom(
+  null,
+  (get, set, payload: AddZonePayload) => {
+    set(commitHistoryAtom);
+
+    const defaults = ZONE_DEFAULTS[payload.jurisdiction] || { w: 500, h: 400 };
+    const existingZones = get(zonesAtom);
+
+    const newZone: Zone = {
+      id: 'z_' + uid(),
+      name: payload.name,
+      jurisdiction: payload.jurisdiction,
+      code: payload.code,
+      currency: payload.currency,
+      x: payload.x,
+      y: payload.y,
+      w: payload.w ?? defaults.w,
+      h: payload.h ?? defaults.h,
+      zIndex: existingZones.length,
+    };
+
+    set(zonesAtom, (prev) => [...prev, newZone]);
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return { ...prev, zones: [...prev.zones, newZone] };
+    });
   },
 );

@@ -1,22 +1,36 @@
 'use client';
 
 import { useSetAtom } from 'jotai';
-import { useCallback, type RefObject } from 'react';
-import { addNodeAtom } from '../model/graph-actions-atom';
+import { useCallback, useState, type RefObject } from 'react';
+import { addNodeAtom, addZoneAtom } from '../model/graph-actions-atom';
 import type { ViewportState } from './useCanvasViewport';
+import type { JurisdictionCode, CurrencyCode } from '@shared/types';
 
 interface CanvasToolbarProps {
   viewportRef: RefObject<HTMLDivElement | null>;
   viewportStateRef: RefObject<ViewportState>;
 }
 
+const ZONE_PRESETS: { jurisdiction: JurisdictionCode; code: string; name: string; currency: CurrencyCode }[] = [
+  { jurisdiction: 'KZ', code: 'KZ_STD', name: 'Kazakhstan', currency: 'KZT' },
+  { jurisdiction: 'UAE', code: 'UAE_ML', name: 'UAE Mainland', currency: 'AED' },
+  { jurisdiction: 'HK', code: 'HK_ON', name: 'Hong Kong', currency: 'HKD' },
+  { jurisdiction: 'CY', code: 'CY_STD', name: 'Cyprus', currency: 'EUR' },
+  { jurisdiction: 'SG', code: 'SG_STD', name: 'Singapore', currency: 'SGD' },
+  { jurisdiction: 'UK', code: 'UK_STD', name: 'United Kingdom', currency: 'GBP' },
+  { jurisdiction: 'US', code: 'US_DE', name: 'US Delaware', currency: 'USD' },
+  { jurisdiction: 'BVI', code: 'BVI', name: 'BVI', currency: 'USD' },
+];
+
 /**
- * Floating toolbar for spawning new nodes on the canvas.
+ * Floating toolbar for spawning new nodes and zones on the canvas.
  * Computes spawn position at the center of the visible viewport area,
  * accounting for current pan & zoom.
  */
 export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarProps) {
   const addNode = useSetAtom(addNodeAtom);
+  const addZone = useSetAtom(addZoneAtom);
+  const [showZoneMenu, setShowZoneMenu] = useState(false);
 
   const spawnCenter = useCallback((): { x: number; y: number } => {
     const vp = viewportRef.current;
@@ -32,13 +46,29 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
 
   const handleAddCompany = useCallback(() => {
     const pos = spawnCenter();
-    addNode({ type: 'company', name: 'New Company', x: pos.x, y: pos.y, zoneId: 'KZ_HUB' });
+    addNode({ type: 'company', name: 'New Company', x: pos.x, y: pos.y });
   }, [addNode, spawnCenter]);
 
   const handleAddPerson = useCallback(() => {
     const pos = spawnCenter();
     addNode({ type: 'person', name: 'New Person', x: pos.x + 20, y: pos.y + 20 });
   }, [addNode, spawnCenter]);
+
+  const handleAddZone = useCallback(
+    (preset: (typeof ZONE_PRESETS)[number]) => {
+      const pos = spawnCenter();
+      addZone({
+        jurisdiction: preset.jurisdiction,
+        code: preset.code,
+        name: preset.name,
+        currency: preset.currency,
+        x: pos.x - 200,
+        y: pos.y - 150,
+      });
+      setShowZoneMenu(false);
+    },
+    [addZone, spawnCenter],
+  );
 
   return (
     <div
@@ -66,6 +96,56 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
       <button onClick={handleAddPerson} style={{ ...btnStyle, background: '#f0fdf4', color: '#16a34a' }}>
         + Person
       </button>
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={() => setShowZoneMenu((v) => !v)}
+          data-testid="btn-add-zone"
+          style={{ ...btnStyle, background: '#fef3c7', color: '#b45309', width: '100%' }}
+        >
+          + Zone
+        </button>
+        {showZoneMenu && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: '100%',
+              marginLeft: '4px',
+              background: '#fff',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+              padding: '4px',
+              minWidth: '160px',
+              zIndex: 50,
+            }}
+          >
+            {ZONE_PRESETS.map((preset) => (
+              <button
+                key={preset.code}
+                onClick={() => handleAddZone(preset)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '6px 10px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  borderRadius: '3px',
+                  color: '#374151',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#f3f4f6')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+              >
+                {preset.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
