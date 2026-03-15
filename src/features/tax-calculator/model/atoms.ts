@@ -71,7 +71,7 @@ export const taxCalculationAtom = atom(async (get) => {
         const income = Number(node.annualIncome || 0);
         const rawCit = computeCITAmount(income, zoneTax.cit);
         // CIT is computed in the zone's functional currency; derive it from masterData
-        const jurisdictionCode = zone.jurisdictionCode || 'KZ';
+        const jurisdictionCode = zone.jurisdiction || 'KZ';
         const mdEntry = p.masterData?.[jurisdictionCode];
         const localCurrency = mdEntry?.baseCurrency || 'KZT';
         const convertedCit = convert(p, rawCit, localCurrency, baseCurrency);
