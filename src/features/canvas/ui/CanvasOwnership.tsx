@@ -9,7 +9,7 @@
  * FROZEN: SVG Hit-Areas — visible stroke 2px, invisible hit-area 12px.
  */
 
-import { useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import { memo, useCallback } from 'react';
 import type { OwnershipEdge, NodeDTO } from '@shared/types';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
@@ -38,7 +38,8 @@ interface CanvasOwnershipProps {
 export const CanvasOwnership = memo(function CanvasOwnership({ edge, nodes }: CanvasOwnershipProps) {
   const parentNode = nodes.find((n) => n.id === edge.fromId);
   const childNode = nodes.find((n) => n.id === edge.toId);
-  const setSelection = useSetAtom(selectionAtom);
+  const [selection, setSelection] = useAtom(selectionAtom);
+  const isSelected = selection?.type === 'ownership' && selection.id === edge.id;
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -66,11 +67,11 @@ export const CanvasOwnership = memo(function CanvasOwnership({ edge, nodes }: Ca
       {/* Invisible wider hit area (FROZEN: 12px) */}
       <path d={pathData} stroke="transparent" strokeWidth={12} fill="none" />
 
-      {/* Visible dashed purple line */}
+      {/* Visible dashed purple line — highlighted when selected */}
       <path
         d={pathData}
-        stroke="#a855f7"
-        strokeWidth={2}
+        stroke={isSelected ? '#7c3aed' : '#a855f7'}
+        strokeWidth={isSelected ? 4 : 2}
         strokeDasharray="5 5"
         fill="none"
       />
