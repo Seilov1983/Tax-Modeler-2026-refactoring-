@@ -2,6 +2,7 @@
   "name": "tax-modeler-2026",
   "version": "0.10.0",
   "private": true,
+  "main": "main.js",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
@@ -12,10 +13,27 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npx playwright test",
-    "test:e2e:ui": "npx playwright test --ui"
+    "test:e2e:ui": "npx playwright test --ui",
+    "build:mac": "next build && electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.taxmodeler.app",
+    "productName": "Tax Modeler",
+    "directories": {
+      "output": "release/"
+    },
+    "mac": {
+      "category": "public.app-category.finance",
+      "target": ["dmg"]
+    },
+    "files": [
+      "out/**/*",
+      "main.js"
+    ]
   },
   "dependencies": {
     "dagre": "^0.8.5",
+    "electron-serve": "^3.0.1",
     "html-to-image": "^1.11.13",
     "jotai": "^2.12.0",
     "jotai-effect": "^1.1.0",
@@ -30,6 +48,8 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitest/coverage-v8": "^4.1.0",
+    "electron": "^41.0.2",
+    "electron-builder": "^26.8.1",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.2.0",
     "typescript": "^5.7.0",
