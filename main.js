@@ -1,8 +1,9 @@
 const { app, BrowserWindow } = require('electron');
-const serve = require('electron-serve');
+const electronServe = require('electron-serve');
+// Подхватываем функцию, даже если она спрятана в .default
+const serve = electronServe.default || electronServe;
 const path = require('path');
 
-// Указываем electron-serve раздавать файлы из папки out/ (результат сборки Next.js)
 const appServe = serve({ directory: path.join(__dirname, 'out') });
 
 let mainWindow;
