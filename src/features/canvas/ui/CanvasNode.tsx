@@ -22,7 +22,7 @@ import { nodeTaxAtomFamily, taxCalculationAtom } from '@features/tax-calculator/
 import { nodeRiskAtomFamily } from '@features/risk-analyzer/model/atoms';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { draftConnectionAtom } from '../model/draft-connection-atom';
-import { addFlowAtom, addOwnershipAtom } from '../model/graph-actions-atom';
+import { addFlowAtom, addOwnershipAtom, moveNodesAtom } from '../model/graph-actions-atom';
 import { fmtMoney, currencySymbol } from '@shared/lib/engine/utils';
 
 // ─── Micro-component: isolates Suspense per node for CIT display ────────────
@@ -78,6 +78,7 @@ interface CanvasNodeProps {
 
 export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef }: CanvasNodeProps) {
   const [node, setNode] = useAtom(nodeAtom);
+  const selection = useAtomValue(selectionAtom);
   const setSelection = useSetAtom(selectionAtom);
   const [draft, setDraft] = useAtom(draftConnectionAtom);
   const addFlow = useSetAtom(addFlowAtom);
@@ -87,6 +88,14 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
   const livePos = useRef({ x: node.x, y: node.y });
   // Distinguish click from drag
   const hasDragged = useRef(false);
+  // Ref to read selection without stale closures in event handlers
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+
+  // Whether this node is part of a multi-selection
+  const isSelected = selection?.type === 'node' && selection.ids.includes(node.id);
+
+  const moveNodes = useSetAtom(moveNodesAtom);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -97,15 +106,47 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
       // Snapshot starting position
       livePos.current = { x: node.x, y: node.y };
 
+      // Check if this node is part of a multi-selection for bulk drag
+      const sel = selectionRef.current;
+      const isBulk = sel?.type === 'node' && sel.ids.length > 1 && sel.ids.includes(node.id);
+      // Snapshot sibling DOM elements and their starting positions for bulk drag
+      const siblings: { el: HTMLElement; startX: number; startY: number }[] = [];
+      if (isBulk) {
+        for (const id of sel.ids) {
+          if (id === node.id) continue; // skip self — handled by livePos
+          const el = document.querySelector(`[data-node-id="${id}"]`) as HTMLElement | null;
+          if (el) {
+            // Parse current position from the transform style
+            const match = el.style.transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+            if (match) {
+              siblings.push({ el, startX: parseFloat(match[1]), startY: parseFloat(match[2]) });
+            }
+          }
+        }
+      }
+
+      let totalDx = 0;
+      let totalDy = 0;
+
       const onPointerMove = (moveEvent: PointerEvent) => {
         hasDragged.current = true;
         // Compensate for zoom: divide pixel movement by current scale
         const scale = viewportStateRef.current?.scale ?? 1;
+        const dx = moveEvent.movementX / scale;
+        const dy = moveEvent.movementY / scale;
+        totalDx += dx;
+        totalDy += dy;
+
         // DIRECT DOM MUTATION — bypasses React render cycle
-        livePos.current.x += moveEvent.movementX / scale;
-        livePos.current.y += moveEvent.movementY / scale;
+        livePos.current.x += dx;
+        livePos.current.y += dy;
         if (domRef.current) {
           domRef.current.style.transform = `translate(${livePos.current.x}px, ${livePos.current.y}px) translateZ(0)`;
+        }
+
+        // Bulk: move sibling nodes via direct DOM mutation
+        for (const s of siblings) {
+          s.el.style.transform = `translate(${s.startX + totalDx}px, ${s.startY + totalDy}px) translateZ(0)`;
         }
       };
 
@@ -115,25 +156,53 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
         target.releasePointerCapture(upEvent.pointerId);
 
         if (hasDragged.current) {
-          // COMMIT to Jotai — triggers React re-render + background tax recalculation
-          const finalX = Math.round(livePos.current.x);
-          const finalY = Math.round(livePos.current.y);
-          setNode((prev) => ({ ...prev, x: finalX, y: finalY }));
+          if (isBulk) {
+            // COMMIT all selected nodes via batch atom
+            const entries = [
+              { id: node.id, x: Math.round(livePos.current.x), y: Math.round(livePos.current.y) },
+              ...siblings.map((s) => {
+                const el = s.el;
+                const id = el.getAttribute('data-node-id')!;
+                return { id, x: Math.round(s.startX + totalDx), y: Math.round(s.startY + totalDy) };
+              }),
+            ];
+            moveNodes(entries);
+          } else {
+            // Single node commit
+            const finalX = Math.round(livePos.current.x);
+            const finalY = Math.round(livePos.current.y);
+            setNode((prev) => ({ ...prev, x: finalX, y: finalY }));
+          }
         }
       };
 
       target.addEventListener('pointermove', onPointerMove);
       target.addEventListener('pointerup', onPointerUp);
     },
-    [node.x, node.y, setNode, viewportStateRef],
+    [node.x, node.y, node.id, setNode, moveNodes, viewportStateRef],
   );
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       if (hasDragged.current) return; // was a drag, not a click
       e.stopPropagation();
-      setSelection({ type: 'node', id: node.id });
+      // Shift+click: toggle this node in/out of existing multi-select
+      const sel = selectionRef.current;
+      if (e.shiftKey) {
+        if (sel?.type === 'node') {
+          const exists = sel.ids.includes(node.id);
+          const newIds = exists
+            ? sel.ids.filter((id) => id !== node.id)
+            : [...sel.ids, node.id];
+          setSelection(newIds.length > 0 ? { type: 'node', ids: newIds } : null);
+        } else {
+          setSelection({ type: 'node', ids: [node.id] });
+        }
+      } else {
+        setSelection({ type: 'node', ids: [node.id] });
+      }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [node.id, setSelection],
   );
 
@@ -203,6 +272,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
         isTxa ? 'node-txa' : '',
         node.frozen ? 'node-frozen' : '',
         riskCount > 0 ? 'node-has-risks' : '',
+        isSelected ? 'node-selected' : '',
       ]
         .filter(Boolean)
         .join(' ')}

@@ -187,8 +187,66 @@ export const deleteNodeAtom = atom(
     });
 
     const sel = get(selectionAtom);
-    if (sel?.type === 'node' && sel.id === nodeId) {
-      set(selectionAtom, null);
+    if (sel?.type === 'node') {
+      const remaining = sel.ids.filter((id) => id !== nodeId);
+      set(selectionAtom, remaining.length > 0 ? { type: 'node', ids: remaining } : null);
     }
+  },
+);
+
+// ─── Move Nodes (batch) — commits positions for a group of nodes ────────
+
+export interface MoveNodeEntry {
+  id: string;
+  x: number;
+  y: number;
+}
+
+export const moveNodesAtom = atom(
+  null,
+  (get, set, entries: MoveNodeEntry[]) => {
+    set(commitHistoryAtom);
+
+    const idMap = new Map(entries.map((e) => [e.id, e]));
+    set(nodesAtom, (prev) =>
+      prev.map((n) => {
+        const entry = idMap.get(n.id);
+        return entry ? { ...n, x: entry.x, y: entry.y } : n;
+      }),
+    );
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        nodes: prev.nodes.map((n) => {
+          const entry = idMap.get(n.id);
+          return entry ? { ...n, x: entry.x, y: entry.y } : n;
+        }),
+      };
+    });
+  },
+);
+
+// ─── Delete Nodes (batch) — cascading delete for multiple nodes ─────────
+
+export const deleteNodesAtom = atom(
+  null,
+  (get, set, nodeIds: string[]) => {
+    set(commitHistoryAtom);
+
+    const idSet = new Set(nodeIds);
+    set(nodesAtom, (prev) => prev.filter((n) => !idSet.has(n.id)));
+    set(flowsAtom, (prev) => prev.filter((f) => !idSet.has(f.fromId) && !idSet.has(f.toId)));
+    set(ownershipAtom, (prev) => prev.filter((o) => !idSet.has(o.fromId) && !idSet.has(o.toId)));
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        nodes: prev.nodes.filter((n) => !idSet.has(n.id)),
+        flows: prev.flows.filter((f) => !idSet.has(f.fromId) && !idSet.has(f.toId)),
+        ownership: prev.ownership.filter((o) => !idSet.has(o.fromId) && !idSet.has(o.toId)),
+      };
+    });
+    set(selectionAtom, null);
   },
 );

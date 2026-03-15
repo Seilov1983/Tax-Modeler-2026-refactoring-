@@ -4,7 +4,7 @@ import { useAtom, useSetAtom } from 'jotai';
 import { useRef, useCallback } from 'react';
 import { selectionAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
-import { deleteNodeAtom, deleteFlowAtom, deleteOwnershipAtom } from '@features/canvas/model/graph-actions-atom';
+import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom } from '@features/canvas/model/graph-actions-atom';
 import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
 import type { NodeDTO, FlowDTO, OwnershipEdge, FlowType } from '@shared/types';
 
@@ -263,7 +263,7 @@ const ENTITY_LABELS: Record<string, string> = {
 export function EditorSidebar() {
   const [selection, setSelection] = useAtom(selectionAtom);
   const [project, setProject] = useAtom(projectAtom);
-  const deleteNode = useSetAtom(deleteNodeAtom);
+  const deleteNodes = useSetAtom(deleteNodesAtom);
   const deleteFlow = useSetAtom(deleteFlowAtom);
   const deleteOwnership = useSetAtom(deleteOwnershipAtom);
   const commitHistory = useSetAtom(commitHistoryAtom);
@@ -285,54 +285,70 @@ export function EditorSidebar() {
 
   if (!selection || !project) return null;
 
+  // Multi-select mode: node selection with more than one node
+  const isMultiNode = selection.type === 'node' && selection.ids.length > 1;
+
   // Look up the selected entity from the correct collection
   let entity: NodeDTO | FlowDTO | OwnershipEdge | undefined;
   if (selection.type === 'node') {
-    entity = project.nodes.find((n) => n.id === selection.id);
+    if (selection.ids.length === 1) {
+      entity = project.nodes.find((n) => n.id === selection.ids[0]);
+    }
+    // multi-select: entity stays undefined, show summary instead
   } else if (selection.type === 'flow') {
     entity = project.flows.find((f) => f.id === selection.id);
   } else {
     entity = project.ownership.find((o) => o.id === selection.id);
   }
 
-  if (!entity) return null;
+  if (!entity && !isMultiNode) return null;
+
+  const singleNodeId = selection.type === 'node' && selection.ids.length === 1 ? selection.ids[0] : null;
+
+  // Single entity ID for flow/ownership editing
+  const entityId = selection.type === 'flow' ? selection.id : selection.type === 'ownership' ? selection.id : null;
 
   const updateField = (field: string, value: unknown) => {
     commitOnce();
     setProject((prev) => {
       if (!prev) return prev;
-      if (selection.type === 'node') {
+      if (singleNodeId) {
         return {
           ...prev,
           nodes: prev.nodes.map((n) =>
-            n.id === selection.id ? { ...n, [field]: value } : n,
+            n.id === singleNodeId ? { ...n, [field]: value } : n,
           ),
         };
       }
-      if (selection.type === 'flow') {
+      if (selection.type === 'flow' && entityId) {
         return {
           ...prev,
           flows: prev.flows.map((f) =>
-            f.id === selection.id ? { ...f, [field]: value } : f,
+            f.id === entityId ? { ...f, [field]: value } : f,
           ),
         };
       }
-      return {
-        ...prev,
-        ownership: prev.ownership.map((o) =>
-          o.id === selection.id ? { ...o, [field]: value } : o,
-        ),
-      };
+      if (entityId) {
+        return {
+          ...prev,
+          ownership: prev.ownership.map((o) =>
+            o.id === entityId ? { ...o, [field]: value } : o,
+          ),
+        };
+      }
+      return prev;
     });
   };
 
   const handleDelete = () => {
-    if (selection.type === 'node') deleteNode(selection.id);
+    if (selection.type === 'node') deleteNodes(selection.ids);
     else if (selection.type === 'flow') deleteFlow(selection.id);
     else deleteOwnership(selection.id);
   };
 
-  const label = ENTITY_LABELS[selection.type] ?? selection.type;
+  const label = isMultiNode
+    ? `${selection.ids.length} Nodes`
+    : ENTITY_LABELS[selection.type] ?? selection.type;
 
   return (
     <div
@@ -381,14 +397,24 @@ export function EditorSidebar() {
 
       {/* Body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }} onBlur={handleBlur}>
-        {selection.type === 'node' && (
-          <NodeEditor node={entity as NodeDTO} onChange={updateField} />
-        )}
-        {selection.type === 'flow' && (
-          <FlowEditor flow={entity as FlowDTO} onChange={updateField} />
-        )}
-        {selection.type === 'ownership' && (
-          <OwnershipEditor edge={entity as OwnershipEdge} onChange={updateField} />
+        {isMultiNode ? (
+          <div style={{ padding: '12px', background: '#eff6ff', borderRadius: '6px', fontSize: '13px', color: '#1e40af' }}>
+            <strong>{selection.ids.length} nodes</strong> selected.
+            <br /><br />
+            Drag any selected node to move all. Press <kbd style={{ padding: '1px 4px', background: '#dbeafe', borderRadius: '3px', fontSize: '11px' }}>Delete</kbd> to remove all.
+          </div>
+        ) : (
+          <>
+            {selection.type === 'node' && entity && (
+              <NodeEditor node={entity as NodeDTO} onChange={updateField} />
+            )}
+            {selection.type === 'flow' && (
+              <FlowEditor flow={entity as FlowDTO} onChange={updateField} />
+            )}
+            {selection.type === 'ownership' && (
+              <OwnershipEditor edge={entity as OwnershipEdge} onChange={updateField} />
+            )}
+          </>
         )}
       </div>
 
