@@ -33,6 +33,7 @@ import { viewportAtom } from '@features/canvas/model/viewport-atom';
 import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
 import { CanvasToolbar } from '@features/canvas/ui/CanvasToolbar';
+import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { ProjectHeader } from '@features/project-management';
 
 export function CanvasBoard() {
@@ -324,6 +325,9 @@ export function CanvasBoard() {
 
         {/* Toolbar — outside zoom/pan area, fixed to top-left */}
         <CanvasToolbar viewportRef={viewportRef} viewportStateRef={viewportStateRef} />
+
+        {/* Executive Summary — top-right */}
+        <GlobalSummaryWidget />
 
         {/* Zoom Controls — bottom-left */}
         <CanvasControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={resetViewport} />
