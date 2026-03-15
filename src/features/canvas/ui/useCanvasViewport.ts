@@ -161,6 +161,7 @@ export function useCanvasViewport(
 
     // Wheel → zoom
     const onWheel = (e: WheelEvent) => {
+      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
       e.preventDefault();
 
       // Pinch gesture on trackpad sends ctrlKey with wheel
@@ -177,6 +178,7 @@ export function useCanvasViewport(
 
     // Middle-click or Space+click → start pan
     const onPointerDown = (e: PointerEvent) => {
+      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
       // Middle button (1) or space held down
       if (e.button === 1 || spaceDownRef.current) {
         e.preventDefault();
@@ -204,6 +206,7 @@ export function useCanvasViewport(
 
     // Double-click → reset
     const onDblClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
       // Only reset on background double-click, not on nodes
       if ((e.target as HTMLElement).closest('.canvas-node')) return;
       resetViewport();
