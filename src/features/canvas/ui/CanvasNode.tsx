@@ -77,7 +77,7 @@ interface CanvasNodeProps {
 }
 
 export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef }: CanvasNodeProps) {
-  const [node, setNode] = useAtom(nodeAtom);
+  const node = useAtomValue(nodeAtom);
   const selection = useAtomValue(selectionAtom);
   const setSelection = useSetAtom(selectionAtom);
   const [draft, setDraft] = useAtom(draftConnectionAtom);
@@ -156,30 +156,23 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
         target.releasePointerCapture(upEvent.pointerId);
 
         if (hasDragged.current) {
-          if (isBulk) {
-            // COMMIT all selected nodes via batch atom
-            const entries = [
-              { id: node.id, x: Math.round(livePos.current.x), y: Math.round(livePos.current.y) },
-              ...siblings.map((s) => {
-                const el = s.el;
-                const id = el.getAttribute('data-node-id')!;
-                return { id, x: Math.round(s.startX + totalDx), y: Math.round(s.startY + totalDy) };
-              }),
-            ];
-            moveNodes(entries);
-          } else {
-            // Single node commit
-            const finalX = Math.round(livePos.current.x);
-            const finalY = Math.round(livePos.current.y);
-            setNode((prev) => ({ ...prev, x: finalX, y: finalY }));
-          }
+          // COMMIT via moveNodesAtom — handles position + spatial zone inheritance
+          const entries = [
+            { id: node.id, x: Math.round(livePos.current.x), y: Math.round(livePos.current.y) },
+            ...siblings.map((s) => ({
+              id: s.el.getAttribute('data-node-id')!,
+              x: Math.round(s.startX + totalDx),
+              y: Math.round(s.startY + totalDy),
+            })),
+          ];
+          moveNodes(entries);
         }
       };
 
       target.addEventListener('pointermove', onPointerMove);
       target.addEventListener('pointerup', onPointerUp);
     },
-    [node.x, node.y, node.id, setNode, moveNodes, viewportStateRef],
+    [node.x, node.y, node.id, moveNodes, viewportStateRef],
   );
 
   const handleClick = useCallback(

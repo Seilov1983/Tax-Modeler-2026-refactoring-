@@ -21,6 +21,7 @@ import { zonesAtom } from '@entities/zone';
 import { ownershipAtom } from '@entities/ownership';
 import { CanvasNode, CanvasFlow, useCanvasViewport } from '@features/canvas';
 import { CanvasOwnership } from '@features/canvas/ui/CanvasOwnership';
+import { CanvasZone } from '@features/canvas/ui/CanvasZone';
 import { useKeyboardShortcuts } from '@features/canvas/ui/useKeyboardShortcuts';
 import { CanvasControls } from '@features/canvas/ui/CanvasControls';
 import { Minimap } from '@features/canvas/ui/Minimap';
@@ -32,6 +33,7 @@ import { viewportAtom } from '@features/canvas/model/viewport-atom';
 import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
 import { CanvasToolbar } from '@features/canvas/ui/CanvasToolbar';
+import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { ProjectHeader } from '@features/project-management';
 
 export function CanvasBoard() {
@@ -243,24 +245,10 @@ export function CanvasBoard() {
           id="canvas-render-area"
           style={{ position: 'absolute', transformOrigin: '0 0' }}
         >
-          {/* Zones Layer */}
+          {/* Zones Layer (lowest z-index — behind nodes and edges) */}
           <div id="zones-layer">
             {zones.map((zone) => (
-              <div
-                key={zone.id}
-                className="zone"
-                data-zone-id={zone.id}
-                style={{
-                  position: 'absolute',
-                  left: zone.x,
-                  top: zone.y,
-                  width: zone.w,
-                  height: zone.h,
-                  zIndex: zone.zIndex,
-                }}
-              >
-                <div className="zone-label">{zone.name}</div>
-              </div>
+              <CanvasZone key={zone.id} zone={zone} />
             ))}
           </div>
 
@@ -337,6 +325,9 @@ export function CanvasBoard() {
 
         {/* Toolbar — outside zoom/pan area, fixed to top-left */}
         <CanvasToolbar viewportRef={viewportRef} viewportStateRef={viewportStateRef} />
+
+        {/* Executive Summary — top-right */}
+        <GlobalSummaryWidget />
 
         {/* Zoom Controls — bottom-left */}
         <CanvasControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={resetViewport} />
