@@ -9,6 +9,7 @@
  */
 
 import { atom } from 'jotai';
+import dagre from 'dagre';
 import { projectAtom } from './project-atom';
 import { nodesAtom } from '@entities/node';
 import { flowsAtom } from '@entities/flow';
@@ -310,6 +311,64 @@ export const addZoneAtom = atom(
     set(projectAtom, (prev) => {
       if (!prev) return prev;
       return { ...prev, zones: [...prev.zones, newZone] };
+    });
+  },
+);
+
+// ─── Auto-Layout (Dagre) — arrange nodes into a clean hierarchy ──────────
+
+const NODE_WIDTH = 180;
+const NODE_HEIGHT = 80;
+
+export const autoLayoutAtom = atom(
+  null,
+  (get, set) => {
+    const project = get(projectAtom);
+    if (!project || project.nodes.length === 0) return;
+
+    set(commitHistoryAtom);
+
+    const g = new dagre.graphlib.Graph();
+    g.setGraph({
+      rankdir: 'TB',
+      align: 'UL',
+      nodesep: 80,
+      ranksep: 120,
+      edgesep: 40,
+    });
+    g.setDefaultEdgeLabel(() => ({}));
+
+    // Add nodes
+    for (const node of project.nodes) {
+      g.setNode(node.id, { width: node.w || NODE_WIDTH, height: node.h || NODE_HEIGHT });
+    }
+
+    // Ownership edges form the primary hierarchy (higher weight)
+    for (const own of project.ownership) {
+      g.setEdge(own.fromId, own.toId, { weight: 2 });
+    }
+
+    // Flow edges are secondary (lower weight)
+    for (const flow of project.flows) {
+      g.setEdge(flow.fromId, flow.toId, { weight: 1 });
+    }
+
+    dagre.layout(g);
+
+    // Extract new positions (dagre returns center coordinates)
+    const updatedNodes = project.nodes.map((node) => {
+      const pos = g.node(node.id);
+      if (!pos) return node;
+      const w = node.w || NODE_WIDTH;
+      const h = node.h || NODE_HEIGHT;
+      return { ...node, x: Math.round(pos.x - w / 2), y: Math.round(pos.y - h / 2) };
+    });
+
+    // Batch-update both entity atoms and projectAtom
+    set(nodesAtom, updatedNodes);
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return { ...prev, nodes: updatedNodes };
     });
   },
 );

@@ -2,7 +2,7 @@
 
 import { useSetAtom } from 'jotai';
 import { useCallback, useState, type RefObject } from 'react';
-import { addNodeAtom, addZoneAtom } from '../model/graph-actions-atom';
+import { addNodeAtom, addZoneAtom, autoLayoutAtom } from '../model/graph-actions-atom';
 import type { ViewportState } from './useCanvasViewport';
 import type { JurisdictionCode, CurrencyCode } from '@shared/types';
 
@@ -30,6 +30,7 @@ const ZONE_PRESETS: { jurisdiction: JurisdictionCode; code: string; name: string
 export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarProps) {
   const addNode = useSetAtom(addNodeAtom);
   const addZone = useSetAtom(addZoneAtom);
+  const autoLayout = useSetAtom(autoLayoutAtom);
   const [showZoneMenu, setShowZoneMenu] = useState(false);
 
   const spawnCenter = useCallback((): { x: number; y: number } => {
@@ -146,6 +147,15 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
           </div>
         )}
       </div>
+      <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '2px 0' }} />
+      <button
+        onClick={() => autoLayout()}
+        data-testid="btn-auto-layout"
+        title="Arrange nodes into a hierarchy (Dagre)"
+        style={{ ...btnStyle, background: '#eef2ff', color: '#4f46e5', width: '100%' }}
+      >
+        Auto-Arrange
+      </button>
     </div>
   );
 }
