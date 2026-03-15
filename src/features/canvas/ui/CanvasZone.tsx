@@ -5,10 +5,12 @@
  *
  * Uses existing CSS classes from styles.css (.zone, .zone-header, .zone-resize-handle).
  * Zones are pointer-events:none in the body so nodes/flows can be clicked through,
- * but the header is pointer-events:auto for potential drag support.
+ * but the header is pointer-events:auto for click-to-select support.
  */
 
 import { memo } from 'react';
+import { useAtom } from 'jotai';
+import { selectionAtom } from '@features/entity-editor/model/atoms';
 import type { Zone } from '@shared/types';
 
 interface CanvasZoneProps {
@@ -43,6 +45,9 @@ const ZONE_BORDER_COLORS: Record<string, string> = {
 };
 
 export const CanvasZone = memo(function CanvasZone({ zone }: CanvasZoneProps) {
+  const [selection, setSelection] = useAtom(selectionAtom);
+  const isSelected = selection?.type === 'zone' && selection.id === zone.id;
+
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
   const borderColor = ZONE_BORDER_COLORS[zone.jurisdiction] || '#94a3b8';
 
@@ -57,27 +62,49 @@ export const CanvasZone = memo(function CanvasZone({ zone }: CanvasZoneProps) {
         width: zone.w,
         height: zone.h,
         zIndex: zone.zIndex,
-        border: `2px dashed ${borderColor}`,
+        border: `2px dashed ${isSelected ? '#3b82f6' : borderColor}`,
         borderRadius: '12px',
-        background: `${bgColor}40`,
+        background: isSelected ? `${bgColor}60` : `${bgColor}40`,
         pointerEvents: 'none',
         transform: 'translateZ(0)',
+        transition: 'border-color 0.15s, background 0.15s',
       }}
     >
-      {/* Zone header label */}
+      {/* Clickable zone header label */}
       <div
         style={{
           position: 'absolute',
-          top: '12px',
-          left: '16px',
+          top: 0,
+          left: 0,
+          padding: '8px 16px',
           fontSize: '18px',
           fontWeight: 800,
           textTransform: 'uppercase',
           letterSpacing: '0.1em',
-          color: borderColor,
-          opacity: 0.4,
+          color: isSelected ? '#fff' : borderColor,
+          background: isSelected ? '#3b82f6' : 'transparent',
+          opacity: isSelected ? 1 : 0.5,
           userSelect: 'none',
-          pointerEvents: 'none',
+          pointerEvents: 'auto',
+          cursor: 'pointer',
+          borderBottomRightRadius: '12px',
+          transition: 'all 0.15s',
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setSelection({ type: 'zone', id: zone.id });
+        }}
+        onMouseEnter={(e) => {
+          if (!isSelected) {
+            (e.currentTarget as HTMLElement).style.opacity = '0.8';
+            (e.currentTarget as HTMLElement).style.background = '#f3f4f6';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isSelected) {
+            (e.currentTarget as HTMLElement).style.opacity = '0.5';
+            (e.currentTarget as HTMLElement).style.background = 'transparent';
+          }
         }}
       >
         {zone.name}

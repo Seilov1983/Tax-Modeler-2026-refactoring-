@@ -18,7 +18,7 @@ import { useEffect } from 'react';
 import { useSetAtom, useAtomValue } from 'jotai';
 import { undoAtom, redoAtom } from '@features/project-management/model/history-atoms';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
-import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom } from '../model/graph-actions-atom';
+import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom, deleteZoneAtom } from '../model/graph-actions-atom';
 import { copyAtom, pasteAtom, duplicateAtom } from '../model/clipboard-atoms';
 
 export function useKeyboardShortcuts() {
@@ -29,6 +29,7 @@ export function useKeyboardShortcuts() {
   const deleteNodes = useSetAtom(deleteNodesAtom);
   const deleteFlow = useSetAtom(deleteFlowAtom);
   const deleteOwnership = useSetAtom(deleteOwnershipAtom);
+  const deleteZone = useSetAtom(deleteZoneAtom);
   const copy = useSetAtom(copyAtom);
   const paste = useSetAtom(pasteAtom);
   const duplicate = useSetAtom(duplicateAtom);
@@ -85,6 +86,7 @@ export function useKeyboardShortcuts() {
         if (selection.type === 'node') deleteNodes(selection.ids);
         else if (selection.type === 'flow') deleteFlow(selection.id);
         else if (selection.type === 'ownership') deleteOwnership(selection.id);
+        else if (selection.type === 'zone') deleteZone(selection.id);
         return;
       }
 
@@ -96,5 +98,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, selection, setSelection, deleteNodes, deleteFlow, deleteOwnership, copy, paste, duplicate]);
+  }, [undo, redo, selection, setSelection, deleteNodes, deleteFlow, deleteOwnership, deleteZone, copy, paste, duplicate]);
 }

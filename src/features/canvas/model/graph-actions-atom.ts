@@ -315,6 +315,29 @@ export const addZoneAtom = atom(
   },
 );
 
+// ─── Delete Zone ─────────────────────────────────────────────────────────────
+
+export const deleteZoneAtom = atom(
+  null,
+  (get, set, zoneId: string) => {
+    set(commitHistoryAtom);
+
+    set(zonesAtom, (prev) => prev.filter((z) => z.id !== zoneId));
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        zones: prev.zones?.filter((z) => z.id !== zoneId) || [],
+      };
+    });
+
+    const sel = get(selectionAtom);
+    if (sel?.type === 'zone' && sel.id === zoneId) {
+      set(selectionAtom, null);
+    }
+  },
+);
+
 // ─── Auto-Layout (Dagre) — arrange nodes into a clean hierarchy ──────────
 
 const NODE_WIDTH = 180;

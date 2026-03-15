@@ -4,9 +4,9 @@ import { useAtom, useSetAtom } from 'jotai';
 import { useRef, useCallback } from 'react';
 import { selectionAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
-import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom } from '@features/canvas/model/graph-actions-atom';
+import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom, deleteZoneAtom } from '@features/canvas/model/graph-actions-atom';
 import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
-import type { NodeDTO, FlowDTO, OwnershipEdge, FlowType } from '@shared/types';
+import type { NodeDTO, FlowDTO, OwnershipEdge, FlowType, Zone } from '@shared/types';
 
 const ZONE_OPTIONS = [
   { value: 'KZ_HUB', label: 'Kazakhstan Astana Hub' },
@@ -241,6 +241,77 @@ function OwnershipEditor({
   );
 }
 
+// ─── Zone editor ─────────────────────────────────────────────────────────────
+
+function ZoneEditor({
+  zone,
+  onChange,
+}: {
+  zone: Zone;
+  onChange: (field: string, value: unknown) => void;
+}) {
+  return (
+    <>
+      <Field label="Name">
+        <input
+          style={inputStyle}
+          type="text"
+          value={zone.name || ''}
+          onChange={(e) => onChange('name', e.target.value)}
+        />
+      </Field>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+        <Field label="Width">
+          <input
+            style={inputStyle}
+            type="number"
+            step={50}
+            value={zone.w || 0}
+            onChange={(e) => onChange('w', parseInt(e.target.value) || 600)}
+          />
+        </Field>
+        <Field label="Height">
+          <input
+            style={inputStyle}
+            type="number"
+            step={50}
+            value={zone.h || 0}
+            onChange={(e) => onChange('h', parseInt(e.target.value) || 400)}
+          />
+        </Field>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+        <Field label="X">
+          <input
+            style={inputStyle}
+            type="number"
+            step={10}
+            value={zone.x || 0}
+            onChange={(e) => onChange('x', parseInt(e.target.value) || 0)}
+          />
+        </Field>
+        <Field label="Y">
+          <input
+            style={inputStyle}
+            type="number"
+            step={10}
+            value={zone.y || 0}
+            onChange={(e) => onChange('y', parseInt(e.target.value) || 0)}
+          />
+        </Field>
+      </div>
+
+      <div style={{ marginTop: '12px', padding: '8px', background: '#f9fafb', borderRadius: '4px', fontSize: '11px', color: '#9ca3af' }}>
+        ID: {zone.id}<br />
+        Jurisdiction: {zone.jurisdiction}<br />
+        Currency: {zone.currency}
+      </div>
+    </>
+  );
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -256,6 +327,7 @@ const ENTITY_LABELS: Record<string, string> = {
   node: 'Node',
   flow: 'Flow',
   ownership: 'Ownership',
+  zone: 'Zone',
 };
 
 // ─── Main sidebar ───────────────────────────────────────────────────────────
@@ -266,6 +338,7 @@ export function EditorSidebar() {
   const deleteNodes = useSetAtom(deleteNodesAtom);
   const deleteFlow = useSetAtom(deleteFlowAtom);
   const deleteOwnership = useSetAtom(deleteOwnershipAtom);
+  const deleteZone = useSetAtom(deleteZoneAtom);
   const commitHistory = useSetAtom(commitHistoryAtom);
 
   // Tracks whether we already committed for the current editing session.
@@ -289,7 +362,7 @@ export function EditorSidebar() {
   const isMultiNode = selection.type === 'node' && selection.ids.length > 1;
 
   // Look up the selected entity from the correct collection
-  let entity: NodeDTO | FlowDTO | OwnershipEdge | undefined;
+  let entity: NodeDTO | FlowDTO | OwnershipEdge | Zone | undefined;
   if (selection.type === 'node') {
     if (selection.ids.length === 1) {
       entity = project.nodes.find((n) => n.id === selection.ids[0]);
@@ -297,6 +370,8 @@ export function EditorSidebar() {
     // multi-select: entity stays undefined, show summary instead
   } else if (selection.type === 'flow') {
     entity = project.flows.find((f) => f.id === selection.id);
+  } else if (selection.type === 'zone') {
+    entity = project.zones?.find((z) => z.id === selection.id);
   } else {
     entity = project.ownership.find((o) => o.id === selection.id);
   }
@@ -305,8 +380,8 @@ export function EditorSidebar() {
 
   const singleNodeId = selection.type === 'node' && selection.ids.length === 1 ? selection.ids[0] : null;
 
-  // Single entity ID for flow/ownership editing
-  const entityId = selection.type === 'flow' ? selection.id : selection.type === 'ownership' ? selection.id : null;
+  // Single entity ID for flow/ownership/zone editing
+  const entityId = (selection.type === 'flow' || selection.type === 'ownership' || selection.type === 'zone') ? selection.id : null;
 
   const updateField = (field: string, value: unknown) => {
     commitOnce();
@@ -328,6 +403,14 @@ export function EditorSidebar() {
           ),
         };
       }
+      if (selection.type === 'zone' && entityId) {
+        return {
+          ...prev,
+          zones: (prev.zones || []).map((z) =>
+            z.id === entityId ? { ...z, [field]: value } : z,
+          ),
+        };
+      }
       if (entityId) {
         return {
           ...prev,
@@ -343,6 +426,7 @@ export function EditorSidebar() {
   const handleDelete = () => {
     if (selection.type === 'node') deleteNodes(selection.ids);
     else if (selection.type === 'flow') deleteFlow(selection.id);
+    else if (selection.type === 'zone') deleteZone(selection.id);
     else deleteOwnership(selection.id);
   };
 
@@ -413,6 +497,9 @@ export function EditorSidebar() {
             )}
             {selection.type === 'ownership' && (
               <OwnershipEditor edge={entity as OwnershipEdge} onChange={updateField} />
+            )}
+            {selection.type === 'zone' && (
+              <ZoneEditor zone={entity as Zone} onChange={updateField} />
             )}
           </>
         )}
