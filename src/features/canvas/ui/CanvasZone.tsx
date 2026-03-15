@@ -3,18 +3,25 @@
 /**
  * CanvasZone — visual jurisdiction zone rendered on the lowest canvas layer.
  *
- * Uses existing CSS classes from styles.css (.zone, .zone-header, .zone-resize-handle).
- * Zones are pointer-events:none in the body so nodes/flows can be clicked through,
- * but the header is pointer-events:auto for click-to-select support.
+ * Supports:
+ * - Click on header label to select the zone (opens EditorSidebar)
+ * - Transient drag on header for 60 FPS repositioning (same pattern as CanvasNode)
+ * - Visual highlight when selected (blue border + header)
+ *
+ * Zone body is pointer-events:none so nodes/flows/lasso can be clicked through.
+ * Header is pointer-events:auto for interaction.
  */
 
-import { memo } from 'react';
-import { useAtom } from 'jotai';
+import { memo, useRef, useCallback, type RefObject } from 'react';
+import { useAtom, useSetAtom } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
+import { moveZoneAtom } from '../model/graph-actions-atom';
 import type { Zone } from '@shared/types';
+import type { ViewportState } from './useCanvasViewport';
 
 interface CanvasZoneProps {
   zone: Zone;
+  viewportStateRef: RefObject<ViewportState>;
 }
 
 /** Map jurisdiction codes to subtle background colors */
@@ -44,15 +51,76 @@ const ZONE_BORDER_COLORS: Record<string, string> = {
   SEY: '#2dd4bf',   // teal-400
 };
 
-export const CanvasZone = memo(function CanvasZone({ zone }: CanvasZoneProps) {
+export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: CanvasZoneProps) {
   const [selection, setSelection] = useAtom(selectionAtom);
+  const moveZone = useSetAtom(moveZoneAtom);
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
 
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
   const borderColor = ZONE_BORDER_COLORS[zone.jurisdiction] || '#94a3b8';
 
+  // Refs for transient drag (direct DOM mutation, no React re-renders during drag)
+  const containerRef = useRef<HTMLDivElement>(null);
+  const livePos = useRef({ x: zone.x, y: zone.y });
+  const hasDragged = useRef(false);
+
+  const handleHeaderPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+      const target = e.currentTarget;
+      target.setPointerCapture(e.pointerId);
+      hasDragged.current = false;
+      livePos.current = { x: zone.x, y: zone.y };
+
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        hasDragged.current = true;
+        const scale = viewportStateRef.current?.scale ?? 1;
+        const dx = moveEvent.movementX / scale;
+        const dy = moveEvent.movementY / scale;
+
+        livePos.current.x += dx;
+        livePos.current.y += dy;
+
+        // Direct DOM mutation for 60 FPS drag
+        if (containerRef.current) {
+          containerRef.current.style.left = `${livePos.current.x}px`;
+          containerRef.current.style.top = `${livePos.current.y}px`;
+        }
+      };
+
+      const onPointerUp = (upEvent: PointerEvent) => {
+        target.removeEventListener('pointermove', onPointerMove);
+        target.removeEventListener('pointerup', onPointerUp);
+        target.releasePointerCapture(upEvent.pointerId);
+
+        if (hasDragged.current) {
+          moveZone({
+            id: zone.id,
+            x: Math.round(livePos.current.x),
+            y: Math.round(livePos.current.y),
+          });
+        }
+      };
+
+      target.addEventListener('pointermove', onPointerMove);
+      target.addEventListener('pointerup', onPointerUp);
+    },
+    [zone.x, zone.y, zone.id, moveZone, viewportStateRef],
+  );
+
+  const handleHeaderClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!hasDragged.current) {
+        setSelection({ type: 'zone', id: zone.id });
+      }
+    },
+    [zone.id, setSelection],
+  );
+
   return (
     <div
+      ref={containerRef}
       data-zone-id={zone.id}
       data-testid="canvas-zone"
       style={{
@@ -70,7 +138,7 @@ export const CanvasZone = memo(function CanvasZone({ zone }: CanvasZoneProps) {
         transition: 'border-color 0.15s, background 0.15s',
       }}
     >
-      {/* Clickable zone header label */}
+      {/* Draggable + clickable zone header label */}
       <div
         style={{
           position: 'absolute',
@@ -86,14 +154,13 @@ export const CanvasZone = memo(function CanvasZone({ zone }: CanvasZoneProps) {
           opacity: isSelected ? 1 : 0.5,
           userSelect: 'none',
           pointerEvents: 'auto',
-          cursor: 'pointer',
+          cursor: 'grab',
           borderBottomRightRadius: '12px',
-          transition: 'all 0.15s',
+          touchAction: 'none',
+          transition: 'color 0.15s, background 0.15s, opacity 0.15s',
         }}
-        onClick={(e) => {
-          e.stopPropagation();
-          setSelection({ type: 'zone', id: zone.id });
-        }}
+        onPointerDown={handleHeaderPointerDown}
+        onClick={handleHeaderClick}
         onMouseEnter={(e) => {
           if (!isSelected) {
             (e.currentTarget as HTMLElement).style.opacity = '0.8';

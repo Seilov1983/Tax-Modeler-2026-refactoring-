@@ -315,6 +315,28 @@ export const addZoneAtom = atom(
   },
 );
 
+// ─── Move Zone ───────────────────────────────────────────────────────────────
+
+export const moveZoneAtom = atom(
+  null,
+  (_get, set, payload: { id: string; x: number; y: number }) => {
+    set(commitHistoryAtom);
+
+    set(zonesAtom, (prev) =>
+      prev.map((z) => (z.id === payload.id ? { ...z, x: payload.x, y: payload.y } : z)),
+    );
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        zones: prev.zones.map((z) =>
+          z.id === payload.id ? { ...z, x: payload.x, y: payload.y } : z,
+        ),
+      };
+    });
+  },
+);
+
 // ─── Delete Zone ─────────────────────────────────────────────────────────────
 
 export const deleteZoneAtom = atom(

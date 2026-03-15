@@ -48,33 +48,9 @@ export function makeZones(): Zone[] {
 // ─── Default Project ──────────────────────────────────────────────────────────
 
 export function defaultProject(): Project {
-  const zones = makeZones();
-  const nodes = [
-    makeNode('KZ Company', 'company', 240, 150),
-    makeNode('HK Company', 'company', 700, 360),
-    makeNode('UAE Company', 'company', 760, 160),
-    makeNode('Person KZ', 'person', 120, 360),
-  ];
-
-  nodes.forEach((n) => {
-    n.annualIncome = 1_000_000;
-    n.etr = 0.2;
-    if (n.type === 'company' && n.ledger) {
-      n.ledger.balances = { KZT: 10_000_000, HKD: 200_000, AED: 200_000, USD: 20_000, EUR: 10_000, GBP: 0, SGD: 0 };
-      n.balances = n.ledger.balances;
-    }
-  });
-
-  zones.forEach((z) => nodes.push(makeTXA(z)));
-
-  // Shift demo project to canvas center (2000, 2000)
-  zones.forEach((z) => { z.x += 2000; z.y += 2000; });
-  nodes.forEach((n) => { n.x += 2000; n.y += 2000; });
-
-  const ownership = [
-    { id: 'o_' + uid(), fromId: nodes.find((n) => n.name === 'Person KZ')!.id, toId: nodes.find((n) => n.name === 'KZ Company')!.id, percent: 100, manualAdjustment: 0 },
-    { id: 'o_' + uid(), fromId: nodes.find((n) => n.name === 'KZ Company')!.id, toId: nodes.find((n) => n.name === 'HK Company')!.id, percent: 100, manualAdjustment: 0 },
-  ];
+  const zones: Zone[] = [];
+  const nodes: ReturnType<typeof makeNode>[] = [];
+  const ownership: { id: string; fromId: string; toId: string; percent: number; manualAdjustment: number }[] = [];
 
   const catalogs = defaultCatalogs();
 
@@ -82,7 +58,7 @@ export function defaultProject(): Project {
     schemaVersion: SCHEMA_VERSION,
     engineVersion: ENGINE_VERSION,
     projectId: 'demo_' + uid(),
-    title: 'Demo Project',
+    title: 'New Project',
     userId: 'user_demo',
     createdAt: nowIso(),
     updatedAt: nowIso(),
