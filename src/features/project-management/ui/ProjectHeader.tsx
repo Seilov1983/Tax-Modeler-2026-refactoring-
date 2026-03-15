@@ -13,6 +13,9 @@ import { useRef, useCallback } from 'react';
 import { projectAtom, hydrateProjectAtom } from '@features/canvas';
 import { baseCurrencyAtom } from '@features/canvas/model/project-atom';
 import {
+  undoAtom, redoAtom, canUndoAtom, canRedoAtom,
+} from '../model/history-atoms';
+import {
   ensureMasterData, ensureZoneTaxDefaults,
   bootstrapNormalizeZones, recomputeRisks, recomputeFrozen,
 } from '@shared/lib/engine';
@@ -33,6 +36,10 @@ export function ProjectHeader() {
   const [project, setProject] = useAtom(projectAtom);
   const baseCurrency = useAtomValue(baseCurrencyAtom);
   const hydrate = useSetAtom(hydrateProjectAtom);
+  const undo = useSetAtom(undoAtom);
+  const redo = useSetAtom(redoAtom);
+  const canUndo = useAtomValue(canUndoAtom);
+  const canRedo = useAtomValue(canRedoAtom);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCurrencyChange = useCallback(
@@ -135,8 +142,29 @@ export function ProjectHeader() {
         </div>
       </div>
 
-      {/* Right: actions */}
+      {/* Right: undo/redo + actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button
+          onClick={() => undo()}
+          disabled={!canUndo}
+          data-testid="btn-undo"
+          title="Undo (Ctrl+Z)"
+          style={{ ...btnSecondary, opacity: canUndo ? 1 : 0.35, cursor: canUndo ? 'pointer' : 'default' }}
+        >
+          &#x21A9;
+        </button>
+        <button
+          onClick={() => redo()}
+          disabled={!canRedo}
+          data-testid="btn-redo"
+          title="Redo (Ctrl+Y)"
+          style={{ ...btnSecondary, opacity: canRedo ? 1 : 0.35, cursor: canRedo ? 'pointer' : 'default' }}
+        >
+          &#x21AA;
+        </button>
+
+        <div style={{ width: '1px', height: '20px', background: '#d1d5db' }} />
+
         <input
           type="file"
           accept=".json"

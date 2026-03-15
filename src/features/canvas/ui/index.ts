@@ -6,3 +6,4 @@ export { Minimap } from './Minimap';
 export { CanvasToolbar } from './CanvasToolbar';
 export { useCanvasViewport } from './useCanvasViewport';
 export type { ViewportState } from './useCanvasViewport';
+export { useKeyboardShortcuts } from './useKeyboardShortcuts';

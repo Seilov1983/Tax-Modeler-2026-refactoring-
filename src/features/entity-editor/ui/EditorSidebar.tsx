@@ -1,9 +1,11 @@
 'use client';
 
 import { useAtom, useSetAtom } from 'jotai';
+import { useRef, useCallback } from 'react';
 import { selectionAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { deleteNodeAtom, deleteFlowAtom, deleteOwnershipAtom } from '@features/canvas/model/graph-actions-atom';
+import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
 import type { NodeDTO, FlowDTO, OwnershipEdge, FlowType } from '@shared/types';
 
 const ZONE_OPTIONS = [
@@ -264,6 +266,22 @@ export function EditorSidebar() {
   const deleteNode = useSetAtom(deleteNodeAtom);
   const deleteFlow = useSetAtom(deleteFlowAtom);
   const deleteOwnership = useSetAtom(deleteOwnershipAtom);
+  const commitHistory = useSetAtom(commitHistoryAtom);
+
+  // Tracks whether we already committed for the current editing session.
+  // Resets on blur so each focus→edit→blur cycle saves exactly one snapshot.
+  const committedRef = useRef(false);
+
+  const commitOnce = useCallback(() => {
+    if (!committedRef.current) {
+      committedRef.current = true;
+      commitHistory();
+    }
+  }, [commitHistory]);
+
+  const handleBlur = useCallback(() => {
+    committedRef.current = false;
+  }, []);
 
   if (!selection || !project) return null;
 
@@ -280,6 +298,7 @@ export function EditorSidebar() {
   if (!entity) return null;
 
   const updateField = (field: string, value: unknown) => {
+    commitOnce();
     setProject((prev) => {
       if (!prev) return prev;
       if (selection.type === 'node') {
@@ -361,7 +380,7 @@ export function EditorSidebar() {
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }} onBlur={handleBlur}>
         {selection.type === 'node' && (
           <NodeEditor node={entity as NodeDTO} onChange={updateField} />
         )}
