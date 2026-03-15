@@ -5,6 +5,9 @@
  *
  * - Ctrl/Cmd + Z: Undo
  * - Ctrl/Cmd + Y / Ctrl/Cmd + Shift + Z: Redo
+ * - Ctrl/Cmd + C: Copy selected nodes (+ internal edges)
+ * - Ctrl/Cmd + V: Paste from internal clipboard
+ * - Ctrl/Cmd + D: Duplicate (copy + paste)
  * - Delete / Backspace: Delete selected entity
  * - Escape: Deselect
  *
@@ -16,6 +19,7 @@ import { useSetAtom, useAtomValue } from 'jotai';
 import { undoAtom, redoAtom } from '@features/project-management/model/history-atoms';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom } from '../model/graph-actions-atom';
+import { copyAtom, pasteAtom, duplicateAtom } from '../model/clipboard-atoms';
 
 export function useKeyboardShortcuts() {
   const undo = useSetAtom(undoAtom);
@@ -25,6 +29,9 @@ export function useKeyboardShortcuts() {
   const deleteNodes = useSetAtom(deleteNodesAtom);
   const deleteFlow = useSetAtom(deleteFlowAtom);
   const deleteOwnership = useSetAtom(deleteOwnershipAtom);
+  const copy = useSetAtom(copyAtom);
+  const paste = useSetAtom(pasteAtom);
+  const duplicate = useSetAtom(duplicateAtom);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -50,6 +57,27 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Copy: Ctrl+C / Cmd+C
+      if (mod && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        copy();
+        return;
+      }
+
+      // Paste: Ctrl+V / Cmd+V
+      if (mod && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        paste();
+        return;
+      }
+
+      // Duplicate: Ctrl+D / Cmd+D
+      if (mod && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        duplicate();
+        return;
+      }
+
       // Delete / Backspace: delete selected entity (supports multi-select for nodes)
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (!selection) return;
@@ -68,5 +96,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, selection, setSelection, deleteNodes, deleteFlow, deleteOwnership]);
+  }, [undo, redo, selection, setSelection, deleteNodes, deleteFlow, deleteOwnership, copy, paste, duplicate]);
 }

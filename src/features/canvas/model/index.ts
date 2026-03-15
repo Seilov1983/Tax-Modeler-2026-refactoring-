@@ -5,3 +5,4 @@ export { viewportAtom } from './viewport-atom';
 export type { ViewportSnapshot } from './viewport-atom';
 export { addNodeAtom, addFlowAtom, addOwnershipAtom, deleteNodeAtom, deleteFlowAtom, deleteOwnershipAtom, moveNodesAtom, deleteNodesAtom } from './graph-actions-atom';
 export type { AddNodePayload, AddFlowPayload, MoveNodeEntry } from './graph-actions-atom';
+export { clipboardAtom, copyAtom, pasteAtom, duplicateAtom } from './clipboard-atoms';
