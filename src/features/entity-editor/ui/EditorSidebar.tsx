@@ -436,6 +436,7 @@ export function EditorSidebar() {
 
   return (
     <div
+      className="no-canvas-events"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       style={{

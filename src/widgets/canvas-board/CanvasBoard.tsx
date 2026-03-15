@@ -76,7 +76,8 @@ export function CanvasBoard() {
 
   // Deselect when clicking empty canvas area (only if no lasso drag happened)
   const lassoDraggedRef = useRef(false);
-  const handleBackgroundClick = useCallback(() => {
+  const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
     if (lassoDraggedRef.current) return; // lasso drag, don't deselect
     setSelection(null);
   }, [setSelection]);
@@ -99,6 +100,8 @@ export function CanvasBoard() {
   // ─── Lasso pointer handlers ────────────────────────────────────────────
   const handleBoardPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      // If the event originated from a UI overlay element, ignore it on the canvas level
+      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
       // Only start lasso on left button on the background (not on nodes/ports)
       if (e.button !== 0) return;
       const target = e.target as HTMLElement;

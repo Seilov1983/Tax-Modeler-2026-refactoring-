@@ -300,6 +300,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
       {/* Flow port (right edge, blue) — drag to create cash flow */}
       {!isTxa && (
         <div
+          className="no-canvas-events"
           onPointerDown={handleFlowPortDown}
           data-testid="port-flow"
           title="Drag to create flow"
@@ -323,6 +324,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
       {/* Ownership port (bottom edge, purple) — drag to create ownership link */}
       {!isTxa && (
         <div
+          className="no-canvas-events"
           onPointerDown={handleOwnershipPortDown}
           data-testid="port-ownership"
           title="Drag down to create ownership"
