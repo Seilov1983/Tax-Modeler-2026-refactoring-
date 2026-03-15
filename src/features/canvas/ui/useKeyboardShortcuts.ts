@@ -15,14 +15,14 @@ import { useEffect } from 'react';
 import { useSetAtom, useAtomValue } from 'jotai';
 import { undoAtom, redoAtom } from '@features/project-management/model/history-atoms';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
-import { deleteNodeAtom, deleteFlowAtom, deleteOwnershipAtom } from '../model/graph-actions-atom';
+import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom } from '../model/graph-actions-atom';
 
 export function useKeyboardShortcuts() {
   const undo = useSetAtom(undoAtom);
   const redo = useSetAtom(redoAtom);
   const selection = useAtomValue(selectionAtom);
   const setSelection = useSetAtom(selectionAtom);
-  const deleteNode = useSetAtom(deleteNodeAtom);
+  const deleteNodes = useSetAtom(deleteNodesAtom);
   const deleteFlow = useSetAtom(deleteFlowAtom);
   const deleteOwnership = useSetAtom(deleteOwnershipAtom);
 
@@ -50,11 +50,11 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Delete / Backspace: delete selected entity
+      // Delete / Backspace: delete selected entity (supports multi-select for nodes)
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (!selection) return;
         e.preventDefault();
-        if (selection.type === 'node') deleteNode(selection.id);
+        if (selection.type === 'node') deleteNodes(selection.ids);
         else if (selection.type === 'flow') deleteFlow(selection.id);
         else if (selection.type === 'ownership') deleteOwnership(selection.id);
         return;
@@ -68,5 +68,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, selection, setSelection, deleteNode, deleteFlow, deleteOwnership]);
+  }, [undo, redo, selection, setSelection, deleteNodes, deleteFlow, deleteOwnership]);
 }

@@ -1,7 +1,7 @@
 import { atom } from 'jotai';
 
 export type SelectionState =
-  | { type: 'node'; id: string }
+  | { type: 'node'; ids: string[] }
   | { type: 'flow'; id: string }
   | { type: 'ownership'; id: string }
   | null;

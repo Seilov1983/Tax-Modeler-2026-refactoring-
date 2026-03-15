@@ -14,7 +14,7 @@
  */
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { nodeAtomsAtom, nodesAtom } from '@entities/node';
 import { flowsAtom } from '@entities/flow';
 import { zonesAtom } from '@entities/zone';
@@ -41,7 +41,9 @@ export function CanvasBoard() {
   const flows = useAtomValue(flowsAtom);
   const ownership = useAtomValue(ownershipAtom);
 
-  const setSelection = useSetAtom(selectionAtom);
+  const [currentSelection, setSelection] = useAtom(selectionAtom);
+  const selectionRef = useRef(currentSelection);
+  selectionRef.current = currentSelection;
 
   // Global keyboard shortcuts (Undo, Redo, Delete, Escape)
   useKeyboardShortcuts();
@@ -66,8 +68,14 @@ export function CanvasBoard() {
   // ─── Draft connection path ref (transient DOM mutation for 60 FPS) ────────
   const draftPathRef = useRef<SVGPathElement>(null);
 
-  // Deselect when clicking empty canvas area
+  // ─── Lasso (rubber-band) multi-select ────────────────────────────────────
+  const lassoStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [lassoRect, setLassoRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  // Deselect when clicking empty canvas area (only if no lasso drag happened)
+  const lassoDraggedRef = useRef(false);
   const handleBackgroundClick = useCallback(() => {
+    if (lassoDraggedRef.current) return; // lasso drag, don't deselect
     setSelection(null);
   }, [setSelection]);
 
@@ -84,6 +92,86 @@ export function CanvasBoard() {
       };
     },
     [viewportRef, viewportStateRef],
+  );
+
+  // ─── Lasso pointer handlers ────────────────────────────────────────────
+  const handleBoardPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      // Only start lasso on left button on the background (not on nodes/ports)
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      // Don't start lasso if clicking on a node, port, flow, or control
+      if (target.closest('.canvas-node') || target.closest('[data-testid]') || target.closest('button')) return;
+
+      const coords = clientToCanvas(e.clientX, e.clientY);
+      lassoStartRef.current = coords;
+      lassoDraggedRef.current = false;
+      setLassoRect({ x: coords.x, y: coords.y, w: 0, h: 0 });
+
+      if (!e.shiftKey) {
+        setSelection(null);
+      }
+    },
+    [clientToCanvas, setSelection],
+  );
+
+  const handleBoardPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!lassoStartRef.current) return;
+
+      const current = clientToCanvas(e.clientX, e.clientY);
+      const start = lassoStartRef.current;
+
+      const x = Math.min(start.x, current.x);
+      const y = Math.min(start.y, current.y);
+      const w = Math.abs(current.x - start.x);
+      const h = Math.abs(current.y - start.y);
+
+      // Only mark as dragged if the rect is big enough (avoids accidental lasso on click)
+      if (w > 5 || h > 5) {
+        lassoDraggedRef.current = true;
+      }
+
+      setLassoRect({ x, y, w, h });
+    },
+    [clientToCanvas],
+  );
+
+  const handleBoardPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      if (!lassoStartRef.current) return;
+
+      const rect = lassoRect;
+      lassoStartRef.current = null;
+      setLassoRect(null);
+
+      if (!rect || (rect.w < 5 && rect.h < 5)) return;
+
+      // AABB collision: find all nodes intersecting the lasso rect
+      const hitIds = nodes
+        .filter((n) => {
+          return (
+            n.x < rect.x + rect.w &&
+            n.x + n.w > rect.x &&
+            n.y < rect.y + rect.h &&
+            n.y + n.h > rect.y
+          );
+        })
+        .map((n) => n.id);
+
+      if (hitIds.length === 0) return;
+
+      if (e.shiftKey) {
+        // Merge with existing node selection
+        const sel = selectionRef.current;
+        const existing = sel?.type === 'node' ? sel.ids : [];
+        const merged = [...new Set([...existing, ...hitIds])];
+        setSelection({ type: 'node', ids: merged });
+      } else {
+        setSelection({ type: 'node', ids: hitIds });
+      }
+    },
+    [lassoRect, nodes, setSelection],
   );
 
   // Compute source node port for the draft path start (depends on connection type)
@@ -145,6 +233,9 @@ export function CanvasBoard() {
         ref={viewportRef}
         id="viewport"
         onClick={handleBackgroundClick}
+        onPointerDown={handleBoardPointerDown}
+        onPointerMove={handleBoardPointerMove}
+        onPointerUp={handleBoardPointerUp}
         style={{ position: 'absolute', top: '48px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
       >
         <div
@@ -225,6 +316,23 @@ export function CanvasBoard() {
               />
             )}
           </svg>
+
+          {/* Lasso selection rectangle — rendered in canvas-space */}
+          {lassoRect && lassoRect.w > 2 && lassoRect.h > 2 && (
+            <div
+              style={{
+                position: 'absolute',
+                left: lassoRect.x,
+                top: lassoRect.y,
+                width: lassoRect.w,
+                height: lassoRect.h,
+                border: '1px solid #3b82f6',
+                background: 'rgba(59, 130, 246, 0.1)',
+                pointerEvents: 'none',
+                zIndex: 50,
+              }}
+            />
+          )}
         </div>
 
         {/* Toolbar — outside zoom/pan area, fixed to top-left */}
