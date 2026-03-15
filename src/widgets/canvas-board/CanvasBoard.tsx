@@ -21,6 +21,7 @@ import { zonesAtom } from '@entities/zone';
 import { ownershipAtom } from '@entities/ownership';
 import { CanvasNode, CanvasFlow, useCanvasViewport } from '@features/canvas';
 import { CanvasOwnership } from '@features/canvas/ui/CanvasOwnership';
+import { useKeyboardShortcuts } from '@features/canvas/ui/useKeyboardShortcuts';
 import { CanvasControls } from '@features/canvas/ui/CanvasControls';
 import { Minimap } from '@features/canvas/ui/Minimap';
 import { AuditLogPanel } from '@features/audit-log/ui/AuditLogPanel';
@@ -41,6 +42,9 @@ export function CanvasBoard() {
   const ownership = useAtomValue(ownershipAtom);
 
   const setSelection = useSetAtom(selectionAtom);
+
+  // Global keyboard shortcuts (Undo, Redo, Delete, Escape)
+  useKeyboardShortcuts();
   const [draft, setDraft] = useAtom(draftConnectionAtom);
   const setViewport = useSetAtom(viewportAtom);
 

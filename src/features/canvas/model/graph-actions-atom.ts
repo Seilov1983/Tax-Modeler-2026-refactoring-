@@ -3,6 +3,9 @@
  *
  * These atoms update BOTH projectAtom and the individual entity atoms
  * (nodesAtom, flowsAtom, ownershipAtom) in a single Jotai batch — one React re-render.
+ *
+ * Every mutation calls commitHistoryAtom first, pushing the current state
+ * onto the undo stack before applying the change.
  */
 
 import { atom } from 'jotai';
@@ -11,6 +14,7 @@ import { nodesAtom } from '@entities/node';
 import { flowsAtom } from '@entities/flow';
 import { ownershipAtom } from '@entities/ownership';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
+import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
 import { uid } from '@shared/lib/engine/utils';
 import type { NodeDTO, FlowDTO, OwnershipEdge, NodeType } from '@shared/types';
 
@@ -27,6 +31,8 @@ export interface AddNodePayload {
 export const addNodeAtom = atom(
   null,
   (_get, set, payload: AddNodePayload) => {
+    set(commitHistoryAtom);
+
     const newNode: NodeDTO = {
       id: 'n_' + uid(),
       name: payload.name,
@@ -61,6 +67,8 @@ export interface AddFlowPayload {
 export const addFlowAtom = atom(
   null,
   (get, set, payload: AddFlowPayload) => {
+    set(commitHistoryAtom);
+
     const project = get(projectAtom);
     const fxDate = project?.fx?.fxDate || new Date().toISOString().slice(0, 10);
 
@@ -100,6 +108,8 @@ export interface AddOwnershipPayload {
 export const addOwnershipAtom = atom(
   null,
   (_get, set, payload: AddOwnershipPayload) => {
+    set(commitHistoryAtom);
+
     const edge: OwnershipEdge = {
       id: 'own_' + uid(),
       fromId: payload.parentId,
@@ -121,6 +131,8 @@ export const addOwnershipAtom = atom(
 export const deleteFlowAtom = atom(
   null,
   (get, set, flowId: string) => {
+    set(commitHistoryAtom);
+
     set(flowsAtom, (prev) => prev.filter((f) => f.id !== flowId));
     set(projectAtom, (prev) => {
       if (!prev) return prev;
@@ -139,6 +151,8 @@ export const deleteFlowAtom = atom(
 export const deleteOwnershipAtom = atom(
   null,
   (get, set, ownershipId: string) => {
+    set(commitHistoryAtom);
+
     set(ownershipAtom, (prev) => prev.filter((o) => o.id !== ownershipId));
     set(projectAtom, (prev) => {
       if (!prev) return prev;
@@ -157,6 +171,8 @@ export const deleteOwnershipAtom = atom(
 export const deleteNodeAtom = atom(
   null,
   (get, set, nodeId: string) => {
+    set(commitHistoryAtom);
+
     set(nodesAtom, (prev) => prev.filter((n) => n.id !== nodeId));
     set(flowsAtom, (prev) => prev.filter((f) => f.fromId !== nodeId && f.toId !== nodeId));
     set(ownershipAtom, (prev) => prev.filter((o) => o.fromId !== nodeId && o.toId !== nodeId));
