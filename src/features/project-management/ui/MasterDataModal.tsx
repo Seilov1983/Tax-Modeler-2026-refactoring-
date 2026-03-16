@@ -133,6 +133,31 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
 
   const deleteCountry = useCallback(
     (countryId: string) => {
+      if (!project) return;
+
+      // Check if any zone on the canvas uses this country as jurisdiction
+      const hasZone = project.zones.some(
+        (z) => z.jurisdiction === countryId || z.code?.startsWith(countryId + '_'),
+      );
+      if (hasZone) {
+        alert('Cannot delete: This jurisdiction is currently in use on the canvas.');
+        return;
+      }
+
+      // Check if any regime of this country is used by nodes
+      const countryRegimeIds = new Set(
+        (project.masterData.regimes ?? [])
+          .filter((r) => r.countryId === countryId)
+          .map((r) => r.id),
+      );
+      const regimeInUse = project.nodes.some(
+        (n) => n.regimeId && countryRegimeIds.has(n.regimeId),
+      );
+      if (regimeInUse) {
+        alert('Cannot delete: This jurisdiction has regimes currently in use on the canvas.');
+        return;
+      }
+
       setProject((prev) => {
         if (!prev) return prev;
         return {
@@ -145,7 +170,7 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
         };
       });
     },
-    [setProject],
+    [setProject, project],
   );
 
   // ─── Regime mutations ───────────────────────────────────────────────────
@@ -188,6 +213,15 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
 
   const deleteRegime = useCallback(
     (regimeId: string) => {
+      if (!project) return;
+
+      // Check if any node on the canvas uses this regime
+      const inUse = project.nodes.some((n) => n.regimeId === regimeId);
+      if (inUse) {
+        alert('Cannot delete: This regime is currently in use on the canvas.');
+        return;
+      }
+
       setProject((prev) => {
         if (!prev) return prev;
         return {
@@ -199,7 +233,7 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
         };
       });
     },
-    [setProject],
+    [setProject, project],
   );
 
   // ─── One-click add country as zone to canvas ─────────────────────────

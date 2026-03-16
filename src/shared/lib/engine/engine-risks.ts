@@ -113,6 +113,19 @@ export function recomputeRisks(p: Project): void {
     if (n.statuses) n.statuses.isInvestmentResident = false;
   });
 
+  // ── NO_JURISDICTION: flag nodes that are outside every zone ─────────────
+  for (const n of p.nodes) {
+    if (n.type === 'txa') continue;
+    const z = getZone(p, n.zoneId);
+    if (!z) {
+      n.riskFlags.push({
+        type: 'NO_JURISDICTION',
+        severity: 'CRITICAL',
+        message: 'Node is outside any tax jurisdiction.',
+      });
+    }
+  }
+
   const kz = (p.masterData as Record<string, Record<string, unknown>>).KZ || {};
   const mc = kz.macroConstants as Record<string, number> | undefined;
   const thr = kz.thresholds as Record<string, number> | undefined;
