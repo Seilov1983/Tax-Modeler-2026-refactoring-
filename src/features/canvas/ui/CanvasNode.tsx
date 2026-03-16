@@ -101,14 +101,25 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // Re-entrancy guard: prevent duplicate drag sessions from multi-touch
+      // or rapid pointer events. Without this, multiple pointermove handlers
+      // with different origins fight each other → oscillation/jitter.
+      if (isDraggingRef.current) return;
+
       e.stopPropagation(); // Prevent zone header from intercepting node drag
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
       hasDragged.current = false;
       isDraggingRef.current = true;
 
-      // Snapshot starting position
+      // Snapshot starting position — this is the locked origin for absolute deltas
       livePos.current = { x: node.x, y: node.y };
+
+      // Lock the initial client pointer position — all displacement is computed
+      // as an absolute delta from this point (never accumulate movementX/Y which
+      // suffers from floating-point drift when divided by scale).
+      const startClientX = e.clientX;
+      const startClientY = e.clientY;
 
       // Check if this node is part of a multi-selection for bulk drag
       const sel = selectionRef.current;
@@ -129,21 +140,19 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
         }
       }
 
-      let totalDx = 0;
-      let totalDy = 0;
-
       const onPointerMove = (moveEvent: PointerEvent) => {
         hasDragged.current = true;
         // Compensate for zoom: divide pixel movement by current scale
         const scale = viewportStateRef.current?.scale ?? 1;
-        const dx = moveEvent.movementX / scale;
-        const dy = moveEvent.movementY / scale;
-        totalDx += dx;
-        totalDy += dy;
+
+        // Absolute delta from locked origin — stable, no accumulation drift
+        const totalDx = (moveEvent.clientX - startClientX) / scale;
+        const totalDy = (moveEvent.clientY - startClientY) / scale;
+
+        livePos.current.x = node.x + totalDx;
+        livePos.current.y = node.y + totalDy;
 
         // DIRECT DOM MUTATION — bypasses React render cycle
-        livePos.current.x += dx;
-        livePos.current.y += dy;
         if (domRef.current) {
           domRef.current.style.transform = `translate(${livePos.current.x}px, ${livePos.current.y}px) translateZ(0)`;
         }
@@ -162,9 +171,24 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
         isDraggingRef.current = false;
 
         if (hasDragged.current) {
+          // CRITICAL: Clear ALL transient inline transforms BEFORE committing
+          // to state. Without this, React re-renders with new coordinates from
+          // Jotai, but the stale inline overrides remain → double-delta "jump".
+          if (domRef.current) {
+            domRef.current.style.transform = '';
+          }
+          for (const s of siblings) {
+            s.el.style.transform = '';
+          }
+
+          // Total displacement for final commit
+          const scale = viewportStateRef.current?.scale ?? 1;
+          const totalDx = (upEvent.clientX - startClientX) / scale;
+          const totalDy = (upEvent.clientY - startClientY) / scale;
+
           // COMMIT via moveNodesAtom — handles position + spatial zone inheritance
           const entries = [
-            { id: node.id, x: Math.round(livePos.current.x), y: Math.round(livePos.current.y) },
+            { id: node.id, x: Math.round(node.x + totalDx), y: Math.round(node.y + totalDy) },
             ...siblings.map((s) => ({
               id: s.el.getAttribute('data-node-id')!,
               x: Math.round(s.startX + totalDx),

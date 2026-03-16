@@ -490,12 +490,10 @@ function recalculateCountryBounds(zones: Zone[]): Zone[] {
              cy >= orig.y && cy <= orig.y + orig.h;
     });
 
-    if (children.length === 0) {
-      // No children — snap to default minimums (never leave oversized ghost)
-      country.w = DEFAULT_COUNTRY_WIDTH;
-      country.h = DEFAULT_COUNTRY_HEIGHT;
-      continue;
-    }
+    // Only auto-resize zones that actually contain children.
+    // Childless zones keep their user-set dimensions — snapping them to
+    // 200×150 defaults caused "runaway" shrink when a child was dragged out.
+    if (children.length === 0) continue;
 
     // Absolute child boundaries
     const maxRightEdge = Math.max(...children.map((c) => c.x + c.w));

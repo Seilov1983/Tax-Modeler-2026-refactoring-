@@ -113,6 +113,11 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
 
   const handleHeaderPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      // Re-entrancy guard: prevent duplicate drag sessions from multi-touch
+      // or rapid pointer events. Without this, multiple pointermove handlers
+      // with different startClientX values fight each other → oscillation.
+      if (isDraggingRef.current) return;
+
       e.stopPropagation();
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
@@ -133,7 +138,6 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
       // (avoids floating-point drift that can leave nodes visually static).
       const startClientX = e.clientX;
       const startClientY = e.clientY;
-      let loggedFirstFrame = false;
 
       const onPointerMove = (moveEvent: PointerEvent) => {
         hasDragged.current = true;
@@ -153,10 +157,6 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         }
 
         // Cascade: move child sub-zones and nodes by the same absolute delta
-        if (!loggedFirstFrame) {
-          console.log('[DEBUG] Dragging Nodes Count:', childElsRef.current.filter(c => c.usesTransform).length, '| Applied dx/dy:', totalDx, totalDy);
-          loggedFirstFrame = true;
-        }
         for (const child of childElsRef.current) {
           if (child.usesTransform) {
             // Nodes: absolute position = snapshot origin + total displacement
@@ -232,20 +232,29 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
   // ─── Resize handle (bottom-right corner) ──────────────────────────────
   const liveSize = useRef({ w: zone.w, h: zone.h });
 
+  const isResizingRef = useRef(false);
+
   const handleResizePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (isResizingRef.current) return; // Re-entrancy guard
+
       e.stopPropagation();
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
+      isResizingRef.current = true;
       liveSize.current = { w: zone.w, h: zone.h };
+
+      // Lock initial client position for absolute delta (no movementX/Y drift)
+      const startClientX = e.clientX;
+      const startClientY = e.clientY;
 
       const onPointerMove = (moveEvent: PointerEvent) => {
         const scale = viewportStateRef.current?.scale ?? 1;
-        const dw = moveEvent.movementX / scale;
-        const dh = moveEvent.movementY / scale;
+        const totalDw = (moveEvent.clientX - startClientX) / scale;
+        const totalDh = (moveEvent.clientY - startClientY) / scale;
 
-        liveSize.current.w = Math.max(200, liveSize.current.w + dw);
-        liveSize.current.h = Math.max(150, liveSize.current.h + dh);
+        liveSize.current.w = Math.max(200, zone.w + totalDw);
+        liveSize.current.h = Math.max(150, zone.h + totalDh);
 
         if (containerRef.current) {
           containerRef.current.style.width = `${liveSize.current.w}px`;
@@ -257,6 +266,13 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         target.removeEventListener('pointermove', onPointerMove);
         target.removeEventListener('pointerup', onPointerUp);
         target.releasePointerCapture(upEvent.pointerId);
+        isResizingRef.current = false;
+
+        // Clear inline size overrides before committing
+        if (containerRef.current) {
+          containerRef.current.style.width = '';
+          containerRef.current.style.height = '';
+        }
 
         resizeZone({
           id: zone.id,
