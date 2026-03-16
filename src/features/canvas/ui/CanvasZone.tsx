@@ -139,12 +139,12 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         hasDragged.current = true;
         const scale = viewportStateRef.current?.scale ?? 1;
 
-        // Total pixel displacement from drag start, converted to canvas coords
-        const dx = (moveEvent.clientX - startClientX) / scale;
-        const dy = (moveEvent.clientY - startClientY) / scale;
+        // Total cumulative displacement from drag start → canvas coords
+        const totalDx = (moveEvent.clientX - startClientX) / scale;
+        const totalDy = (moveEvent.clientY - startClientY) / scale;
 
-        livePos.current.x = zone.x + dx;
-        livePos.current.y = zone.y + dy;
+        livePos.current.x = zone.x + totalDx;
+        livePos.current.y = zone.y + totalDy;
 
         // Direct DOM mutation for 60 FPS drag — zone itself
         if (containerRef.current) {
@@ -152,21 +152,19 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
           containerRef.current.style.top = `${livePos.current.y}px`;
         }
 
-        // Cascade: move child sub-zones and nodes by the same delta
+        // Cascade: move child sub-zones and nodes by the same absolute delta
         if (!loggedFirstFrame) {
-          console.log('[DEBUG] Dragging Nodes Count:', childElsRef.current.filter(c => c.usesTransform).length, '| Applied dx/dy:', dx, dy);
+          console.log('[DEBUG] Dragging Nodes Count:', childElsRef.current.filter(c => c.usesTransform).length, '| Applied dx/dy:', totalDx, totalDy);
           loggedFirstFrame = true;
         }
         for (const child of childElsRef.current) {
-          const newX = child.origX + dx;
-          const newY = child.origY + dy;
           if (child.usesTransform) {
-            // Nodes use CSS transform for positioning — read original coords from snapshot
-            child.el.style.transform = `translate(${newX}px, ${newY}px) translateZ(0)`;
+            // Nodes: absolute position = snapshot origin + total displacement
+            child.el.style.transform = `translate(${child.origX + totalDx}px, ${child.origY + totalDy}px) translateZ(0)`;
           } else {
-            // Sub-zones use left/top for positioning
-            child.el.style.left = `${newX}px`;
-            child.el.style.top = `${newY}px`;
+            // Sub-zones use left/top
+            child.el.style.left = `${child.origX + totalDx}px`;
+            child.el.style.top = `${child.origY + totalDy}px`;
           }
         }
       };
