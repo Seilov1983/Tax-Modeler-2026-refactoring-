@@ -9,11 +9,17 @@
  * Data stored flat in projectAtom.masterData.{countries,regimes}.
  */
 
-import { useAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { useState, useCallback } from 'react';
 import { projectAtom } from '@features/canvas/model/project-atom';
+import { addZoneAtom } from '@features/canvas/model/graph-actions-atom';
 import { uid } from '@shared/lib/engine/utils';
-import type { Country, TaxRegime, CurrencyCode } from '@shared/types';
+import type { Country, TaxRegime, CurrencyCode, JurisdictionCode } from '@shared/types';
+
+const COUNTRY_CURRENCY: Record<string, CurrencyCode> = {
+  KZ: 'KZT', UAE: 'AED', HK: 'HKD', CY: 'EUR', SG: 'SGD',
+  UK: 'GBP', US: 'USD', BVI: 'USD', CAY: 'USD', SEY: 'SCR',
+};
 
 const CURRENCY_OPTIONS: CurrencyCode[] = [
   'KZT', 'USD', 'EUR', 'AED', 'HKD', 'SGD', 'GBP', 'SCR', 'CNY',
@@ -79,6 +85,7 @@ const btnAddRegime: React.CSSProperties = {
 
 export function MasterDataModal({ onClose }: { onClose: () => void }) {
   const [project, setProject] = useAtom(projectAtom);
+  const addZone = useSetAtom(addZoneAtom);
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
 
   const countries: Country[] = project?.masterData?.countries ?? [];
@@ -195,6 +202,25 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
     [setProject],
   );
 
+  // ─── One-click add country as zone to canvas ─────────────────────────
+
+  const handleAddToCanvas = useCallback(
+    (country: Country) => {
+      addZone({
+        jurisdiction: country.id as JurisdictionCode,
+        code: `${country.id}_${Date.now().toString(36).toUpperCase()}`,
+        name: country.name,
+        currency: COUNTRY_CURRENCY[country.id] || country.baseCurrency || 'USD',
+        x: 100,
+        y: 100,
+        w: 600,
+        h: 400,
+      });
+      onClose();
+    },
+    [addZone, onClose],
+  );
+
   if (!project) return null;
 
   return (
@@ -272,6 +298,19 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
                       <option key={c} value={c}>{c}</option>
                     ))}
                   </select>
+
+                  {/* One-click add to canvas */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleAddToCanvas(country); }}
+                    title="Add zone to canvas"
+                    style={{
+                      background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb',
+                      fontSize: '11px', fontWeight: 600, padding: '3px 8px',
+                      borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    + Canvas
+                  </button>
 
                   {/* Delete country */}
                   <button

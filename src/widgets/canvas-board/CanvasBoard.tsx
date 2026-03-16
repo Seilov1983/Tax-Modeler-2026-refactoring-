@@ -112,21 +112,27 @@ export function CanvasBoard() {
   );
 
   // ─── Drag & Drop: country from MasterDataModal → canvas zone ────────────
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes('application/tax-country-id')) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
-    }
-  }, []);
 
   const COUNTRY_CURRENCY: Record<string, CurrencyCode> = {
     KZ: 'KZT', UAE: 'AED', HK: 'HKD', CY: 'EUR', SG: 'SGD',
     UK: 'GBP', US: 'USD', BVI: 'USD', CAY: 'USD', SEY: 'SCR',
   };
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+  }, []);
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      e.stopPropagation();
+
       const countryId = e.dataTransfer.getData('application/tax-country-id');
       const countryName = e.dataTransfer.getData('application/tax-country-name');
       if (!countryId) return;
@@ -291,6 +297,7 @@ export function CanvasBoard() {
         onPointerMove={handleBoardPointerMove}
         onPointerUp={handleBoardPointerUp}
         onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
         onDrop={handleDrop}
         style={{ position: 'absolute', top: '48px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
       >
