@@ -281,8 +281,33 @@ export function CanvasBoard() {
 
         // Create a smaller sub-zone for the regime
         const parentZone = countryZone || zones.find((z) => z.jurisdiction === regimeCountryId);
-        const subX = parentZone ? parentZone.x + 30 : Math.round(x - 150);
-        const subY = parentZone ? parentZone.y + 60 : Math.round(y - 100);
+
+        // Calculate offset position so new regimes don't stack on each other.
+        // Count existing child regimes inside the parent to stagger placement.
+        let subX = parentZone ? parentZone.x + 30 : Math.round(x - 150);
+        let subY = parentZone ? parentZone.y + 60 : Math.round(y - 100);
+        if (parentZone) {
+          const parentArea = parentZone.w * parentZone.h;
+          const existingChildren = zones.filter((z) => {
+            if (z.id === parentZone.id) return false;
+            if (z.w * z.h >= parentArea) return false;
+            const cx = z.x + z.w / 2;
+            const cy = z.y + z.h / 2;
+            return pointInZone(cx, cy, parentZone);
+          });
+          // Place next to the rightmost existing child, or stagger down
+          if (existingChildren.length > 0) {
+            const rightmost = existingChildren.reduce((a, b) => (a.x + a.w > b.x + b.w ? a : b));
+            subX = rightmost.x + rightmost.w + 20;
+            subY = rightmost.y;
+            // If it would overflow the parent width, wrap to next row
+            if (subX + 320 > parentZone.x + parentZone.w - 10) {
+              subX = parentZone.x + 30;
+              const bottommost = existingChildren.reduce((a, b) => (a.y + a.h > b.y + b.h ? a : b));
+              subY = bottommost.y + bottommost.h + 20;
+            }
+          }
+        }
 
         addZone({
           jurisdiction: regimeCountryId as JurisdictionCode,

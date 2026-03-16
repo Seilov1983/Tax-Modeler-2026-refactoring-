@@ -463,9 +463,9 @@ const DEFAULT_COUNTRY_HEIGHT = 150;
  *
  * CRITICAL RULES (idempotent, no feedback loop):
  *   - country.x / country.y are NEVER shifted — origin stays stable.
- *   - Width/height are computed absolutely from children's edge coordinates
- *     relative to the country's fixed origin.
- *   - We NEVER reference the country's current w/h in the formula.
+ *   - Width/height can only GROW to fit children, never SHRINK below the
+ *     current user-set size. This prevents the "manual resize gets undone"
+ *     bug where the user enlarges a country and physics immediately collapses it.
  *   - This function is ONLY called in the drop phase (physicsAtom).
  */
 function recalculateCountryBounds(zones: Zone[]): Zone[] {
@@ -490,78 +490,79 @@ function recalculateCountryBounds(zones: Zone[]): Zone[] {
              cy >= orig.y && cy <= orig.y + orig.h;
     });
 
-    // Only auto-resize zones that actually contain children.
-    // Childless zones keep their user-set dimensions — snapping them to
-    // 200×150 defaults caused "runaway" shrink when a child was dragged out.
     if (children.length === 0) continue;
 
     // Absolute child boundaries
     const maxRightEdge = Math.max(...children.map((c) => c.x + c.w));
     const maxBottomEdge = Math.max(...children.map((c) => c.y + c.h));
 
-    // Width/height relative to the STABLE country origin — never shifts x/y
-    country.w = Math.max(DEFAULT_COUNTRY_WIDTH, maxRightEdge - country.x + PHYSICS_PADDING);
-    country.h = Math.max(DEFAULT_COUNTRY_HEIGHT, maxBottomEdge - country.y + PHYSICS_PADDING);
+    // Only GROW to fit children — never shrink below current size.
+    // Math.max(current, needed) preserves user's manual resize as a floor.
+    const neededW = maxRightEdge - country.x + PHYSICS_PADDING;
+    const neededH = maxBottomEdge - country.y + PHYSICS_PADDING;
+    country.w = Math.max(country.w, neededW);
+    country.h = Math.max(country.h, neededH);
   }
 
   return updated;
 }
 
 /**
- * Resolve collisions between country-level zones by pushing overlapping
- * countries to the right. Sorts by x, iterates left-to-right.
- * Max 10 iterations to prevent infinite loops.
+ * Resolve collisions between top-level (country) zones by pushing overlapping
+ * countries to the right. Child sub-zones (regimes) are NOT treated as
+ * independent collision participants — they only move when their parent moves.
+ *
+ * Sorts by x, iterates left-to-right. Max 10 iterations to prevent infinite loops.
  */
 function resolveCountryCollisions(zones: Zone[]): Zone[] {
   const updated = zones.map((z) => ({ ...z }));
 
-  // Identify country-level zones (zones that have children or are large)
-  // For simplicity: any zone with area >= threshold is a "country"
-  // We detect countries as zones that contain other zones
-  const countryIds = new Set<string>();
+  // Build parent/child relationships: a zone is a "child" if its center
+  // lies inside a larger zone. Top-level zones are those that are NOT children.
+  const childIds = new Set<string>();
   for (const a of updated) {
     for (const b of updated) {
       if (a.id === b.id) continue;
-      const bArea = b.w * b.h;
-      const aArea = a.w * a.h;
-      if (bArea < aArea) {
-        const cx = b.x + b.w / 2;
-        const cy = b.y + b.h / 2;
-        if (cx >= a.x && cx <= a.x + a.w && cy >= a.y && cy <= a.y + a.h) {
-          countryIds.add(a.id);
-        }
+      if (a.w * a.h >= b.w * b.h) continue; // a is smaller than b
+      const cx = a.x + a.w / 2;
+      const cy = a.y + a.h / 2;
+      if (cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h) {
+        childIds.add(a.id); // a is inside b → a is a child
+        break; // a zone can only be a child of one parent
       }
     }
   }
 
-  // If no nested structure, treat all zones as potential countries for collision
-  const countries = countryIds.size > 0
-    ? updated.filter((z) => countryIds.has(z.id))
-    : updated;
+  // Only top-level zones participate in collision resolution
+  const topLevel = updated.filter((z) => !childIds.has(z.id));
 
-  // Sort countries by x position (left to right)
-  countries.sort((a, b) => a.x - b.x);
+  // If there's only one top-level zone, nothing to resolve
+  if (topLevel.length < 2) return updated;
 
-  // Resolve collisions: push overlapping countries right
+  // Sort by x position (left to right)
+  topLevel.sort((a, b) => a.x - b.x);
+
+  // Resolve collisions: push overlapping top-level zones right
   for (let iter = 0; iter < 10; iter++) {
     let anyCollision = false;
-    for (let i = 1; i < countries.length; i++) {
-      const prev = countries[i - 1];
-      const curr = countries[i];
+    for (let i = 1; i < topLevel.length; i++) {
+      const prev = topLevel[i - 1];
+      const curr = topLevel[i];
       // Check AABB overlap
       const overlapX = prev.x + prev.w + PHYSICS_PADDING > curr.x;
       const overlapY = !(prev.y + prev.h < curr.y || curr.y + curr.h < prev.y);
       if (overlapX && overlapY) {
         const shift = (prev.x + prev.w + PHYSICS_PADDING) - curr.x;
-        // Push curr and all its children right
-        const oldX = curr.x;
+        // Push curr right
         curr.x = prev.x + prev.w + PHYSICS_PADDING;
-        // Also shift child sub-zones inside this country
+        // Also shift child sub-zones inside this country by the same amount
         for (const z of updated) {
           if (z.id === curr.id) continue;
+          if (!childIds.has(z.id)) continue; // only shift children
           const cx = z.x + z.w / 2;
           const cy = z.y + z.h / 2;
-          if (cx >= oldX && cx <= oldX + curr.w && cy >= curr.y && cy <= curr.y + curr.h) {
+          if (cx >= curr.x - shift && cx <= curr.x - shift + curr.w &&
+              cy >= curr.y && cy <= curr.y + curr.h) {
             z.x += shift;
           }
         }
@@ -570,7 +571,7 @@ function resolveCountryCollisions(zones: Zone[]): Zone[] {
     }
     if (!anyCollision) break;
     // Re-sort after shifts
-    countries.sort((a, b) => a.x - b.x);
+    topLevel.sort((a, b) => a.x - b.x);
   }
 
   return updated;
