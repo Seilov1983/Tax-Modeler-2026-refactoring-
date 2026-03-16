@@ -15,7 +15,7 @@
 import { memo, useRef, useCallback, type RefObject } from 'react';
 import { useAtom, useSetAtom } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
-import { moveZoneAtom } from '../model/graph-actions-atom';
+import { moveZoneAtom, deleteZoneAtom } from '../model/graph-actions-atom';
 import type { Zone } from '@shared/types';
 import type { ViewportState } from './useCanvasViewport';
 
@@ -54,6 +54,7 @@ const ZONE_BORDER_COLORS: Record<string, string> = {
 export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: CanvasZoneProps) {
   const [selection, setSelection] = useAtom(selectionAtom);
   const moveZone = useSetAtom(moveZoneAtom);
+  const deleteZone = useSetAtom(deleteZoneAtom);
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
 
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
@@ -118,6 +119,15 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
     [zone.id, setSelection],
   );
 
+  const handleDeleteZone = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      deleteZone(zone.id);
+      setSelection(null);
+    },
+    [zone.id, deleteZone, setSelection],
+  );
+
   return (
     <div
       ref={containerRef}
@@ -175,6 +185,30 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         }}
       >
         {zone.name}
+
+        {/* Delete zone button */}
+        <button
+          onClick={handleDeleteZone}
+          data-testid="btn-delete-zone"
+          title="Delete zone"
+          style={{
+            marginLeft: '8px',
+            background: 'none',
+            border: 'none',
+            fontSize: '14px',
+            cursor: 'pointer',
+            color: isSelected ? 'rgba(255,255,255,0.7)' : '#dc2626',
+            lineHeight: 1,
+            padding: '0 4px',
+            borderRadius: '3px',
+            opacity: 0.6,
+            pointerEvents: 'auto',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; }}
+        >
+          {'\u2715'}
+        </button>
       </div>
 
       {/* Jurisdiction badge */}
