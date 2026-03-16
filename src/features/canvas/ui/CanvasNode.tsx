@@ -246,6 +246,11 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
   const isPerson = node.type === 'person';
   const isTxa = node.type === 'txa';
 
+  // Skip React-driven transform when this node is being dragged directly
+  // OR when a parent zone is cascade-dragging it (data-cascade-dragging attribute)
+  const isCascadeDragged = domRef.current?.getAttribute('data-cascade-dragging') === '1';
+  const skipTransform = isDraggingRef.current || isCascadeDragged;
+
   return (
     <div
       ref={domRef}
@@ -256,7 +261,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
       data-testid="canvas-node"
       style={{
         position: 'absolute',
-        ...(isDraggingRef.current ? {} : { transform: `translate(${node.x}px, ${node.y}px) translateZ(0)` }),
+        ...(skipTransform ? {} : { transform: `translate(${node.x}px, ${node.y}px) translateZ(0)` }),
         width: node.w,
         height: node.h,
         willChange: 'transform',

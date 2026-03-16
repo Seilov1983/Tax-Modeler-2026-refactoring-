@@ -123,6 +123,11 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
       // Snapshot child elements once at drag start for 60fps DOM-level cascading
       childElsRef.current = collectChildElements(zone, allZones, allNodes);
 
+      // Mark child elements so React skips overwriting their transform during re-renders
+      for (const child of childElsRef.current) {
+        child.el.setAttribute('data-cascade-dragging', '1');
+      }
+
       const onPointerMove = (moveEvent: PointerEvent) => {
         hasDragged.current = true;
         const scale = viewportStateRef.current?.scale ?? 1;
@@ -173,8 +178,9 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
             containerRef.current.style.top = '';
           }
 
-          // Clear child elements' inline overrides
+          // Clear child elements' inline overrides and cascade-drag marker
           for (const child of childElsRef.current) {
+            child.el.removeAttribute('data-cascade-dragging');
             if (child.usesTransform) {
               child.el.style.transform = '';
             } else {
@@ -191,6 +197,10 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
           });
         }
 
+        // Safety: clear marker on any remaining children (e.g. no-drag click)
+        for (const child of childElsRef.current) {
+          child.el.removeAttribute('data-cascade-dragging');
+        }
         childElsRef.current = [];
       };
 
