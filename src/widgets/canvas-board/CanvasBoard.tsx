@@ -122,6 +122,10 @@ export function CanvasBoard() {
       if ((e.target as HTMLElement).closest('.canvas-node')) return;
       if ((e.target as HTMLElement).closest('button')) return;
 
+      // Prevent event from reaching other handlers that might reset the viewport
+      e.stopPropagation();
+      e.preventDefault();
+
       const { x, y } = clientToCanvas(e.clientX, e.clientY);
       setContextMenu({ x: e.clientX, y: e.clientY, canvasX: Math.round(x - NODE_WIDTH / 2), canvasY: Math.round(y - NODE_HEIGHT / 2) });
     },

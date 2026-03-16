@@ -204,13 +204,9 @@ export function useCanvasViewport(
       }
     };
 
-    // Double-click → reset
-    const onDblClick = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
-      // Only reset on background double-click, not on nodes
-      if ((e.target as HTMLElement).closest('.canvas-node')) return;
-      resetViewport();
-    };
+    // NOTE: Double-click reset was removed to avoid collision with the React
+    // onDoubleClick handler in CanvasBoard (context menu). Camera reset is
+    // available via the dedicated button in CanvasControls.
 
     // Space key for pan mode
     const onKeyDown = (e: KeyboardEvent) => {
@@ -236,7 +232,6 @@ export function useCanvasViewport(
     viewport.addEventListener('pointermove', onPointerMove);
     viewport.addEventListener('pointerup', onPointerUp);
     viewport.addEventListener('pointercancel', onPointerUp);
-    viewport.addEventListener('dblclick', onDblClick);
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
 
@@ -246,7 +241,6 @@ export function useCanvasViewport(
       viewport.removeEventListener('pointermove', onPointerMove);
       viewport.removeEventListener('pointerup', onPointerUp);
       viewport.removeEventListener('pointercancel', onPointerUp);
-      viewport.removeEventListener('dblclick', onDblClick);
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
