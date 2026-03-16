@@ -33,8 +33,10 @@ import { viewportAtom } from '@features/canvas/model/viewport-atom';
 import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
 import { CanvasToolbar } from '@features/canvas/ui/CanvasToolbar';
+import { addZoneAtom } from '@features/canvas/model/graph-actions-atom';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { ProjectHeader } from '@features/project-management';
+import type { JurisdictionCode, CurrencyCode } from '@shared/types';
 
 export function CanvasBoard() {
   const zones = useAtomValue(zonesAtom);
@@ -49,6 +51,7 @@ export function CanvasBoard() {
 
   // Global keyboard shortcuts (Undo, Redo, Delete, Escape)
   useKeyboardShortcuts();
+  const addZone = useSetAtom(addZoneAtom);
   const [draft, setDraft] = useAtom(draftConnectionAtom);
   const setViewport = useSetAtom(viewportAtom);
 
@@ -106,6 +109,41 @@ export function CanvasBoard() {
       };
     },
     [viewportRef, viewportStateRef],
+  );
+
+  // ─── Drag & Drop: country from MasterDataModal → canvas zone ────────────
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('application/tax-country-id')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  }, []);
+
+  const COUNTRY_CURRENCY: Record<string, CurrencyCode> = {
+    KZ: 'KZT', UAE: 'AED', HK: 'HKD', CY: 'EUR', SG: 'SGD',
+    UK: 'GBP', US: 'USD', BVI: 'USD', CAY: 'USD', SEY: 'SCR',
+  };
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      const countryId = e.dataTransfer.getData('application/tax-country-id');
+      const countryName = e.dataTransfer.getData('application/tax-country-name');
+      if (!countryId) return;
+
+      const { x, y } = clientToCanvas(e.clientX, e.clientY);
+      addZone({
+        jurisdiction: countryId as JurisdictionCode,
+        code: `${countryId}_${Date.now().toString(36).toUpperCase()}`,
+        name: countryName || countryId,
+        currency: COUNTRY_CURRENCY[countryId] || 'USD',
+        x: Math.round(x - 300),
+        y: Math.round(y - 200),
+        w: 600,
+        h: 400,
+      });
+    },
+    [clientToCanvas, addZone],
   );
 
   // ─── Lasso pointer handlers ────────────────────────────────────────────
@@ -252,6 +290,8 @@ export function CanvasBoard() {
         onPointerDown={handleBoardPointerDown}
         onPointerMove={handleBoardPointerMove}
         onPointerUp={handleBoardPointerUp}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
         style={{ position: 'absolute', top: '48px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
       >
         <div

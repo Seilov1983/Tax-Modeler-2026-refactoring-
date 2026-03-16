@@ -15,7 +15,10 @@ import { projectAtom, hydrateProjectAtom } from '@features/canvas';
 import { baseCurrencyAtom } from '@features/canvas/model/project-atom';
 import {
   undoAtom, redoAtom, canUndoAtom, canRedoAtom,
+  pastStatesAtom, futureStatesAtom,
 } from '../model/history-atoms';
+import { selectionAtom } from '@features/entity-editor/model/atoms';
+import { defaultProject } from '@entities/project';
 import {
   ensureMasterData, ensureZoneTaxDefaults,
   bootstrapNormalizeZones, recomputeRisks, recomputeFrozen,
@@ -42,6 +45,9 @@ export function ProjectHeader() {
   const redo = useSetAtom(redoAtom);
   const canUndo = useAtomValue(canUndoAtom);
   const canRedo = useAtomValue(canRedoAtom);
+  const setSelection = useSetAtom(selectionAtom);
+  const setPastStates = useSetAtom(pastStatesAtom);
+  const setFutureStates = useSetAtom(futureStatesAtom);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showMasterData, setShowMasterData] = useState(false);
 
@@ -90,6 +96,21 @@ export function ProjectHeader() {
   const handleExportPng = useCallback(() => {
     exportCanvasToPng('canvas-render-area', `structure-${Date.now()}.png`);
   }, []);
+
+  const handleNewProject = useCallback(() => {
+    if (!confirm('Create a new blank project? All unsaved changes will be lost.')) return;
+    const p = defaultProject() as Project;
+    ensureMasterData(p);
+    ensureCountriesAndRegimes(p);
+    ensureZoneTaxDefaults(p);
+    bootstrapNormalizeZones(p);
+    recomputeFrozen(p);
+    recomputeRisks(p);
+    hydrate(p);
+    setSelection(null);
+    setPastStates([]);
+    setFutureStates([]);
+  }, [hydrate, setSelection, setPastStates, setFutureStates]);
 
   if (!project) return null;
 
@@ -178,6 +199,15 @@ export function ProjectHeader() {
         </button>
 
         <div style={{ width: '1px', height: '20px', background: '#d1d5db' }} />
+
+        <button
+          onClick={handleNewProject}
+          data-testid="btn-new-project"
+          title="Create a new blank project"
+          style={{ ...btnSecondary, background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}
+        >
+          New / Clear
+        </button>
 
         <input
           type="file"

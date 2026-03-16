@@ -44,7 +44,7 @@ const bodyStyle: React.CSSProperties = {
 const countryRowStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: '10px',
   padding: '10px 12px', background: '#f9fafb', borderRadius: '6px',
-  cursor: 'pointer', userSelect: 'none', marginBottom: '2px',
+  cursor: 'grab', userSelect: 'none', marginBottom: '2px',
 };
 
 const regimeRowStyle: React.CSSProperties = {
@@ -206,9 +206,14 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
       >
         {/* Header */}
         <div style={headerStyle}>
-          <span style={{ fontWeight: 700, fontSize: '16px', color: '#1f2937' }}>
-            Master Data — Countries & Tax Regimes
-          </span>
+          <div>
+            <span style={{ fontWeight: 700, fontSize: '16px', color: '#1f2937' }}>
+              Master Data — Countries & Tax Regimes
+            </span>
+            <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+              Drag a country row onto the canvas to create a zone
+            </div>
+          </div>
           <button
             onClick={onClose}
             style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#6b7280', lineHeight: 1 }}
@@ -225,8 +230,16 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
 
             return (
               <div key={country.id} style={{ marginBottom: '4px' }}>
-                {/* Country Row (Level 1) */}
-                <div style={countryRowStyle}>
+                {/* Country Row (Level 1) — draggable to canvas */}
+                <div
+                  style={countryRowStyle}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/tax-country-id', country.id);
+                    e.dataTransfer.setData('application/tax-country-name', country.name);
+                    e.dataTransfer.effectAllowed = 'copy';
+                  }}
+                >
                   {/* Chevron */}
                   <span
                     onClick={() => toggleCountry(country.id)}
