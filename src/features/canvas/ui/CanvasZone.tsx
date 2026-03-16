@@ -128,14 +128,23 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         child.el.setAttribute('data-cascade-dragging', '1');
       }
 
+      // Snapshot the initial client pointer position so we compute the total
+      // displacement each frame instead of accumulating per-frame movementX/Y
+      // (avoids floating-point drift that can leave nodes visually static).
+      const startClientX = e.clientX;
+      const startClientY = e.clientY;
+      let loggedFirstFrame = false;
+
       const onPointerMove = (moveEvent: PointerEvent) => {
         hasDragged.current = true;
         const scale = viewportStateRef.current?.scale ?? 1;
-        const dx = moveEvent.movementX / scale;
-        const dy = moveEvent.movementY / scale;
 
-        livePos.current.x += dx;
-        livePos.current.y += dy;
+        // Total pixel displacement from drag start, converted to canvas coords
+        const dx = (moveEvent.clientX - startClientX) / scale;
+        const dy = (moveEvent.clientY - startClientY) / scale;
+
+        livePos.current.x = zone.x + dx;
+        livePos.current.y = zone.y + dy;
 
         // Direct DOM mutation for 60 FPS drag — zone itself
         if (containerRef.current) {
@@ -144,13 +153,15 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         }
 
         // Cascade: move child sub-zones and nodes by the same delta
-        const totalDx = livePos.current.x - zone.x;
-        const totalDy = livePos.current.y - zone.y;
+        if (!loggedFirstFrame) {
+          console.log('[DEBUG] Dragging Nodes Count:', childElsRef.current.filter(c => c.usesTransform).length, '| Applied dx/dy:', dx, dy);
+          loggedFirstFrame = true;
+        }
         for (const child of childElsRef.current) {
-          const newX = child.origX + totalDx;
-          const newY = child.origY + totalDy;
+          const newX = child.origX + dx;
+          const newY = child.origY + dy;
           if (child.usesTransform) {
-            // Nodes use CSS transform for positioning
+            // Nodes use CSS transform for positioning — read original coords from snapshot
             child.el.style.transform = `translate(${newX}px, ${newY}px) translateZ(0)`;
           } else {
             // Sub-zones use left/top for positioning
