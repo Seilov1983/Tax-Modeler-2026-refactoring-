@@ -204,9 +204,10 @@ export function useCanvasViewport(
       }
     };
 
-    // Native dblclick guard — intercepts the DOM event before React's synthetic
-    // onDoubleClick so that no residual handler can reset the viewport when the
-    // user double-clicks on an interactive element or the canvas background.
+    // Native dblclick guard — exits early to skip any viewport reset logic
+    // when the user double-clicks on an interactive element or the canvas
+    // background. Does NOT call stopPropagation/preventDefault so the event
+    // still bubbles up to React's synthetic onDoubleClick (context menu).
     const onDblClick = (e: MouseEvent) => {
       console.log('[DEBUG] Native DblClick Fired. Target:', e.target);
       if (
@@ -215,10 +216,8 @@ export function useCanvasViewport(
         (e.target as HTMLElement).closest('button') ||
         e.target === viewport
       ) {
-        // User clicked on an interactive element or the canvas board itself —
-        // prevent the event from reaching any handler that might reset the camera.
-        e.stopPropagation();
-        e.preventDefault();
+        // Early return — skip any viewport reset but let the event bubble
+        // naturally to React's synthetic tree (CanvasBoard onDoubleClick).
         return;
       }
     };
