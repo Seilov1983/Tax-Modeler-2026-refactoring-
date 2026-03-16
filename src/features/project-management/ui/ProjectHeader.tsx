@@ -118,7 +118,7 @@ export function ProjectHeader() {
     <div
       className="exclude-from-export"
       style={{
-        position: 'absolute',
+        position: 'fixed',
         top: 0,
         left: 0,
         width: '100%',
@@ -130,7 +130,7 @@ export function ProjectHeader() {
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 16px',
-        zIndex: 50,
+        zIndex: 100,
       }}
     >
       {/* Left: branding + title + base currency */}

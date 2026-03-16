@@ -286,7 +286,7 @@ export function CanvasBoard() {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      {/* Project header — outside viewport, excluded from export */}
+      {/* Project header — fixed to top of window */}
       <ProjectHeader />
 
       <div
@@ -299,7 +299,7 @@ export function CanvasBoard() {
         onDragOver={handleDragOver}
         onDragEnter={handleDragEnter}
         onDrop={handleDrop}
-        style={{ position: 'absolute', top: '48px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
+        style={{ position: 'fixed', top: '48px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
       >
         <div
           ref={boardRef}
