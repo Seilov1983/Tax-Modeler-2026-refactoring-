@@ -17,6 +17,9 @@
  *   Layer 2 (zones):   Country zones, sub-zones with nested children
  *   Layer 3 (nodes):   Companies, Persons, TXA nodes
  *   Layer 4 (arrows):  Flows, ownership lines, draft connections
+ *
+ * Context menu: rendered as HTML/CSS DOM overlay (not inside Konva) to avoid
+ * clipping and zoom scaling. Coordinates stored in Jotai contextMenuAtom.
  */
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
@@ -37,6 +40,8 @@ import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { EditorSidebar } from '@features/entity-editor/ui/EditorSidebar';
 import { draftConnectionAtom } from '@features/canvas/model/draft-connection-atom';
 import { viewportAtom } from '@features/canvas/model/viewport-atom';
+import { contextMenuAtom } from '@features/canvas/model/context-menu-atom';
+import type { ContextMenuTarget } from '@features/canvas/model/context-menu-atom';
 import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
 import { addNodeAtom, addZoneAtom, NODE_WIDTH, NODE_HEIGHT } from '@features/canvas/model/graph-actions-atom';
@@ -46,13 +51,6 @@ import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
 import type { JurisdictionCode, CurrencyCode, Zone } from '@shared/types';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-
-// ─── Context menu types ─────────────────────────────────────────────────────
-
-type ContextMenuTarget =
-  | { kind: 'empty'; x: number; y: number; canvasX: number; canvasY: number }
-  | { kind: 'country'; x: number; y: number; canvasX: number; canvasY: number; zone: Zone }
-  | { kind: 'regime'; x: number; y: number; canvasX: number; canvasY: number; zone: Zone };
 
 // ─── Grid pattern renderer (cached) ─────────────────────────────────────────
 
@@ -95,6 +93,9 @@ export function CanvasBoard() {
   const addZone = useSetAtom(addZoneAtom);
   const [draft, setDraft] = useAtom(draftConnectionAtom);
   const setViewport = useSetAtom(viewportAtom);
+
+  // ─── Context menu state (Jotai atom — rendered as DOM overlay) ──────
+  const [contextMenu, setContextMenu] = useAtom(contextMenuAtom);
 
   // ─── Konva Stage ref ──────────────────────────────────────────────────
   const stageRef = useRef<Konva.Stage>(null);
@@ -147,15 +148,13 @@ export function CanvasBoard() {
     [viewportStateRef],
   );
 
-  // ─── Context menu ─────────────────────────────────────────────────────
-  const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
-
+  // ─── Context menu target detection ─────────────────────────────────────
   const detectClickContext = useCallback(
-    (canvasX: number, canvasY: number, clientX: number, clientY: number): ContextMenuTarget => {
+    (canvasX: number, canvasY: number, screenX: number, screenY: number): ContextMenuTarget => {
       const hitZones = zones.filter((z) => pointInZone(canvasX, canvasY, z));
 
       if (hitZones.length === 0) {
-        return { kind: 'empty', x: clientX, y: clientY, canvasX, canvasY };
+        return { kind: 'empty', screenX, screenY, canvasX, canvasY };
       }
 
       hitZones.sort((a, b) => zoneArea(a) - zoneArea(b));
@@ -172,13 +171,29 @@ export function CanvasBoard() {
         });
 
       if (isCountry) {
-        return { kind: 'country', x: clientX, y: clientY, canvasX, canvasY, zone: smallestZone };
+        return { kind: 'country', screenX, screenY, canvasX, canvasY, zone: smallestZone };
       }
 
-      return { kind: 'regime', x: clientX, y: clientY, canvasX, canvasY, zone: smallestZone };
+      return { kind: 'regime', screenX, screenY, canvasX, canvasY, zone: smallestZone };
     },
     [zones],
   );
+
+  // ─── Helper: get screen-space pointer position from Stage ──────────────
+  const getScreenPointerPosition = useCallback((): { screenX: number; screenY: number } | null => {
+    const stage = stageRef.current;
+    if (!stage) return null;
+    const pos = stage.getPointerPosition();
+    if (!pos) return null;
+    // getPointerPosition() returns coords relative to the Stage container,
+    // so we add the container's bounding rect offset to get screen coords.
+    const container = stage.container();
+    const rect = container.getBoundingClientRect();
+    return {
+      screenX: pos.x + rect.left,
+      screenY: pos.y + rect.top,
+    };
+  }, []);
 
   // ─── Stage double-click → context menu ────────────────────────────────
   const handleStageDblClick = useCallback(
@@ -197,10 +212,14 @@ export function CanvasBoard() {
 
       const canvasX = Math.round(canvasPos.x - NODE_WIDTH / 2);
       const canvasY = Math.round(canvasPos.y - NODE_HEIGHT / 2);
-      const ctx = detectClickContext(canvasPos.x, canvasPos.y, evt.clientX, evt.clientY);
+
+      const screen = getScreenPointerPosition();
+      if (!screen) return;
+
+      const ctx = detectClickContext(canvasPos.x, canvasPos.y, screen.screenX, screen.screenY);
       setContextMenu({ ...ctx, canvasX, canvasY });
     },
-    [detectClickContext],
+    [detectClickContext, setContextMenu, getScreenPointerPosition],
   );
 
   // ─── Stage click → deselect ────────────────────────────────────────────
@@ -212,7 +231,7 @@ export function CanvasBoard() {
         setContextMenu(null);
       }
     },
-    [setSelection],
+    [setSelection, setContextMenu],
   );
 
   // ─── Right-click context menu ────────────────────────────────────────
@@ -231,10 +250,14 @@ export function CanvasBoard() {
 
       const canvasX = Math.round(canvasPos.x - NODE_WIDTH / 2);
       const canvasY = Math.round(canvasPos.y - NODE_HEIGHT / 2);
-      const ctx = detectClickContext(canvasPos.x, canvasPos.y, evt.clientX, evt.clientY);
+
+      const screen = getScreenPointerPosition();
+      if (!screen) return;
+
+      const ctx = detectClickContext(canvasPos.x, canvasPos.y, screen.screenX, screen.screenY);
       setContextMenu({ ...ctx, canvasX, canvasY });
     },
-    [detectClickContext],
+    [detectClickContext, setContextMenu, getScreenPointerPosition],
   );
 
   // ─── Context menu action handlers ──────────────────────────────────────
@@ -247,7 +270,7 @@ export function CanvasBoard() {
       addNode({ type, name, x: contextMenu.canvasX, y: contextMenu.canvasY, zoneId });
       setContextMenu(null);
     },
-    [contextMenu, addNode],
+    [contextMenu, addNode, setContextMenu],
   );
 
   const handleAddCountryZone = useCallback(() => {
@@ -264,7 +287,7 @@ export function CanvasBoard() {
       parentId: null,
     });
     setContextMenu(null);
-  }, [contextMenu, addZone]);
+  }, [contextMenu, addZone, setContextMenu]);
 
   const handleAddRegimeZone = useCallback(() => {
     if (!contextMenu || contextMenu.kind !== 'country') return;
@@ -281,7 +304,7 @@ export function CanvasBoard() {
       parentId: parentZone.id,
     });
     setContextMenu(null);
-  }, [contextMenu, addZone]);
+  }, [contextMenu, addZone, setContextMenu]);
 
   // ─── Drag & Drop from MasterDataModal ─────────────────────────────────
 
@@ -632,21 +655,24 @@ export function CanvasBoard() {
         <AuditLogPanel />
         <EditorSidebar />
 
-        {/* Context menu popover (HTML, positioned above canvas) */}
+        {/* Context menu — DOM overlay with position: absolute + high z-index.
+            Uses screen-space coordinates from getPointerPosition() via Jotai atom.
+            Rendered OUTSIDE Konva to avoid canvas clipping and zoom scaling. */}
         {contextMenu && (
           <div
             className="no-canvas-events"
             style={{
               position: 'fixed',
-              left: contextMenu.x,
-              top: contextMenu.y,
-              zIndex: 60,
+              left: contextMenu.screenX,
+              top: contextMenu.screenY,
+              zIndex: 9999,
               background: '#fff',
               borderRadius: '8px',
               boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
               border: '1px solid #e5e7eb',
               padding: '4px',
               minWidth: '180px',
+              pointerEvents: 'auto',
             }}
             onPointerDown={(e) => e.stopPropagation()}
           >
