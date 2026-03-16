@@ -96,19 +96,6 @@ export function CanvasBoard() {
     setSelection(null);
   }, [setSelection]);
 
-  // ─── Double-click on empty canvas → create a new Company node ────────────
-  const handleDoubleClick = useCallback(
-    (e: React.MouseEvent) => {
-      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
-      if ((e.target as HTMLElement).closest('.canvas-node')) return;
-      if ((e.target as HTMLElement).closest('button')) return;
-
-      const { x, y } = clientToCanvas(e.clientX, e.clientY);
-      addNode({ type: 'company', name: 'New Company', x: Math.round(x - 90), y: Math.round(y - 40) });
-    },
-    [clientToCanvas, addNode],
-  );
-
   // Convert client coordinates to canvas-space coordinates
   const clientToCanvas = useCallback(
     (clientX: number, clientY: number) => {
@@ -122,6 +109,19 @@ export function CanvasBoard() {
       };
     },
     [viewportRef, viewportStateRef],
+  );
+
+  // ─── Double-click on empty canvas → create a new Company node ────────────
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
+      if ((e.target as HTMLElement).closest('.canvas-node')) return;
+      if ((e.target as HTMLElement).closest('button')) return;
+
+      const { x, y } = clientToCanvas(e.clientX, e.clientY);
+      addNode({ type: 'company', name: 'New Company', x: Math.round(x - 90), y: Math.round(y - 40) });
+    },
+    [clientToCanvas, addNode],
   );
 
   // ─── Drag & Drop: country from MasterDataModal → canvas zone ────────────
