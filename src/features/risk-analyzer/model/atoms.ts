@@ -1,5 +1,5 @@
 import { atom } from 'jotai';
-import { atomFamily } from 'jotai/utils';
+import { atomFamily } from 'jotai-family';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { recomputeRisks } from '@shared/lib/engine/engine-risks';
 import { ensureMasterData } from '@shared/lib/engine/engine-core';

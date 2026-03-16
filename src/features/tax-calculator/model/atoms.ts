@@ -1,5 +1,5 @@
 import { atom } from 'jotai';
-import { atomFamily } from 'jotai/utils';
+import { atomFamily } from 'jotai-family';
 import type { TaxEntry } from '@shared/types';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { computeWht, computeCITAmount } from '@shared/lib/engine/engine-tax';
