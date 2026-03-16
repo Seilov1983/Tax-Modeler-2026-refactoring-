@@ -360,15 +360,29 @@ export function CanvasBoard() {
           id="canvas-render-area"
           style={{ position: 'absolute', transformOrigin: '0 0' }}
         >
-          {/* Zones Layer (lowest z-index — behind nodes and edges) */}
-          <div id="zones-layer">
-            {zones.map((zone) => (
+          {/* ── Z-Index Layer Hierarchy ──
+               Country zones:  z-index 10  (background)
+               Sub-zones:      z-index 20  (regimes inside countries)
+               Nodes:          z-index 30  (companies, persons, TXA)
+               Arrows (SVG):   z-index 40  (flows, ownership lines)
+          */}
+
+          {/* Country Zones Layer (z-index: 10) — large background zones */}
+          <div id="zones-layer-main" style={{ position: 'relative', zIndex: 10 }}>
+            {zones.filter((z) => z.w >= 400).map((zone) => (
               <CanvasZone key={zone.id} zone={zone} viewportStateRef={viewportStateRef} />
             ))}
           </div>
 
-          {/* Nodes Layer — each node has its own atom for isolated re-renders */}
-          <div id="nodes-layer">
+          {/* Sub-Zones / Regimes Layer (z-index: 20) — smaller nested zones */}
+          <div id="zones-layer-sub" style={{ position: 'relative', zIndex: 20 }}>
+            {zones.filter((z) => z.w < 400).map((zone) => (
+              <CanvasZone key={zone.id} zone={zone} viewportStateRef={viewportStateRef} />
+            ))}
+          </div>
+
+          {/* Nodes Layer (z-index: 30) — each node has its own atom for isolated re-renders */}
+          <div id="nodes-layer" style={{ position: 'relative', zIndex: 30 }}>
             {nodeAtoms.map((nodeAtom) => (
               <CanvasNode
                 key={`${nodeAtom}`}
@@ -378,10 +392,10 @@ export function CanvasBoard() {
             ))}
           </div>
 
-          {/* Arrows Layer (SVG) — flows, ownership lines, draft connection */}
+          {/* Arrows Layer (SVG, z-index: 40) — flows, ownership lines, draft connection */}
           <svg
             id="arrows-layer"
-            style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, overflow: 'visible', pointerEvents: 'none' }}
+            style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, overflow: 'visible', pointerEvents: 'none', zIndex: 40 }}
           >
             <defs>
               <marker
