@@ -9,7 +9,8 @@
  */
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
+import { MasterDataModal } from './MasterDataModal';
 import { projectAtom, hydrateProjectAtom } from '@features/canvas';
 import { baseCurrencyAtom } from '@features/canvas/model/project-atom';
 import {
@@ -18,6 +19,7 @@ import {
 import {
   ensureMasterData, ensureZoneTaxDefaults,
   bootstrapNormalizeZones, recomputeRisks, recomputeFrozen,
+  ensureCountriesAndRegimes,
 } from '@shared/lib/engine';
 import type { Project } from '@shared/types';
 import { downloadProjectJson, importProjectJson, exportCanvasToPng } from '../model/export-actions';
@@ -41,6 +43,7 @@ export function ProjectHeader() {
   const canUndo = useAtomValue(canUndoAtom);
   const canRedo = useAtomValue(canRedoAtom);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showMasterData, setShowMasterData] = useState(false);
 
   const handleCurrencyChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -67,6 +70,7 @@ export function ProjectHeader() {
 
         // Run the same engine pipeline as initial hydration
         ensureMasterData(p);
+        ensureCountriesAndRegimes(p);
         ensureZoneTaxDefaults(p);
         bootstrapNormalizeZones(p);
         recomputeFrozen(p);
@@ -165,6 +169,16 @@ export function ProjectHeader() {
 
         <div style={{ width: '1px', height: '20px', background: '#d1d5db' }} />
 
+        <button
+          onClick={() => setShowMasterData(true)}
+          data-testid="btn-master-data"
+          style={{ ...btnSecondary, background: '#fef3c7', color: '#b45309', borderColor: '#fde68a' }}
+        >
+          Master Data
+        </button>
+
+        <div style={{ width: '1px', height: '20px', background: '#d1d5db' }} />
+
         <input
           type="file"
           accept=".json"
@@ -182,6 +196,8 @@ export function ProjectHeader() {
           Export PNG
         </button>
       </div>
+
+      {showMasterData && <MasterDataModal onClose={() => setShowMasterData(false)} />}
     </div>
   );
 }

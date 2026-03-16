@@ -15,6 +15,7 @@ import { defaultProject } from '@entities/project';
 import {
   ensureMasterData, ensureZoneTaxDefaults,
   bootstrapNormalizeZones, recomputeRisks, recomputeFrozen,
+  ensureCountriesAndRegimes,
 } from '@shared/lib/engine';
 import { SCHEMA_VERSION } from '@shared/lib/engine/engine-core';
 import type { Project } from '@shared/types';
@@ -44,6 +45,7 @@ function AppContent() {
     }
 
     ensureMasterData(p);
+    ensureCountriesAndRegimes(p);
     ensureZoneTaxDefaults(p);
     bootstrapNormalizeZones(p);
     recomputeFrozen(p);
