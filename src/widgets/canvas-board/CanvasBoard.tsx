@@ -32,7 +32,7 @@ import { draftConnectionAtom } from '@features/canvas/model/draft-connection-ato
 import { viewportAtom } from '@features/canvas/model/viewport-atom';
 import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
-import { addNodeAtom, addZoneAtom } from '@features/canvas/model/graph-actions-atom';
+import { addNodeAtom, addZoneAtom, NODE_WIDTH, NODE_HEIGHT } from '@features/canvas/model/graph-actions-atom';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { ProjectHeader } from '@features/project-management';
 import type { JurisdictionCode, CurrencyCode } from '@shared/types';
@@ -123,7 +123,7 @@ export function CanvasBoard() {
       if ((e.target as HTMLElement).closest('button')) return;
 
       const { x, y } = clientToCanvas(e.clientX, e.clientY);
-      setContextMenu({ x: e.clientX, y: e.clientY, canvasX: Math.round(x - 90), canvasY: Math.round(y - 40) });
+      setContextMenu({ x: e.clientX, y: e.clientY, canvasX: Math.round(x - NODE_WIDTH / 2), canvasY: Math.round(y - NODE_HEIGHT / 2) });
     },
     [clientToCanvas],
   );

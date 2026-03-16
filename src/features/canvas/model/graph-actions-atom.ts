@@ -23,6 +23,10 @@ import type { NodeDTO, FlowDTO, OwnershipEdge, NodeType, Zone, JurisdictionCode,
 
 // ─── Add Node ───────────────────────────────────────────────────────────────
 
+/** Default dimensions for newly created nodes (used in addNodeAtom + CanvasBoard double-click offset) */
+export const NODE_WIDTH = 180;
+export const NODE_HEIGHT = 80;
+
 export interface AddNodePayload {
   type: NodeType;
   name: string;
@@ -43,8 +47,8 @@ export const addNodeAtom = atom(
       type: payload.type,
       x: payload.x,
       y: payload.y,
-      w: 180,
-      h: 80,
+      w: NODE_WIDTH,
+      h: NODE_HEIGHT,
       zoneId: payload.zoneId ?? null,
       frozen: false,
       riskFlags: [],
@@ -436,9 +440,6 @@ export const deleteZoneAtom = atom(
 );
 
 // ─── Auto-Layout (Dagre) — arrange nodes into a clean hierarchy ──────────
-
-const NODE_WIDTH = 180;
-const NODE_HEIGHT = 80;
 
 export const autoLayoutAtom = atom(
   null,
