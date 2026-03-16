@@ -10,7 +10,7 @@ import {
   SCHEMA_VERSION, ENGINE_VERSION,
   defaultMasterData, defaultCatalogs, defaultLawReferences,
   ensureMasterData, bootstrapNormalizeZones,
-  makeNode, makeTXA,
+  makeNode, makeTXA, ensureCountriesAndRegimes,
 } from '@shared/lib/engine/engine-core';
 import { ensureZoneTaxDefaults } from '@shared/lib/engine/engine-tax';
 import { recomputeRisks } from '@shared/lib/engine/engine-risks';
@@ -93,6 +93,7 @@ export function defaultProject(): Project {
   } as unknown as Project;
 
   ensureMasterData(p);
+  ensureCountriesAndRegimes(p);
   ensureZoneTaxDefaults(p);
   bootstrapNormalizeZones(p);
   recomputeRisks(p);

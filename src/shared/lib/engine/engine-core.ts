@@ -6,7 +6,7 @@
 import { uid, deepMerge } from './utils';
 import type {
   Project, Zone, NodeDTO, NodeType, JurisdictionCode, CurrencyCode,
-  MasterData, OwnershipEdge,
+  MasterData, OwnershipEdge, Country, TaxRegime,
 } from '@shared/types';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -80,6 +80,53 @@ export function defaultMasterData(): MasterData {
     CAY: { countryCode: 'CAY', baseCurrency: 'USD', vatRateStandard: 0.00, citRateStandard: 0.00, wht: { dividends: 0.00, interest: 0.00, royalties: 0.00, services: 0.00 }, payroll: { pitRate: 0.00 }, statuteOfLimitationsYears: 5 },
     SEY: { countryCode: 'SEY', baseCurrency: 'SCR', vatRateStandard: 0.15, cit: { mode: 'brackets', currency: 'SCR', brackets: [{ upTo: 1000000, rate: 0.15 }, { upTo: null, rate: 0.25 }] }, wht: { dividends: 0.00, interest: 0.00, royalties: 0.00, services: 0.00 }, payroll: { pitRate: 0.00 }, statuteOfLimitationsYears: 5 },
   } as MasterData;
+}
+
+// ─── Default Countries & Regimes (hierarchical справочник) ───────────────────
+
+export function defaultCountries(): Country[] {
+  return [
+    { id: 'KZ', name: 'Kazakhstan', baseCurrency: 'KZT' },
+    { id: 'UAE', name: 'UAE', baseCurrency: 'AED' },
+    { id: 'HK', name: 'Hong Kong', baseCurrency: 'HKD' },
+    { id: 'CY', name: 'Cyprus', baseCurrency: 'EUR' },
+    { id: 'SG', name: 'Singapore', baseCurrency: 'SGD' },
+    { id: 'UK', name: 'United Kingdom', baseCurrency: 'GBP' },
+    { id: 'US', name: 'US (Delaware)', baseCurrency: 'USD' },
+    { id: 'BVI', name: 'BVI', baseCurrency: 'USD' },
+    { id: 'CAY', name: 'Cayman', baseCurrency: 'USD' },
+    { id: 'SEY', name: 'Seychelles', baseCurrency: 'SCR' },
+  ];
+}
+
+export function defaultRegimes(): TaxRegime[] {
+  return [
+    { id: 'KZ_STD', countryId: 'KZ', name: 'Standard', cit: 20, wht: 15 },
+    { id: 'KZ_AIFC', countryId: 'KZ', name: 'AIFC', cit: 0, wht: 0 },
+    { id: 'KZ_HUB', countryId: 'KZ', name: 'Astana Hub', cit: 0, wht: 5 },
+    { id: 'UAE_ML', countryId: 'UAE', name: 'Mainland', cit: 9, wht: 0 },
+    { id: 'UAE_FZ_Q', countryId: 'UAE', name: 'Free Zone (QFZP)', cit: 0, wht: 0 },
+    { id: 'UAE_FZ_NQ', countryId: 'UAE', name: 'Free Zone (Non-QFZP)', cit: 9, wht: 0 },
+    { id: 'HK_ON', countryId: 'HK', name: 'Onshore', cit: 16.5, wht: 0 },
+    { id: 'HK_OFF', countryId: 'HK', name: 'Offshore', cit: 0, wht: 0 },
+    { id: 'CY_STD', countryId: 'CY', name: 'Standard', cit: 15, wht: 0 },
+    { id: 'SG_STD', countryId: 'SG', name: 'Standard', cit: 17, wht: 15 },
+    { id: 'UK_STD', countryId: 'UK', name: 'Standard', cit: 25, wht: 20 },
+    { id: 'US_STD', countryId: 'US', name: 'Standard', cit: 21, wht: 30 },
+    { id: 'BVI_STD', countryId: 'BVI', name: 'Standard', cit: 0, wht: 0 },
+    { id: 'CAY_STD', countryId: 'CAY', name: 'Standard', cit: 0, wht: 0 },
+    { id: 'SEY_STD', countryId: 'SEY', name: 'Standard', cit: 15, wht: 0 },
+  ];
+}
+
+export function ensureCountriesAndRegimes(p: Project): void {
+  if (!p.masterData) p.masterData = {} as Project['masterData'];
+  if (!p.masterData.countries || p.masterData.countries.length === 0) {
+    p.masterData.countries = defaultCountries();
+  }
+  if (!p.masterData.regimes || p.masterData.regimes.length === 0) {
+    p.masterData.regimes = defaultRegimes();
+  }
 }
 
 export function ensureMasterData(p: Project): MasterData {

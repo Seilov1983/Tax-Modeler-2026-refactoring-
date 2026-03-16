@@ -116,6 +116,22 @@ export interface WHTExemptionRule {
   };
 }
 
+// ─── Hierarchical Master Data (Country → Regime) ─────────────────────────────
+
+export interface Country {
+  id: string;
+  name: string;
+  baseCurrency: CurrencyCode;
+}
+
+export interface TaxRegime {
+  id: string;
+  countryId: string;
+  name: string;
+  cit: number;
+  wht: number;
+}
+
 // ─── Zone ────────────────────────────────────────────────────────────────────
 
 export interface Zone {
@@ -170,6 +186,7 @@ export interface NodeDTO {
   effectiveFrom?: string;
   effectiveTo?: string | null;
   balances: NodeBalances;
+  regimeId?: string | null;
   // Company-specific
   ledger?: CompanyLedger;
   complianceData?: CompanyComplianceData;
@@ -325,7 +342,10 @@ export interface Project {
   updatedAt: string;
   readOnly: boolean;
   baseCurrency: CurrencyCode;
-  masterData: MasterData;
+  masterData: MasterData & {
+    countries?: Country[];
+    regimes?: TaxRegime[];
+  };
   fx: FXConfig;
   zones: Zone[];
   nodes: NodeDTO[];
