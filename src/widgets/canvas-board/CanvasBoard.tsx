@@ -94,6 +94,7 @@ export function CanvasBoard() {
     if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
     if (lassoDraggedRef.current) return; // lasso drag, don't deselect
     setSelection(null);
+    setContextMenu(null);
   }, [setSelection]);
 
   // Convert client coordinates to canvas-space coordinates
@@ -111,7 +112,10 @@ export function CanvasBoard() {
     [viewportRef, viewportStateRef],
   );
 
-  // ─── Double-click on empty canvas → create a new Company node ────────────
+  // ─── Context menu state (popover on double-click) ────────────────────────
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
+
+  // ─── Double-click on empty canvas → open context menu ───────────────────
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
@@ -119,9 +123,19 @@ export function CanvasBoard() {
       if ((e.target as HTMLElement).closest('button')) return;
 
       const { x, y } = clientToCanvas(e.clientX, e.clientY);
-      addNode({ type: 'company', name: 'New Company', x: Math.round(x - 90), y: Math.round(y - 40) });
+      setContextMenu({ x: e.clientX, y: e.clientY, canvasX: Math.round(x - 90), canvasY: Math.round(y - 40) });
     },
-    [clientToCanvas, addNode],
+    [clientToCanvas],
+  );
+
+  const handleContextMenuCreate = useCallback(
+    (type: 'company' | 'person') => {
+      if (!contextMenu) return;
+      const name = type === 'company' ? 'New Company' : 'New Person';
+      addNode({ type, name, x: contextMenu.canvasX, y: contextMenu.canvasY });
+      setContextMenu(null);
+    },
+    [contextMenu, addNode],
   );
 
   // ─── Drag & Drop: country from MasterDataModal → canvas zone ────────────
@@ -146,11 +160,37 @@ export function CanvasBoard() {
       e.preventDefault();
       e.stopPropagation();
 
+      const { x, y } = clientToCanvas(e.clientX, e.clientY);
+
+      // Check if this is a regime drop (sub-zone)
+      const regimeId = e.dataTransfer.getData('application/tax-regime-id');
+      const regimeName = e.dataTransfer.getData('application/tax-regime-name');
+      const regimeCountryId = e.dataTransfer.getData('application/tax-regime-country-id');
+
+      if (regimeId && regimeCountryId) {
+        // Create a smaller sub-zone for the regime, visually nested inside the parent country zone
+        const parentZone = zones.find((z) => z.jurisdiction === regimeCountryId);
+        const subX = parentZone ? parentZone.x + 30 : Math.round(x - 150);
+        const subY = parentZone ? parentZone.y + 60 : Math.round(y - 100);
+
+        addZone({
+          jurisdiction: regimeCountryId as JurisdictionCode,
+          code: `${regimeCountryId}_${regimeId}`,
+          name: regimeName || regimeId,
+          currency: COUNTRY_CURRENCY[regimeCountryId] || 'USD',
+          x: subX,
+          y: subY,
+          w: 320,
+          h: 250,
+        });
+        return;
+      }
+
+      // Country drop → full-size zone
       const countryId = e.dataTransfer.getData('application/tax-country-id');
       const countryName = e.dataTransfer.getData('application/tax-country-name');
       if (!countryId) return;
 
-      const { x, y } = clientToCanvas(e.clientX, e.clientY);
       addZone({
         jurisdiction: countryId as JurisdictionCode,
         code: `${countryId}_${Date.now().toString(36).toUpperCase()}`,
@@ -162,7 +202,7 @@ export function CanvasBoard() {
         h: 400,
       });
     },
-    [clientToCanvas, addZone],
+    [clientToCanvas, addZone, zones],
   );
 
   // ─── Lasso pointer handlers ────────────────────────────────────────────
@@ -412,6 +452,53 @@ export function CanvasBoard() {
 
         {/* Property Panel — right sidebar for editing selected entity */}
         <EditorSidebar />
+
+        {/* Context menu popover — appears on double-click */}
+        {contextMenu && (
+          <div
+            className="no-canvas-events"
+            style={{
+              position: 'fixed',
+              left: contextMenu.x,
+              top: contextMenu.y,
+              zIndex: 60,
+              background: '#fff',
+              borderRadius: '8px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+              border: '1px solid #e5e7eb',
+              padding: '4px',
+              minWidth: '160px',
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => handleContextMenuCreate('company')}
+              style={{
+                display: 'block', width: '100%', padding: '8px 12px',
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '13px', fontWeight: 500, textAlign: 'left',
+                borderRadius: '4px', color: '#1f2937',
+              }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
+            >
+              {'\uD83C\uDFE2'} Create Company
+            </button>
+            <button
+              onClick={() => handleContextMenuCreate('person')}
+              style={{
+                display: 'block', width: '100%', padding: '8px 12px',
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '13px', fontWeight: 500, textAlign: 'left',
+                borderRadius: '4px', color: '#1f2937',
+              }}
+              onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
+              onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
+            >
+              {'\uD83D\uDC64'} Create Person
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
