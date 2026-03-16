@@ -454,10 +454,15 @@ export const deleteZoneAtom = atom(
 // ─── Physics: Auto-Resize Country Bounds ──────────────────────────────────
 
 const PHYSICS_PADDING = 40;
+const DEFAULT_COUNTRY_WIDTH = 200;
+const DEFAULT_COUNTRY_HEIGHT = 150;
 
 /**
  * Recalculate a country zone's bounds to encompass all child regime sub-zones.
  * Returns updated zones array. Does NOT mutate input.
+ *
+ * IMPORTANT: Bounds are computed absolutely from children's coordinates.
+ * We never reference country.w / country.h to avoid additive runaway.
  */
 function recalculateCountryBounds(zones: Zone[]): Zone[] {
   // Identify countries (large zones) and regimes (sub-zones inside them)
@@ -480,17 +485,19 @@ function recalculateCountryBounds(zones: Zone[]): Zone[] {
 
     if (children.length === 0) continue;
 
-    // Compute required bounds to encompass all children + padding
-    const minX = Math.min(...children.map((c) => c.x)) - PHYSICS_PADDING;
-    const minY = Math.min(...children.map((c) => c.y)) - PHYSICS_PADDING - 30; // extra for header
-    const maxX = Math.max(...children.map((c) => c.x + c.w)) + PHYSICS_PADDING;
-    const maxY = Math.max(...children.map((c) => c.y + c.h)) + PHYSICS_PADDING;
+    // Absolute bounds from children — never reference country.w / country.h
+    const maxChildRightEdge = Math.max(...children.map((c) => c.x + c.w));
+    const maxChildBottomEdge = Math.max(...children.map((c) => c.y + c.h));
+    const minChildX = Math.min(...children.map((c) => c.x));
+    const minChildY = Math.min(...children.map((c) => c.y));
 
-    // Only expand, never shrink below current size
-    const newX = Math.min(country.x, minX);
-    const newY = Math.min(country.y, minY);
-    const newW = Math.max(country.w, maxX - newX);
-    const newH = Math.max(country.h, maxY - newY);
+    // Expand origin if children sit outside the current top-left
+    const newX = Math.min(country.x, minChildX - PHYSICS_PADDING);
+    const newY = Math.min(country.y, minChildY - PHYSICS_PADDING - 30); // extra for header
+
+    // Width/height are absolute: based on child edges relative to origin
+    const newW = Math.max(DEFAULT_COUNTRY_WIDTH, maxChildRightEdge - newX + PHYSICS_PADDING);
+    const newH = Math.max(DEFAULT_COUNTRY_HEIGHT, maxChildBottomEdge - newY + PHYSICS_PADDING);
 
     country.x = newX;
     country.y = newY;

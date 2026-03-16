@@ -274,6 +274,29 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
   const handleDeleteZone = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+
+      // Task 3: Clear any active drag state so phantom drags don't persist
+      isDraggingRef.current = false;
+      hasDragged.current = false;
+
+      // Release pointer capture if the header still holds it
+      const headerEl = (e.currentTarget as HTMLElement).parentElement;
+      if (headerEl) {
+        try { headerEl.releasePointerCapture((e as unknown as PointerEvent).pointerId); } catch { /* noop */ }
+      }
+
+      // Clear cascade markers on any child elements
+      for (const child of childElsRef.current) {
+        child.el.removeAttribute('data-cascade-dragging');
+        if (child.usesTransform) {
+          child.el.style.transform = '';
+        } else {
+          child.el.style.left = '';
+          child.el.style.top = '';
+        }
+      }
+      childElsRef.current = [];
+
       deleteZone(zone.id);
       setSelection(null);
     },
@@ -339,6 +362,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
 
         {/* Delete zone button */}
         <button
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={handleDeleteZone}
           data-testid="btn-delete-zone"
           title="Delete zone"
