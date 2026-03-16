@@ -32,7 +32,6 @@ import { draftConnectionAtom } from '@features/canvas/model/draft-connection-ato
 import { viewportAtom } from '@features/canvas/model/viewport-atom';
 import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
-import { CanvasToolbar } from '@features/canvas/ui/CanvasToolbar';
 import { addZoneAtom } from '@features/canvas/model/graph-actions-atom';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { ProjectHeader } from '@features/project-management';
@@ -327,7 +326,7 @@ export function CanvasBoard() {
           {/* Arrows Layer (SVG) — flows, ownership lines, draft connection */}
           <svg
             id="arrows-layer"
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+            style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, overflow: 'visible', pointerEvents: 'none' }}
           >
             <defs>
               <marker
@@ -383,9 +382,6 @@ export function CanvasBoard() {
             />
           )}
         </div>
-
-        {/* Toolbar — outside zoom/pan area, fixed to top-left */}
-        <CanvasToolbar viewportRef={viewportRef} viewportStateRef={viewportStateRef} />
 
         {/* Executive Summary — top-right */}
         <GlobalSummaryWidget />
