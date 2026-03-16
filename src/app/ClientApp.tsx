@@ -9,9 +9,19 @@
 
 import { Provider, useSetAtom, useAtomValue } from 'jotai';
 import { useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { projectAtom, hydrateProjectAtom } from '@features/canvas';
-import { CanvasBoard } from '@widgets/canvas-board';
 import { defaultProject } from '@entities/project';
+
+/**
+ * Konva requires browser APIs (canvas, window) that are unavailable during SSR.
+ * next/dynamic with ssr:false ensures CanvasBoard is only loaded client-side,
+ * preventing "ReferenceError: window is not defined" crashes in Next.js App Router.
+ */
+const CanvasBoard = dynamic(
+  () => import('@widgets/canvas-board').then((mod) => ({ default: mod.CanvasBoard })),
+  { ssr: false },
+);
 import {
   ensureMasterData, ensureZoneTaxDefaults,
   bootstrapNormalizeZones, recomputeRisks, recomputeFrozen,
