@@ -18,7 +18,7 @@ import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
 import { zonesAtom } from '@entities/zone';
 import { uid } from '@shared/lib/engine/utils';
-import { detectZoneId } from '@shared/lib/engine/engine-core';
+import { detectZoneId, pointInZone, zoneArea, nodeCenter } from '@shared/lib/engine/engine-core';
 import type { NodeDTO, FlowDTO, OwnershipEdge, NodeType, Zone, JurisdictionCode, CurrencyCode } from '@shared/types';
 
 // ─── Add Node ───────────────────────────────────────────────────────────────
@@ -319,19 +319,64 @@ export const addZoneAtom = atom(
 
 export const moveZoneAtom = atom(
   null,
-  (_get, set, payload: { id: string; x: number; y: number }) => {
+  (get, set, payload: { id: string; x: number; y: number }) => {
     set(commitHistoryAtom);
 
-    set(zonesAtom, (prev) =>
-      prev.map((z) => (z.id === payload.id ? { ...z, x: payload.x, y: payload.y } : z)),
-    );
+    const zones = get(zonesAtom);
+    const nodes = get(nodesAtom);
+    const movedZone = zones.find((z) => z.id === payload.id);
+    if (!movedZone) return;
+
+    // Delta vector
+    const dx = payload.x - movedZone.x;
+    const dy = payload.y - movedZone.y;
+
+    if (dx === 0 && dy === 0) return;
+
+    // Find child sub-zones: smaller zones whose center lies inside the moved zone
+    const childZoneIds = new Set<string>();
+    const movedArea = zoneArea(movedZone);
+    for (const z of zones) {
+      if (z.id === movedZone.id) continue;
+      if (zoneArea(z) >= movedArea) continue;
+      const cx = z.x + z.w / 2;
+      const cy = z.y + z.h / 2;
+      if (pointInZone(cx, cy, movedZone)) {
+        childZoneIds.add(z.id);
+      }
+    }
+
+    // Find child nodes: nodes whose center lies inside the moved zone or any of its child sub-zones
+    const childNodeIds = new Set<string>();
+    for (const n of nodes) {
+      const { cx, cy } = nodeCenter(n);
+      if (pointInZone(cx, cy, movedZone)) {
+        childNodeIds.add(n.id);
+      }
+    }
+
+    // Apply delta to all zones (moved zone + child sub-zones)
+    const affectedZoneIds = new Set([movedZone.id, ...childZoneIds]);
+    const updateZone = (z: Zone) => {
+      if (!affectedZoneIds.has(z.id)) return z;
+      return { ...z, x: z.x + dx, y: z.y + dy };
+    };
+
+    // Apply delta to child nodes
+    const updateNode = (n: NodeDTO) => {
+      if (!childNodeIds.has(n.id)) return n;
+      return { ...n, x: n.x + dx, y: n.y + dy };
+    };
+
+    // Batch update: zones, nodes, and project in one pass
+    set(zonesAtom, (prev) => prev.map(updateZone));
+    set(nodesAtom, (prev) => prev.map(updateNode));
     set(projectAtom, (prev) => {
       if (!prev) return prev;
       return {
         ...prev,
-        zones: prev.zones.map((z) =>
-          z.id === payload.id ? { ...z, x: payload.x, y: payload.y } : z,
-        ),
+        zones: prev.zones.map(updateZone),
+        nodes: prev.nodes.map(updateNode),
       };
     });
   },

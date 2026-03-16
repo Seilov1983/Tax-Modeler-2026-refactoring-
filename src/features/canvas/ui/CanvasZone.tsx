@@ -13,11 +13,43 @@
  */
 
 import { memo, useRef, useCallback, type RefObject } from 'react';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { moveZoneAtom, deleteZoneAtom, resizeZoneAtom } from '../model/graph-actions-atom';
+import { zonesAtom } from '@entities/zone';
+import { nodesAtom } from '@entities/node';
 import type { Zone } from '@shared/types';
 import type { ViewportState } from './useCanvasViewport';
+
+/** Collect DOM elements of child sub-zones and nodes that are spatially inside the given zone. */
+function collectChildElements(zone: Zone, allZones: Zone[], allNodes: { id: string; x: number; y: number; w: number; h: number }[]) {
+  const zoneArea = zone.w * zone.h;
+  const childEls: { el: HTMLElement; origLeft: number; origTop: number }[] = [];
+
+  // Child sub-zones: smaller zones whose center is inside the moved zone
+  for (const z of allZones) {
+    if (z.id === zone.id) continue;
+    if (z.w * z.h >= zoneArea) continue;
+    const cx = z.x + z.w / 2;
+    const cy = z.y + z.h / 2;
+    if (cx >= zone.x && cx <= zone.x + zone.w && cy >= zone.y && cy <= zone.y + zone.h) {
+      const el = document.querySelector(`[data-zone-id="${z.id}"]`) as HTMLElement | null;
+      if (el) childEls.push({ el, origLeft: z.x, origTop: z.y });
+    }
+  }
+
+  // Child nodes: nodes whose center is inside the moved zone
+  for (const n of allNodes) {
+    const cx = n.x + (n.w || 0) / 2;
+    const cy = n.y + (n.h || 0) / 2;
+    if (cx >= zone.x && cx <= zone.x + zone.w && cy >= zone.y && cy <= zone.y + zone.h) {
+      const el = document.querySelector(`[data-node-id="${n.id}"]`) as HTMLElement | null;
+      if (el) childEls.push({ el, origLeft: n.x, origTop: n.y });
+    }
+  }
+
+  return childEls;
+}
 
 interface CanvasZoneProps {
   zone: Zone;
@@ -56,6 +88,8 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
   const moveZone = useSetAtom(moveZoneAtom);
   const deleteZone = useSetAtom(deleteZoneAtom);
   const resizeZone = useSetAtom(resizeZoneAtom);
+  const allZones = useAtomValue(zonesAtom);
+  const allNodes = useAtomValue(nodesAtom);
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
 
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
@@ -65,6 +99,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
   const containerRef = useRef<HTMLDivElement>(null);
   const livePos = useRef({ x: zone.x, y: zone.y });
   const hasDragged = useRef(false);
+  const childElsRef = useRef<{ el: HTMLElement; origLeft: number; origTop: number }[]>([]);
 
   const handleHeaderPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -73,6 +108,9 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
       target.setPointerCapture(e.pointerId);
       hasDragged.current = false;
       livePos.current = { x: zone.x, y: zone.y };
+
+      // Snapshot child elements once at drag start for 60fps DOM-level cascading
+      childElsRef.current = collectChildElements(zone, allZones, allNodes);
 
       const onPointerMove = (moveEvent: PointerEvent) => {
         hasDragged.current = true;
@@ -83,10 +121,18 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         livePos.current.x += dx;
         livePos.current.y += dy;
 
-        // Direct DOM mutation for 60 FPS drag
+        // Direct DOM mutation for 60 FPS drag — zone itself
         if (containerRef.current) {
           containerRef.current.style.left = `${livePos.current.x}px`;
           containerRef.current.style.top = `${livePos.current.y}px`;
+        }
+
+        // Cascade: move child sub-zones and nodes by the same delta
+        const totalDx = livePos.current.x - zone.x;
+        const totalDy = livePos.current.y - zone.y;
+        for (const child of childElsRef.current) {
+          child.el.style.left = `${child.origLeft + totalDx}px`;
+          child.el.style.top = `${child.origTop + totalDy}px`;
         }
       };
 
@@ -94,6 +140,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         target.removeEventListener('pointermove', onPointerMove);
         target.removeEventListener('pointerup', onPointerUp);
         target.releasePointerCapture(upEvent.pointerId);
+        childElsRef.current = [];
 
         if (hasDragged.current) {
           moveZone({
@@ -107,7 +154,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
       target.addEventListener('pointermove', onPointerMove);
       target.addEventListener('pointerup', onPointerUp);
     },
-    [zone.x, zone.y, zone.id, moveZone, viewportStateRef],
+    [zone.x, zone.y, zone.id, zone.w, zone.h, moveZone, viewportStateRef, allZones, allNodes],
   );
 
   const handleHeaderClick = useCallback(
