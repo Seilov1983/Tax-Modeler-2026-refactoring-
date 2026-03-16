@@ -1,227 +1,109 @@
 'use client';
 
 /**
- * CanvasZone — visual jurisdiction zone rendered on the lowest canvas layer.
+ * CanvasZone — Konva-based jurisdiction zone rendered on a canvas Layer.
  *
  * Supports:
- * - Click on header label to select the zone (opens EditorSidebar)
- * - Transient drag on header for 60 FPS repositioning (same pattern as CanvasNode)
+ * - Click on header to select the zone (opens EditorSidebar)
+ * - Draggable <Group> for 60 FPS repositioning via Konva's built-in drag
+ * - Resize handle (bottom-right corner)
  * - Visual highlight when selected (blue border + header)
+ * - Child zones and nodes are rendered inside parent <Group> — Konva handles
+ *   hierarchical movement automatically with no additional cascade calculations.
  *
- * Zone body is pointer-events:none so nodes/flows/lasso can be clicked through.
- * Header is pointer-events:auto for interaction.
+ * Uses useRef for transient drag state (no React re-renders during drag).
+ * Coordinates committed to Jotai only in onDragEnd (Commit phase).
  */
 
-import { memo, useRef, useCallback, type RefObject } from 'react';
+import { memo, useRef, useCallback } from 'react';
+import { Group, Rect, Text, Line } from 'react-konva';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { moveZoneAtom, deleteZoneAtom, resizeZoneAtom } from '../model/graph-actions-atom';
-import { zonesAtom } from '@entities/zone';
-import { nodesAtom } from '@entities/node';
 import type { Zone } from '@shared/types';
-import type { ViewportState } from './useCanvasViewport';
-
-interface ChildSnapshot {
-  el: HTMLElement;
-  origX: number;
-  origY: number;
-  /** Nodes use CSS transform; zones use left/top */
-  usesTransform: boolean;
-}
-
-/** Collect DOM elements of child sub-zones and nodes that are spatially inside the given zone. */
-function collectChildElements(zone: Zone, allZones: Zone[], allNodes: { id: string; x: number; y: number; w: number; h: number }[]): ChildSnapshot[] {
-  const area = zone.w * zone.h;
-  const children: ChildSnapshot[] = [];
-
-  // Child sub-zones: smaller zones whose center is inside the moved zone
-  for (const z of allZones) {
-    if (z.id === zone.id) continue;
-    if (z.w * z.h >= area) continue;
-    const cx = z.x + z.w / 2;
-    const cy = z.y + z.h / 2;
-    if (cx >= zone.x && cx <= zone.x + zone.w && cy >= zone.y && cy <= zone.y + zone.h) {
-      const el = document.querySelector(`[data-zone-id="${z.id}"]`) as HTMLElement | null;
-      if (el) children.push({ el, origX: z.x, origY: z.y, usesTransform: false });
-    }
-  }
-
-  // Child nodes: nodes whose center is inside the moved zone (nodes use transform)
-  for (const n of allNodes) {
-    const cx = n.x + (n.w || 0) / 2;
-    const cy = n.y + (n.h || 0) / 2;
-    if (cx >= zone.x && cx <= zone.x + zone.w && cy >= zone.y && cy <= zone.y + zone.h) {
-      const el = document.querySelector(`[data-node-id="${n.id}"]`) as HTMLElement | null;
-      if (el) children.push({ el, origX: n.x, origY: n.y, usesTransform: true });
-    }
-  }
-
-  return children;
-}
+import type Konva from 'konva';
+import type { KonvaEventObject } from 'konva/lib/Node';
 
 interface CanvasZoneProps {
   zone: Zone;
-  viewportStateRef: RefObject<ViewportState>;
+  /** Child elements (sub-zones + nodes) rendered inside this Group */
+  children?: React.ReactNode;
 }
 
 /** Map jurisdiction codes to subtle background colors */
 const ZONE_COLORS: Record<string, string> = {
-  KZ: '#fef3c7',   // amber-100
-  UAE: '#dbeafe',   // blue-100
-  HK: '#fce7f3',   // pink-100
-  CY: '#d1fae5',   // green-100
-  SG: '#ede9fe',    // violet-100
-  UK: '#fee2e2',    // red-100
-  US: '#e0e7ff',    // indigo-100
-  BVI: '#ccfbf1',   // teal-100
-  CAY: '#fef9c3',   // yellow-100
-  SEY: '#f0fdfa',   // teal-50
+  KZ: '#fef3c7',
+  UAE: '#dbeafe',
+  HK: '#fce7f3',
+  CY: '#d1fae5',
+  SG: '#ede9fe',
+  UK: '#fee2e2',
+  US: '#e0e7ff',
+  BVI: '#ccfbf1',
+  CAY: '#fef9c3',
+  SEY: '#f0fdfa',
 };
 
 const ZONE_BORDER_COLORS: Record<string, string> = {
-  KZ: '#f59e0b',   // amber-500
-  UAE: '#3b82f6',   // blue-500
-  HK: '#ec4899',   // pink-500
-  CY: '#10b981',   // green-500
-  SG: '#8b5cf6',   // violet-500
-  UK: '#ef4444',   // red-500
-  US: '#6366f1',   // indigo-500
-  BVI: '#14b8a6',   // teal-500
-  CAY: '#eab308',   // yellow-500
-  SEY: '#2dd4bf',   // teal-400
+  KZ: '#f59e0b',
+  UAE: '#3b82f6',
+  HK: '#ec4899',
+  CY: '#10b981',
+  SG: '#8b5cf6',
+  UK: '#ef4444',
+  US: '#6366f1',
+  BVI: '#14b8a6',
+  CAY: '#eab308',
+  SEY: '#2dd4bf',
 };
 
-export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: CanvasZoneProps) {
+const HEADER_HEIGHT = 36;
+const RESIZE_HANDLE_SIZE = 18;
+
+export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZoneProps) {
   const [selection, setSelection] = useAtom(selectionAtom);
   const moveZone = useSetAtom(moveZoneAtom);
   const deleteZone = useSetAtom(deleteZoneAtom);
   const resizeZone = useSetAtom(resizeZoneAtom);
-  const allZones = useAtomValue(zonesAtom);
-  const allNodes = useAtomValue(nodesAtom);
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
 
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
   const borderColor = ZONE_BORDER_COLORS[zone.jurisdiction] || '#94a3b8';
 
-  // Refs for transient drag (direct DOM mutation, no React re-renders during drag)
-  const containerRef = useRef<HTMLDivElement>(null);
-  const livePos = useRef({ x: zone.x, y: zone.y });
+  // Ref for transient drag — avoid re-renders during drag
+  const groupRef = useRef<Konva.Group>(null);
   const hasDragged = useRef(false);
-  const childElsRef = useRef<ChildSnapshot[]>([]);
-  /** Re-render shield: while true, React must not overwrite inline left/top from state */
-  const isDraggingRef = useRef(false);
 
-  const handleHeaderPointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      // Re-entrancy guard: prevent duplicate drag sessions from multi-touch
-      // or rapid pointer events. Without this, multiple pointermove handlers
-      // with different startClientX values fight each other → oscillation.
-      if (isDraggingRef.current) return;
+  // Resize refs
+  const resizeStartRef = useRef<{ w: number; h: number; startX: number; startY: number } | null>(null);
+  const liveSizeRef = useRef({ w: zone.w, h: zone.h });
 
-      e.stopPropagation();
-      const target = e.currentTarget;
-      target.setPointerCapture(e.pointerId);
-      hasDragged.current = false;
-      isDraggingRef.current = true;
-      livePos.current = { x: zone.x, y: zone.y };
+  // ─── Drag handlers ──────────────────────────────────────────────────────
+  const handleDragStart = useCallback(() => {
+    hasDragged.current = false;
+  }, []);
 
-      // Snapshot child elements once at drag start for 60fps DOM-level cascading
-      childElsRef.current = collectChildElements(zone, allZones, allNodes);
+  const handleDragMove = useCallback(() => {
+    hasDragged.current = true;
+  }, []);
 
-      // Mark child elements so React skips overwriting their transform during re-renders
-      for (const child of childElsRef.current) {
-        child.el.setAttribute('data-cascade-dragging', '1');
-      }
-
-      // Snapshot the initial client pointer position so we compute the total
-      // displacement each frame instead of accumulating per-frame movementX/Y
-      // (avoids floating-point drift that can leave nodes visually static).
-      const startClientX = e.clientX;
-      const startClientY = e.clientY;
-
-      const onPointerMove = (moveEvent: PointerEvent) => {
-        hasDragged.current = true;
-        const scale = viewportStateRef.current?.scale ?? 1;
-
-        // Total cumulative displacement from drag start → canvas coords
-        const totalDx = (moveEvent.clientX - startClientX) / scale;
-        const totalDy = (moveEvent.clientY - startClientY) / scale;
-
-        livePos.current.x = zone.x + totalDx;
-        livePos.current.y = zone.y + totalDy;
-
-        // Direct DOM mutation for 60 FPS drag — zone itself
-        if (containerRef.current) {
-          containerRef.current.style.left = `${livePos.current.x}px`;
-          containerRef.current.style.top = `${livePos.current.y}px`;
-        }
-
-        // Cascade: move child sub-zones and nodes by the same absolute delta
-        for (const child of childElsRef.current) {
-          if (child.usesTransform) {
-            // Nodes: absolute position = snapshot origin + total displacement
-            child.el.style.transform = `translate(${child.origX + totalDx}px, ${child.origY + totalDy}px) translateZ(0)`;
-          } else {
-            // Sub-zones use left/top
-            child.el.style.left = `${child.origX + totalDx}px`;
-            child.el.style.top = `${child.origY + totalDy}px`;
-          }
-        }
-      };
-
-      const onPointerUp = (upEvent: PointerEvent) => {
-        target.removeEventListener('pointermove', onPointerMove);
-        target.removeEventListener('pointerup', onPointerUp);
-        target.releasePointerCapture(upEvent.pointerId);
-
-        isDraggingRef.current = false;
-
-        if (hasDragged.current) {
-          // CRITICAL: Clear ALL transient inline styles BEFORE committing to state.
-          // Without this, React re-renders with new coordinates from Jotai,
-          // but the stale inline overrides remain → double-delta "jump".
-
-          // Clear zone container's own inline position
-          if (containerRef.current) {
-            containerRef.current.style.left = '';
-            containerRef.current.style.top = '';
-          }
-
-          // Clear child elements' inline overrides and cascade-drag marker
-          for (const child of childElsRef.current) {
-            child.el.removeAttribute('data-cascade-dragging');
-            if (child.usesTransform) {
-              child.el.style.transform = '';
-            } else {
-              child.el.style.left = '';
-              child.el.style.top = '';
-            }
-          }
-
-          // Now commit new positions — React will re-render with correct values
-          moveZone({
-            id: zone.id,
-            x: Math.round(livePos.current.x),
-            y: Math.round(livePos.current.y),
-          });
-        }
-
-        // Safety: clear marker on any remaining children (e.g. no-drag click)
-        for (const child of childElsRef.current) {
-          child.el.removeAttribute('data-cascade-dragging');
-        }
-        childElsRef.current = [];
-      };
-
-      target.addEventListener('pointermove', onPointerMove);
-      target.addEventListener('pointerup', onPointerUp);
+  const handleDragEnd = useCallback(
+    (e: KonvaEventObject<DragEvent>) => {
+      if (!hasDragged.current) return;
+      const node = e.target;
+      moveZone({
+        id: zone.id,
+        x: Math.round(node.x()),
+        y: Math.round(node.y()),
+      });
     },
-    [zone.x, zone.y, zone.id, zone.w, zone.h, moveZone, viewportStateRef, allZones, allNodes],
+    [zone.id, moveZone],
   );
 
+  // ─── Click to select ─────────────────────────────────────────────────────
   const handleHeaderClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
+    (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      e.cancelBubble = true;
       if (!hasDragged.current) {
         setSelection({ type: 'zone', id: zone.id });
       }
@@ -229,222 +111,207 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
     [zone.id, setSelection],
   );
 
-  // ─── Resize handle (bottom-right corner) ──────────────────────────────
-  const liveSize = useRef({ w: zone.w, h: zone.h });
-
-  const isResizingRef = useRef(false);
-
-  const handleResizePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (isResizingRef.current) return; // Re-entrancy guard
-
-      e.stopPropagation();
-      const target = e.currentTarget;
-      target.setPointerCapture(e.pointerId);
-      isResizingRef.current = true;
-      liveSize.current = { w: zone.w, h: zone.h };
-
-      // Lock initial client position for absolute delta (no movementX/Y drift)
-      const startClientX = e.clientX;
-      const startClientY = e.clientY;
-
-      const onPointerMove = (moveEvent: PointerEvent) => {
-        const scale = viewportStateRef.current?.scale ?? 1;
-        const totalDw = (moveEvent.clientX - startClientX) / scale;
-        const totalDh = (moveEvent.clientY - startClientY) / scale;
-
-        liveSize.current.w = Math.max(200, zone.w + totalDw);
-        liveSize.current.h = Math.max(150, zone.h + totalDh);
-
-        if (containerRef.current) {
-          containerRef.current.style.width = `${liveSize.current.w}px`;
-          containerRef.current.style.height = `${liveSize.current.h}px`;
-        }
-      };
-
-      const onPointerUp = (upEvent: PointerEvent) => {
-        target.removeEventListener('pointermove', onPointerMove);
-        target.removeEventListener('pointerup', onPointerUp);
-        target.releasePointerCapture(upEvent.pointerId);
-        isResizingRef.current = false;
-
-        // Clear inline size overrides before committing
-        if (containerRef.current) {
-          containerRef.current.style.width = '';
-          containerRef.current.style.height = '';
-        }
-
-        resizeZone({
-          id: zone.id,
-          w: Math.round(liveSize.current.w),
-          h: Math.round(liveSize.current.h),
-        });
-      };
-
-      target.addEventListener('pointermove', onPointerMove);
-      target.addEventListener('pointerup', onPointerUp);
-    },
-    [zone.w, zone.h, zone.id, resizeZone, viewportStateRef],
-  );
-
-  const handleDeleteZone = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-
-      // Task 3: Clear any active drag state so phantom drags don't persist
-      isDraggingRef.current = false;
-      hasDragged.current = false;
-
-      // Release pointer capture if the header still holds it
-      const headerEl = (e.currentTarget as HTMLElement).parentElement;
-      if (headerEl) {
-        try { headerEl.releasePointerCapture((e as unknown as PointerEvent).pointerId); } catch { /* noop */ }
-      }
-
-      // Clear cascade markers on any child elements
-      for (const child of childElsRef.current) {
-        child.el.removeAttribute('data-cascade-dragging');
-        if (child.usesTransform) {
-          child.el.style.transform = '';
-        } else {
-          child.el.style.left = '';
-          child.el.style.top = '';
-        }
-      }
-      childElsRef.current = [];
-
+  // ─── Delete zone ─────────────────────────────────────────────────────────
+  const handleDeleteClick = useCallback(
+    (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      e.cancelBubble = true;
       deleteZone(zone.id);
       setSelection(null);
     },
     [zone.id, deleteZone, setSelection],
   );
 
+  // ─── Resize handle ───────────────────────────────────────────────────────
+  const handleResizeDragStart = useCallback(
+    (e: KonvaEventObject<DragEvent>) => {
+      e.cancelBubble = true;
+      const node = e.target;
+      resizeStartRef.current = {
+        w: zone.w,
+        h: zone.h,
+        startX: node.x(),
+        startY: node.y(),
+      };
+      liveSizeRef.current = { w: zone.w, h: zone.h };
+    },
+    [zone.w, zone.h],
+  );
+
+  const handleResizeDragMove = useCallback(
+    (e: KonvaEventObject<DragEvent>) => {
+      e.cancelBubble = true;
+      if (!resizeStartRef.current) return;
+
+      const node = e.target;
+      const dx = node.x() - resizeStartRef.current.startX;
+      const dy = node.y() - resizeStartRef.current.startY;
+
+      liveSizeRef.current.w = Math.max(200, resizeStartRef.current.w + dx);
+      liveSizeRef.current.h = Math.max(150, resizeStartRef.current.h + dy);
+
+      // Update the zone rect visually during drag
+      const parent = node.getParent();
+      if (parent) {
+        const zoneRect = parent.findOne('.zone-bg') as Konva.Rect | undefined;
+        if (zoneRect) {
+          zoneRect.width(liveSizeRef.current.w);
+          zoneRect.height(liveSizeRef.current.h);
+        }
+        const borderRect = parent.findOne('.zone-border') as Konva.Rect | undefined;
+        if (borderRect) {
+          borderRect.width(liveSizeRef.current.w);
+          borderRect.height(liveSizeRef.current.h);
+        }
+        parent.getLayer()?.batchDraw();
+      }
+    },
+    [],
+  );
+
+  const handleResizeDragEnd = useCallback(
+    (e: KonvaEventObject<DragEvent>) => {
+      e.cancelBubble = true;
+      // Reset handle position to bottom-right
+      const node = e.target;
+      node.position({
+        x: liveSizeRef.current.w - RESIZE_HANDLE_SIZE,
+        y: liveSizeRef.current.h - RESIZE_HANDLE_SIZE,
+      });
+
+      resizeZone({
+        id: zone.id,
+        w: Math.round(liveSizeRef.current.w),
+        h: Math.round(liveSizeRef.current.h),
+      });
+      resizeStartRef.current = null;
+    },
+    [zone.id, resizeZone],
+  );
+
+  // Badge text
+  const badgeText = `${zone.jurisdiction} · ${zone.currency}`;
+
   return (
-    <div
-      ref={containerRef}
-      data-zone-id={zone.id}
-      data-testid="canvas-zone"
-      style={{
-        position: 'absolute',
-        ...(isDraggingRef.current ? {} : { left: zone.x, top: zone.y }),
-        width: zone.w,
-        height: zone.h,
-        zIndex: zone.zIndex,
-        border: `2px dashed ${isSelected ? '#3b82f6' : borderColor}`,
-        borderRadius: '12px',
-        background: isSelected ? `${bgColor}60` : `${bgColor}40`,
-        pointerEvents: 'none',
-        transform: 'translateZ(0)',
-        transition: 'border-color 0.15s, background 0.15s',
-      }}
+    <Group
+      ref={groupRef}
+      x={zone.x}
+      y={zone.y}
+      draggable
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
+      onDragEnd={handleDragEnd}
     >
-      {/* Draggable + clickable zone header label — statically positioned
-          so it inherits left/top from the container. NEVER give this div
-          its own transform or absolute positioning. */}
-      <div
-        style={{
-          display: 'inline-block',
-          padding: '8px 16px',
-          fontSize: '18px',
-          fontWeight: 800,
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-          color: isSelected ? '#fff' : borderColor,
-          background: isSelected ? '#3b82f6' : 'transparent',
-          opacity: isSelected ? 1 : 0.5,
-          userSelect: 'none',
-          pointerEvents: 'auto',
-          cursor: 'grab',
-          borderBottomRightRadius: '12px',
-          borderTopLeftRadius: '10px',
-          touchAction: 'none',
-          transition: 'color 0.15s, background 0.15s, opacity 0.15s',
-        }}
-        onPointerDown={handleHeaderPointerDown}
+      {/* Zone background fill */}
+      <Rect
+        name="zone-bg"
+        width={zone.w}
+        height={zone.h}
+        fill={isSelected ? `${bgColor}` : bgColor}
+        opacity={isSelected ? 0.4 : 0.25}
+        cornerRadius={12}
+      />
+
+      {/* Zone border (dashed) */}
+      <Rect
+        name="zone-border"
+        width={zone.w}
+        height={zone.h}
+        stroke={isSelected ? '#3b82f6' : borderColor}
+        strokeWidth={2}
+        dash={[8, 4]}
+        cornerRadius={12}
+        listening={false}
+      />
+
+      {/* Header background — draggable area + click to select */}
+      <Rect
+        x={0}
+        y={0}
+        width={Math.min(zone.name.length * 12 + 60, zone.w)}
+        height={HEADER_HEIGHT}
+        fill={isSelected ? '#3b82f6' : 'transparent'}
+        opacity={isSelected ? 1 : 0.5}
+        cornerRadius={[10, 0, 12, 0]}
         onClick={handleHeaderClick}
-        onMouseEnter={(e) => {
-          if (!isSelected) {
-            (e.currentTarget as HTMLElement).style.opacity = '0.8';
-            (e.currentTarget as HTMLElement).style.background = '#f3f4f6';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isSelected) {
-            (e.currentTarget as HTMLElement).style.opacity = '0.5';
-            (e.currentTarget as HTMLElement).style.background = 'transparent';
-          }
-        }}
-      >
-        {zone.name}
+        onTap={handleHeaderClick}
+      />
 
-        {/* Delete zone button */}
-        <button
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={handleDeleteZone}
-          data-testid="btn-delete-zone"
-          title="Delete zone"
-          style={{
-            marginLeft: '8px',
-            background: 'none',
-            border: 'none',
-            fontSize: '14px',
-            cursor: 'pointer',
-            color: isSelected ? 'rgba(255,255,255,0.7)' : '#dc2626',
-            lineHeight: 1,
-            padding: '0 4px',
-            borderRadius: '3px',
-            opacity: 0.6,
-            pointerEvents: 'auto',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; }}
-        >
-          {'\u2715'}
-        </button>
-      </div>
+      {/* Zone name text */}
+      <Text
+        x={8}
+        y={10}
+        text={zone.name.toUpperCase()}
+        fontSize={16}
+        fontStyle="bold"
+        fill={isSelected ? '#ffffff' : borderColor}
+        letterSpacing={1.5}
+        listening={false}
+      />
 
-      {/* Jurisdiction badge */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '12px',
-          right: '16px',
-          fontSize: '11px',
-          fontWeight: 700,
-          padding: '2px 8px',
-          borderRadius: '4px',
-          background: `${borderColor}20`,
-          color: borderColor,
-          opacity: 0.6,
-          userSelect: 'none',
-          pointerEvents: 'none',
-        }}
+      {/* Delete button "✕" */}
+      <Group
+        x={Math.min(zone.name.length * 12 + 30, zone.w - 30)}
+        y={8}
+        onClick={handleDeleteClick}
+        onTap={handleDeleteClick}
       >
-        {zone.jurisdiction} · {zone.currency}
-      </div>
+        <Rect width={20} height={20} fill="transparent" />
+        <Text
+          text="\u2715"
+          fontSize={14}
+          fill={isSelected ? 'rgba(255,255,255,0.7)' : '#dc2626'}
+          align="center"
+          width={20}
+        />
+      </Group>
 
-      {/* Resize handle — bottom-right corner */}
-      <div
-        onPointerDown={handleResizePointerDown}
-        style={{
-          position: 'absolute',
-          right: 0,
-          bottom: 0,
-          width: 18,
-          height: 18,
-          cursor: 'nwse-resize',
-          pointerEvents: 'auto',
-          touchAction: 'none',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
+      {/* Jurisdiction badge (top-right) */}
+      <Group x={zone.w - badgeText.length * 6 - 16} y={12} listening={false}>
+        <Rect
+          width={badgeText.length * 6 + 16}
+          height={18}
+          fill={`${borderColor}`}
+          opacity={0.15}
+          cornerRadius={4}
+        />
+        <Text
+          x={8}
+          y={3}
+          text={badgeText}
+          fontSize={11}
+          fontStyle="bold"
+          fill={borderColor}
+          opacity={0.6}
+        />
+      </Group>
+
+      {/* Resize handle (bottom-right) */}
+      <Group
+        x={zone.w - RESIZE_HANDLE_SIZE}
+        y={zone.h - RESIZE_HANDLE_SIZE}
+        draggable
+        onDragStart={handleResizeDragStart}
+        onDragMove={handleResizeDragMove}
+        onDragEnd={handleResizeDragEnd}
       >
-        <svg width="10" height="10" viewBox="0 0 10 10" style={{ opacity: 0.4 }}>
-          <line x1="9" y1="1" x2="1" y2="9" stroke={borderColor} strokeWidth="1.5" />
-          <line x1="9" y1="5" x2="5" y2="9" stroke={borderColor} strokeWidth="1.5" />
-        </svg>
-      </div>
-    </div>
+        <Rect width={RESIZE_HANDLE_SIZE} height={RESIZE_HANDLE_SIZE} fill="transparent" />
+        <Line
+          points={[RESIZE_HANDLE_SIZE - 1, 1, 1, RESIZE_HANDLE_SIZE - 1]}
+          stroke={borderColor}
+          strokeWidth={1.5}
+          opacity={0.4}
+        />
+        <Line
+          points={[RESIZE_HANDLE_SIZE - 1, 5, 5, RESIZE_HANDLE_SIZE - 1]}
+          stroke={borderColor}
+          strokeWidth={1.5}
+          opacity={0.4}
+        />
+      </Group>
+
+      {/* Children (sub-zones and nodes) rendered inside this Group —
+          Konva handles hierarchical movement automatically */}
+      {children}
+    </Group>
   );
 });

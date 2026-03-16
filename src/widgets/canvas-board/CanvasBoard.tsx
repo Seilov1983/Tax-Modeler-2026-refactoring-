@@ -1,21 +1,27 @@
 'use client';
 
 /**
- * CanvasBoard Widget — renders all zones, nodes, flow arrows, ownership lines,
- * minimap, and zoom controls.
+ * CanvasBoard Widget — React Konva-based canvas with multi-layer rendering.
  *
  * Integrates:
+ * - Konva <Stage> + <Layer> for GPU-accelerated 2D rendering
  * - Jotai splitAtom for per-node rendering isolation
- * - Transient drag state pattern (via CanvasNode)
- * - Local Suspense per node/flow for async tax badge rendering
- * - useCanvasViewport for 60 FPS pan & zoom via direct DOM manipulation
+ * - useCanvasViewport for 60 FPS pan & zoom via Konva Stage
  * - Draft connection line for interactive flow/ownership creation
  * - viewportAtom sync (rAF-throttled) for minimap + zoom controls
  * - Context-aware creation: strict hierarchy Country > Regime > Node
+ * - Hierarchical zone nesting via parentId + Konva <Group>
+ *
+ * Layer architecture (from bottom to top):
+ *   Layer 1 (static):  Grid background (cached for perf)
+ *   Layer 2 (zones):   Country zones, sub-zones with nested children
+ *   Layer 3 (nodes):   Companies, Persons, TXA nodes
+ *   Layer 4 (arrows):  Flows, ownership lines, draft connections
  */
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { Stage, Layer, Rect, Shape, Line } from 'react-konva';
 import { nodeAtomsAtom, nodesAtom } from '@entities/node';
 import { flowsAtom } from '@entities/flow';
 import { zonesAtom } from '@entities/zone';
@@ -38,6 +44,8 @@ import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSumm
 import { ProjectHeader } from '@features/project-management';
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
 import type { JurisdictionCode, CurrencyCode, Zone } from '@shared/types';
+import type Konva from 'konva';
+import type { KonvaEventObject } from 'konva/lib/Node';
 
 // ─── Context menu types ─────────────────────────────────────────────────────
 
@@ -45,6 +53,31 @@ type ContextMenuTarget =
   | { kind: 'empty'; x: number; y: number; canvasX: number; canvasY: number }
   | { kind: 'country'; x: number; y: number; canvasX: number; canvasY: number; zone: Zone }
   | { kind: 'regime'; x: number; y: number; canvasX: number; canvasY: number; zone: Zone };
+
+// ─── Grid pattern renderer (cached) ─────────────────────────────────────────
+
+const GRID_SIZE = 24;
+const GRID_COLOR = 'rgba(0,0,0,0.04)';
+
+function GridBackground({ width, height }: { width: number; height: number }) {
+  return (
+    <Shape
+      sceneFunc={(ctx) => {
+        ctx.fillStyle = GRID_COLOR;
+        for (let x = 0; x < width; x += GRID_SIZE) {
+          for (let y = 0; y < height; y += GRID_SIZE) {
+            ctx.beginPath();
+            ctx.arc(x, y, 0.8, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }}
+      listening={false}
+    />
+  );
+}
+
+// ─── Main Component ─────────────────────────────────────────────────────────
 
 export function CanvasBoard() {
   const zones = useAtomValue(zonesAtom);
@@ -57,151 +90,154 @@ export function CanvasBoard() {
   const selectionRef = useRef(currentSelection);
   selectionRef.current = currentSelection;
 
-  // Global keyboard shortcuts (Undo, Redo, Delete, Escape)
   useKeyboardShortcuts();
   const addNode = useSetAtom(addNodeAtom);
   const addZone = useSetAtom(addZoneAtom);
   const [draft, setDraft] = useAtom(draftConnectionAtom);
   const setViewport = useSetAtom(viewportAtom);
 
-  // ─── Viewport refs (pan & zoom via direct DOM mutation, zero re-renders) ──
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const boardRef = useRef<HTMLDivElement>(null);
+  // ─── Konva Stage ref ──────────────────────────────────────────────────
+  const stageRef = useRef<Konva.Stage>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [stageSize, setStageSize] = useState({ width: 1200, height: 800 });
 
-  // Sync imperative ref → Jotai atom (rAF-throttled inside the hook)
+  // Resize Stage to fill viewport
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        setStageSize({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight,
+        });
+      }
+    };
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
+
+  // ─── Viewport (pan & zoom) ─────────────────────────────────────────────
   const { stateRef: viewportStateRef, zoomBy, panTo, resetViewport } = useCanvasViewport(
-    viewportRef,
-    boardRef,
+    stageRef,
     setViewport,
   );
 
-  // ─── Zoom callbacks for CanvasControls ────────────────────────────────────
   const handleZoomIn = useCallback(() => zoomBy(1.25), [zoomBy]);
   const handleZoomOut = useCallback(() => zoomBy(0.8), [zoomBy]);
 
-  // ─── Center camera when project has no nodes (empty canvas first load) ───
-  const centeredRef = useRef(false);
-  useEffect(() => {
-    if (centeredRef.current) return;
-    if (nodes.length === 0 && viewportRef.current) {
-      centeredRef.current = true;
-      const rect = viewportRef.current.getBoundingClientRect();
-      panTo(rect.width / 2, rect.height / 2);
-    }
-  }, [nodes.length, panTo]);
-
-  // ─── Draft connection path ref (transient DOM mutation for 60 FPS) ────────
-  const draftPathRef = useRef<SVGPathElement>(null);
-
-  // ─── Lasso (rubber-band) multi-select ────────────────────────────────────
-  const lassoStartRef = useRef<{ x: number; y: number } | null>(null);
-  const [lassoRect, setLassoRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-
-  // Deselect when clicking empty canvas area (only if no lasso drag happened)
-  const lassoDraggedRef = useRef(false);
-  const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
-    if (lassoDraggedRef.current) return; // lasso drag, don't deselect
-    setSelection(null);
-    setContextMenu(null);
-  }, [setSelection]);
-
-  // Convert client coordinates to canvas-space coordinates
+  // ─── Convert client coords to canvas-space ────────────────────────────
   const clientToCanvas = useCallback(
     (clientX: number, clientY: number) => {
-      const vp = viewportRef.current;
+      const stage = stageRef.current;
+      if (!stage) return { x: clientX, y: clientY };
+      const pos = stage.getPointerPosition();
+      if (pos) {
+        const transform = stage.getAbsoluteTransform().copy().invert();
+        return transform.point(pos);
+      }
+      // Fallback
+      const container = stage.container();
+      const rect = container.getBoundingClientRect();
       const state = viewportStateRef.current;
-      if (!vp || !state) return { x: clientX, y: clientY };
-      const rect = vp.getBoundingClientRect();
       return {
         x: (clientX - rect.left - state.panX) / state.scale,
         y: (clientY - rect.top - state.panY) / state.scale,
       };
     },
-    [viewportRef, viewportStateRef],
+    [viewportStateRef],
   );
 
-  // ─── Context menu state (popover on double-click / right-click) ──────────
+  // ─── Context menu ─────────────────────────────────────────────────────
   const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
 
-  // ─── Determine context based on click position (hierarchy-aware) ─────────
   const detectClickContext = useCallback(
     (canvasX: number, canvasY: number, clientX: number, clientY: number): ContextMenuTarget => {
-      // Find all zones containing the click point
       const hitZones = zones.filter((z) => pointInZone(canvasX, canvasY, z));
 
       if (hitZones.length === 0) {
-        // Empty canvas: only allow "Add Country"
         return { kind: 'empty', x: clientX, y: clientY, canvasX, canvasY };
       }
 
-      // Sort by area ascending (smallest first = most specific)
       hitZones.sort((a, b) => zoneArea(a) - zoneArea(b));
       const smallestZone = hitZones[0];
 
-      // Check if this zone is a "country" (has child sub-zones) or a "regime" (leaf)
-      const isCountry = zones.some((z) => {
-        if (z.id === smallestZone.id) return false;
-        if (zoneArea(z) >= zoneArea(smallestZone)) return false;
-        const cx = z.x + z.w / 2;
-        const cy = z.y + z.h / 2;
-        return pointInZone(cx, cy, smallestZone);
-      });
+      // Check if this zone has child sub-zones (country vs regime)
+      const isCountry = zones.some((z) => z.parentId === smallestZone.id) ||
+        zones.some((z) => {
+          if (z.id === smallestZone.id) return false;
+          if (zoneArea(z) >= zoneArea(smallestZone)) return false;
+          const cx = z.x + z.w / 2;
+          const cy = z.y + z.h / 2;
+          return pointInZone(cx, cy, smallestZone);
+        });
 
       if (isCountry) {
         return { kind: 'country', x: clientX, y: clientY, canvasX, canvasY, zone: smallestZone };
       }
 
-      // It's a leaf zone (regime/sub-zone) → allow adding nodes
       return { kind: 'regime', x: clientX, y: clientY, canvasX, canvasY, zone: smallestZone };
     },
     [zones],
   );
 
-  // ─── Double-click on empty canvas → open context menu ───────────────────
-  const handleDoubleClick = useCallback(
-    (e: React.MouseEvent) => {
-      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
-      if ((e.target as HTMLElement).closest('.canvas-node')) return;
-      if ((e.target as HTMLElement).closest('button')) return;
+  // ─── Stage double-click → context menu ────────────────────────────────
+  const handleStageDblClick = useCallback(
+    (e: KonvaEventObject<MouseEvent>) => {
+      const stage = stageRef.current;
+      if (!stage) return;
 
-      // Prevent event from reaching other handlers that might reset the viewport
-      e.stopPropagation();
-      e.preventDefault();
+      const evt = e.evt;
+      evt.stopPropagation();
+      evt.preventDefault();
 
-      const { x, y } = clientToCanvas(e.clientX, e.clientY);
-      const canvasX = Math.round(x - NODE_WIDTH / 2);
-      const canvasY = Math.round(y - NODE_HEIGHT / 2);
-      const ctx = detectClickContext(x, y, e.clientX, e.clientY);
-      // Override canvasX/canvasY for node placement offset
-      if (ctx.kind === 'empty') {
-        setContextMenu({ ...ctx, canvasX, canvasY });
-      } else {
-        setContextMenu({ ...ctx, canvasX, canvasY });
-      }
-    },
-    [clientToCanvas, detectClickContext],
-  );
+      const pos = stage.getPointerPosition();
+      if (!pos) return;
+      const transform = stage.getAbsoluteTransform().copy().invert();
+      const canvasPos = transform.point(pos);
 
-  // ─── Right-click context menu ────────────────────────────────────────────
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
-      if ((e.target as HTMLElement).closest('.canvas-node')) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      const { x, y } = clientToCanvas(e.clientX, e.clientY);
-      const ctx = detectClickContext(x, y, e.clientX, e.clientY);
-      const canvasX = Math.round(x - NODE_WIDTH / 2);
-      const canvasY = Math.round(y - NODE_HEIGHT / 2);
+      const canvasX = Math.round(canvasPos.x - NODE_WIDTH / 2);
+      const canvasY = Math.round(canvasPos.y - NODE_HEIGHT / 2);
+      const ctx = detectClickContext(canvasPos.x, canvasPos.y, evt.clientX, evt.clientY);
       setContextMenu({ ...ctx, canvasX, canvasY });
     },
-    [clientToCanvas, detectClickContext],
+    [detectClickContext],
   );
 
-  // ─── Context menu action handlers ────────────────────────────────────────
+  // ─── Stage click → deselect ────────────────────────────────────────────
+  const handleStageClick = useCallback(
+    (e: KonvaEventObject<MouseEvent>) => {
+      // Only deselect if clicking directly on Stage (empty area)
+      if (e.target === e.target.getStage()) {
+        setSelection(null);
+        setContextMenu(null);
+      }
+    },
+    [setSelection],
+  );
+
+  // ─── Right-click context menu ────────────────────────────────────────
+  const handleContextMenu = useCallback(
+    (e: KonvaEventObject<PointerEvent>) => {
+      const evt = e.evt;
+      evt.preventDefault();
+      evt.stopPropagation();
+
+      const stage = stageRef.current;
+      if (!stage) return;
+      const pos = stage.getPointerPosition();
+      if (!pos) return;
+      const transform = stage.getAbsoluteTransform().copy().invert();
+      const canvasPos = transform.point(pos);
+
+      const canvasX = Math.round(canvasPos.x - NODE_WIDTH / 2);
+      const canvasY = Math.round(canvasPos.y - NODE_HEIGHT / 2);
+      const ctx = detectClickContext(canvasPos.x, canvasPos.y, evt.clientX, evt.clientY);
+      setContextMenu({ ...ctx, canvasX, canvasY });
+    },
+    [detectClickContext],
+  );
+
+  // ─── Context menu action handlers ──────────────────────────────────────
 
   const handleContextMenuCreate = useCallback(
     (type: 'company' | 'person') => {
@@ -225,6 +261,7 @@ export function CanvasBoard() {
       y: contextMenu.canvasY - 100,
       w: 600,
       h: 400,
+      parentId: null,
     });
     setContextMenu(null);
   }, [contextMenu, addZone]);
@@ -241,11 +278,12 @@ export function CanvasBoard() {
       y: contextMenu.canvasY - 50,
       w: 320,
       h: 250,
+      parentId: parentZone.id,
     });
     setContextMenu(null);
   }, [contextMenu, addZone]);
 
-  // ─── Drag & Drop: country from MasterDataModal → canvas zone ────────────
+  // ─── Drag & Drop from MasterDataModal ─────────────────────────────────
 
   const COUNTRY_CURRENCY: Record<string, CurrencyCode> = {
     KZ: 'KZT', UAE: 'AED', HK: 'HKD', CY: 'EUR', SG: 'SGD',
@@ -258,96 +296,43 @@ export function CanvasBoard() {
     e.dataTransfer.dropEffect = 'copy';
   }, []);
 
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-  }, []);
-
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
 
-      const { x, y } = clientToCanvas(e.clientX, e.clientY);
+      const state = viewportStateRef.current;
+      const container = containerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const x = (e.clientX - rect.left - state.panX) / state.scale;
+      const y = (e.clientY - rect.top - state.panY) / state.scale;
 
-      // Check if this is a regime drop (sub-zone)
+      // Regime drop
       const regimeId = e.dataTransfer.getData('application/tax-regime-id');
       const regimeName = e.dataTransfer.getData('application/tax-regime-name');
       const regimeCountryId = e.dataTransfer.getData('application/tax-regime-country-id');
 
       if (regimeId && regimeCountryId) {
-        // Validate: regime can only be dropped inside a country zone
-        const hitZones = zones.filter((z) => pointInZone(x, y, z));
-        const countryZone = hitZones.find((z) => z.jurisdiction === regimeCountryId);
-
-        // Create a smaller sub-zone for the regime
-        const parentZone = countryZone || zones.find((z) => z.jurisdiction === regimeCountryId);
-
-        // Calculate offset position so new regimes don't stack on each other.
-        // Count existing child regimes inside the parent to stagger placement.
-        let subX = parentZone ? parentZone.x + 30 : Math.round(x - 150);
-        let subY = parentZone ? parentZone.y + 60 : Math.round(y - 100);
-        if (parentZone) {
-          const parentArea = parentZone.w * parentZone.h;
-          const existingChildren = zones.filter((z) => {
-            if (z.id === parentZone.id) return false;
-            if (z.w * z.h >= parentArea) return false;
-            const cx = z.x + z.w / 2;
-            const cy = z.y + z.h / 2;
-            return pointInZone(cx, cy, parentZone);
-          });
-          // Place next to the rightmost existing child, or stagger down
-          if (existingChildren.length > 0) {
-            const rightmost = existingChildren.reduce((a, b) => (a.x + a.w > b.x + b.w ? a : b));
-            subX = rightmost.x + rightmost.w + 20;
-            subY = rightmost.y;
-            // If it would overflow the parent width, wrap to next row
-            if (subX + 320 > parentZone.x + parentZone.w - 10) {
-              subX = parentZone.x + 30;
-              const bottommost = existingChildren.reduce((a, b) => (a.y + a.h > b.y + b.h ? a : b));
-              subY = bottommost.y + bottommost.h + 20;
-            }
-          }
-        }
-
+        const parentZone = zones.find((z) => z.jurisdiction === regimeCountryId && !z.parentId);
         addZone({
           jurisdiction: regimeCountryId as JurisdictionCode,
           code: `${regimeCountryId}_${regimeId}`,
           name: regimeName || regimeId,
           currency: COUNTRY_CURRENCY[regimeCountryId] || 'USD',
-          x: subX,
-          y: subY,
+          x: parentZone ? parentZone.x + 30 : Math.round(x - 150),
+          y: parentZone ? parentZone.y + 60 : Math.round(y - 100),
           w: 320,
           h: 250,
+          parentId: parentZone?.id ?? null,
         });
         return;
       }
 
-      // Country drop → full-size zone
+      // Country drop
       const countryId = e.dataTransfer.getData('application/tax-country-id');
       const countryName = e.dataTransfer.getData('application/tax-country-name');
       if (!countryId) return;
-
-      // Validate: country cannot be dropped inside another country
-      const hitZones = zones.filter((z) => pointInZone(x, y, z));
-      if (hitZones.length > 0) {
-        // There's a zone at the drop location — check if dropping country inside country
-        const largestHit = [...hitZones].sort((a, b) => zoneArea(b) - zoneArea(a))[0];
-        if (largestHit) {
-          // Allow dropping but place outside existing zones
-          const rightEdge = Math.max(...zones.map((z) => z.x + z.w)) + 60;
-          addZone({
-            jurisdiction: countryId as JurisdictionCode,
-            code: `${countryId}_${Date.now().toString(36).toUpperCase()}`,
-            name: countryName || countryId,
-            currency: COUNTRY_CURRENCY[countryId] || 'USD',
-            x: rightEdge,
-            y: Math.round(y - 200),
-            w: 600,
-            h: 400,
-          });
-          return;
-        }
-      }
 
       addZone({
         jurisdiction: countryId as JurisdictionCode,
@@ -358,58 +343,68 @@ export function CanvasBoard() {
         y: Math.round(y - 200),
         w: 600,
         h: 400,
+        parentId: null,
       });
     },
-    [clientToCanvas, addZone, zones],
+    [viewportStateRef, addZone, zones],
   );
 
-  // ─── Lasso pointer handlers ────────────────────────────────────────────
-  const handleBoardPointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      // If the event originated from a UI overlay element, ignore it on the canvas level
-      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
-      // Only start lasso on left button on the background (not on nodes/ports)
-      if (e.button !== 0) return;
-      const target = e.target as HTMLElement;
-      // Don't start lasso if clicking on a node, port, flow, or control
-      if (target.closest('.canvas-node') || target.closest('[data-testid]') || target.closest('button')) return;
+  // ─── Lasso selection ──────────────────────────────────────────────────
+  const lassoStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [lassoRect, setLassoRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const lassoDraggedRef = useRef(false);
 
-      const coords = clientToCanvas(e.clientX, e.clientY);
-      lassoStartRef.current = coords;
+  const handleStageMouseDown = useCallback(
+    (e: KonvaEventObject<MouseEvent>) => {
+      // Only start lasso if clicking empty area (Stage itself)
+      if (e.target !== e.target.getStage()) return;
+      if (e.evt.button !== 0) return;
+
+      const stage = stageRef.current;
+      if (!stage) return;
+      const pos = stage.getPointerPosition();
+      if (!pos) return;
+      const transform = stage.getAbsoluteTransform().copy().invert();
+      const canvasPos = transform.point(pos);
+
+      lassoStartRef.current = canvasPos;
       lassoDraggedRef.current = false;
-      setLassoRect({ x: coords.x, y: coords.y, w: 0, h: 0 });
+      setLassoRect({ x: canvasPos.x, y: canvasPos.y, w: 0, h: 0 });
 
-      if (!e.shiftKey) {
+      if (!e.evt.shiftKey) {
         setSelection(null);
       }
     },
-    [clientToCanvas, setSelection],
+    [setSelection],
   );
 
-  const handleBoardPointerMove = useCallback(
-    (e: React.PointerEvent) => {
+  const handleStageMouseMove = useCallback(
+    (e: KonvaEventObject<MouseEvent>) => {
       if (!lassoStartRef.current) return;
 
-      const current = clientToCanvas(e.clientX, e.clientY);
+      const stage = stageRef.current;
+      if (!stage) return;
+      const pos = stage.getPointerPosition();
+      if (!pos) return;
+      const transform = stage.getAbsoluteTransform().copy().invert();
+      const current = transform.point(pos);
       const start = lassoStartRef.current;
 
-      const x = Math.min(start.x, current.x);
-      const y = Math.min(start.y, current.y);
-      const w = Math.abs(current.x - start.x);
-      const h = Math.abs(current.y - start.y);
+      const lx = Math.min(start.x, current.x);
+      const ly = Math.min(start.y, current.y);
+      const lw = Math.abs(current.x - start.x);
+      const lh = Math.abs(current.y - start.y);
 
-      // Only mark as dragged if the rect is big enough (avoids accidental lasso on click)
-      if (w > 5 || h > 5) {
+      if (lw > 5 || lh > 5) {
         lassoDraggedRef.current = true;
       }
-
-      setLassoRect({ x, y, w, h });
+      setLassoRect({ x: lx, y: ly, w: lw, h: lh });
     },
-    [clientToCanvas],
+    [],
   );
 
-  const handleBoardPointerUp = useCallback(
-    (e: React.PointerEvent) => {
+  const handleStageMouseUp = useCallback(
+    (e: KonvaEventObject<MouseEvent>) => {
       if (!lassoStartRef.current) return;
 
       const rect = lassoRect;
@@ -418,22 +413,18 @@ export function CanvasBoard() {
 
       if (!rect || (rect.w < 5 && rect.h < 5)) return;
 
-      // AABB collision: find all nodes intersecting the lasso rect
       const hitIds = nodes
-        .filter((n) => {
-          return (
-            n.x < rect.x + rect.w &&
-            n.x + n.w > rect.x &&
-            n.y < rect.y + rect.h &&
-            n.y + n.h > rect.y
-          );
-        })
+        .filter((n) =>
+          n.x < rect.x + rect.w &&
+          n.x + n.w > rect.x &&
+          n.y < rect.y + rect.h &&
+          n.y + n.h > rect.y
+        )
         .map((n) => n.id);
 
       if (hitIds.length === 0) return;
 
-      if (e.shiftKey) {
-        // Merge with existing node selection
+      if (e.evt.shiftKey) {
         const sel = selectionRef.current;
         const existing = sel?.type === 'node' ? sel.ids : [];
         const merged = [...new Set([...existing, ...hitIds])];
@@ -445,38 +436,40 @@ export function CanvasBoard() {
     [lassoRect, nodes, setSelection],
   );
 
-  // Compute source node port for the draft path start (depends on connection type)
+  // ─── Draft connection (transient Bezier during port drag) ──────────────
   const sourceNode = draft ? nodes.find((n) => n.id === draft.sourceNodeId) : null;
   const isFlowDraft = draft?.connectionType === 'flow';
-  // Flow: right-edge center; Ownership: bottom-center
   const srcX = sourceNode
-    ? isFlowDraft
-      ? sourceNode.x + sourceNode.w
-      : sourceNode.x + sourceNode.w / 2
+    ? isFlowDraft ? sourceNode.x + sourceNode.w : sourceNode.x + sourceNode.w / 2
     : 0;
   const srcY = sourceNode
-    ? isFlowDraft
-      ? sourceNode.y + sourceNode.h / 2
-      : sourceNode.y + sourceNode.h
+    ? isFlowDraft ? sourceNode.y + sourceNode.h / 2 : sourceNode.y + sourceNode.h
     : 0;
 
-  // Track pointer movement and update the draft Bezier path via direct DOM mutation
-  useEffect(() => {
-    if (!draft || !sourceNode) return;
+  // Track pointer for draft connection
+  const [draftEnd, setDraftEnd] = useState<{ x: number; y: number } | null>(null);
 
-    const isFlow = draft.connectionType === 'flow';
-    const sx = isFlow ? sourceNode.x + sourceNode.w : sourceNode.x + sourceNode.w / 2;
-    const sy = isFlow ? sourceNode.y + sourceNode.h / 2 : sourceNode.y + sourceNode.h;
-    const pathBuilder = isFlow ? buildBezierPath : buildVerticalBezierPath;
+  useEffect(() => {
+    if (!draft || !sourceNode) {
+      setDraftEnd(null);
+      return;
+    }
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!draftPathRef.current) return;
-      const canvas = clientToCanvas(e.clientX, e.clientY);
-      draftPathRef.current.setAttribute('d', pathBuilder(sx, sy, canvas.x, canvas.y));
+      const stage = stageRef.current;
+      if (!stage) return;
+      const container = stage.container();
+      const rect = container.getBoundingClientRect();
+      const state = viewportStateRef.current;
+      setDraftEnd({
+        x: (e.clientX - rect.left - state.panX) / state.scale,
+        y: (e.clientY - rect.top - state.panY) / state.scale,
+      });
     };
 
     const onPointerUp = () => {
       setDraft(null);
+      setDraftEnd(null);
     };
 
     window.addEventListener('pointermove', onPointerMove);
@@ -485,17 +478,29 @@ export function CanvasBoard() {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [draft, sourceNode, clientToCanvas, setDraft]);
+  }, [draft, sourceNode, viewportStateRef, setDraft]);
 
-  // Choose the correct path builder for the initial d attribute
-  const initialPath = isFlowDraft
-    ? buildBezierPath(srcX, srcY, srcX, srcY)
-    : buildVerticalBezierPath(srcX, srcY, srcX, srcY);
+  // ─── Build hierarchical zone tree ──────────────────────────────────────
+  // Top-level zones: zones without parentId
+  const topLevelZones = useMemo(
+    () => zones.filter((z) => !z.parentId),
+    [zones],
+  );
 
-  // Draft stroke color: blue for flow, purple for ownership
-  const draftStroke = isFlowDraft ? '#3b82f6' : '#a855f7';
+  // Child zones: zones with parentId
+  const childZonesByParent = useMemo(() => {
+    const map = new Map<string, Zone[]>();
+    for (const z of zones) {
+      if (z.parentId) {
+        const children = map.get(z.parentId) || [];
+        children.push(z);
+        map.set(z.parentId, children);
+      }
+    }
+    return map;
+  }, [zones]);
 
-  // ─── Context menu button style helper ──────────────────────────────────
+  // ─── Context menu button style ────────────────────────────────────────
   const menuBtnStyle: React.CSSProperties = {
     display: 'block', width: '100%', padding: '8px 12px',
     background: 'none', border: 'none', cursor: 'pointer',
@@ -505,136 +510,129 @@ export function CanvasBoard() {
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      {/* Project header — fixed to top of window */}
       <ProjectHeader />
 
       <div
-        ref={viewportRef}
-        id="viewport"
-        onClick={handleBackgroundClick}
-        onDoubleClick={handleDoubleClick}
-        onContextMenu={handleContextMenu}
-        onPointerDown={handleBoardPointerDown}
-        onPointerMove={handleBoardPointerMove}
-        onPointerUp={handleBoardPointerUp}
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragEnter}
-        onDrop={handleDrop}
+        ref={containerRef}
         style={{ position: 'fixed', top: '48px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
       >
-        <div
-          ref={boardRef}
-          id="canvas-render-area"
-          style={{ position: 'absolute', transformOrigin: '0 0' }}
+        <Stage
+          ref={stageRef}
+          width={stageSize.width}
+          height={stageSize.height}
+          onClick={handleStageClick}
+          onDblClick={handleStageDblClick}
+          onContextMenu={handleContextMenu}
+          onMouseDown={handleStageMouseDown}
+          onMouseMove={handleStageMouseMove}
+          onMouseUp={handleStageMouseUp}
         >
-          {/* ── Z-Index Layer Hierarchy ──
-               Country zones:  z-index 10  (background)
-               Sub-zones:      z-index 20  (regimes inside countries)
-               Nodes:          z-index 30  (companies, persons, TXA)
-               Arrows (SVG):   z-index 40  (flows, ownership lines)
-          */}
+          {/* Layer 1: Static grid background (cacheable) */}
+          <Layer listening={false}>
+            <GridBackground width={8000} height={6000} />
+          </Layer>
 
-          {/* Country Zones Layer (z-index: 10) — large background zones */}
-          <div id="zones-layer-main" style={{ position: 'relative', zIndex: 10 }}>
-            {zones.filter((z) => z.w >= 400).map((zone) => (
-              <CanvasZone key={zone.id} zone={zone} viewportStateRef={viewportStateRef} />
+          {/* Layer 2: Zones (hierarchical — parent Group contains children) */}
+          <Layer>
+            {topLevelZones.map((zone) => (
+              <CanvasZone key={zone.id} zone={zone}>
+                {/* Render child sub-zones inside parent Group */}
+                {(childZonesByParent.get(zone.id) || []).map((childZone) => (
+                  <CanvasZone
+                    key={childZone.id}
+                    zone={{
+                      ...childZone,
+                      // Convert to local coordinates relative to parent
+                      x: childZone.x - zone.x,
+                      y: childZone.y - zone.y,
+                    }}
+                  />
+                ))}
+              </CanvasZone>
             ))}
-          </div>
 
-          {/* Sub-Zones / Regimes Layer (z-index: 20) — smaller nested zones */}
-          <div id="zones-layer-sub" style={{ position: 'relative', zIndex: 20 }}>
-            {zones.filter((z) => z.w < 400).map((zone) => (
-              <CanvasZone key={zone.id} zone={zone} viewportStateRef={viewportStateRef} />
-            ))}
-          </div>
+            {/* Orphan zones (parentId set but parent doesn't exist) */}
+            {zones
+              .filter((z) => z.parentId && !zones.some((p) => p.id === z.parentId))
+              .map((zone) => (
+                <CanvasZone key={zone.id} zone={zone} />
+              ))}
+          </Layer>
 
-          {/* Nodes Layer (z-index: 30) — each node has its own atom for isolated re-renders */}
-          <div id="nodes-layer" style={{ position: 'relative', zIndex: 30 }}>
+          {/* Layer 3: Nodes (each with its own atom for isolated re-renders) */}
+          <Layer>
             {nodeAtoms.map((nodeAtom) => (
-              <CanvasNode
-                key={`${nodeAtom}`}
-                nodeAtom={nodeAtom}
-                viewportStateRef={viewportStateRef}
-              />
+              <CanvasNode key={`${nodeAtom}`} nodeAtom={nodeAtom} />
             ))}
-          </div>
+          </Layer>
 
-          {/* Arrows Layer (SVG, z-index: 40) — flows, ownership lines, draft connection */}
-          <svg
-            id="arrows-layer"
-            style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, overflow: 'visible', pointerEvents: 'none', zIndex: 40 }}
-          >
-            <defs>
-              <marker
-                id="arrowhead"
-                markerWidth="8"
-                markerHeight="6"
-                refX="8"
-                refY="3"
-                orient="auto"
-              >
-                <polygon points="0 0, 8 3, 0 6" fill="var(--stroke, #94a3b8)" />
-              </marker>
-            </defs>
-
-            {/* Flow arrows (horizontal Bezier, solid) */}
+          {/* Layer 4: Arrows (flows, ownership, draft connection, lasso) */}
+          <Layer listening={false}>
+            {/* Flow arrows */}
             {flows.map((flow) => (
               <CanvasFlow key={flow.id} flow={flow} nodes={nodes} />
             ))}
 
-            {/* Ownership lines (vertical Bezier, dashed purple) */}
+            {/* Ownership lines */}
             {ownership.map((edge) => (
               <CanvasOwnership key={edge.id} edge={edge} nodes={nodes} />
             ))}
 
-            {/* Draft connection path — transient Bezier, mutated via ref */}
-            {draft && sourceNode && (
-              <path
-                ref={draftPathRef}
-                d={initialPath}
-                stroke={draftStroke}
+            {/* Draft connection line */}
+            {draft && sourceNode && draftEnd && (
+              <Shape
+                sceneFunc={(ctx, shape) => {
+                  const ex = draftEnd.x;
+                  const ey = draftEnd.y;
+
+                  if (isFlowDraft) {
+                    const dx = Math.abs(ex - srcX);
+                    const cpOffset = Math.max(dx * 0.45, 50);
+                    ctx.beginPath();
+                    ctx.moveTo(srcX, srcY);
+                    ctx.bezierCurveTo(srcX + cpOffset, srcY, ex - cpOffset, ey, ex, ey);
+                  } else {
+                    const dy = Math.abs(ey - srcY);
+                    const cpOffset = Math.max(dy * 0.45, 50);
+                    ctx.beginPath();
+                    ctx.moveTo(srcX, srcY);
+                    ctx.bezierCurveTo(srcX, srcY + cpOffset, ex, ey - cpOffset, ex, ey);
+                  }
+                  ctx.strokeShape(shape);
+                }}
+                stroke={isFlowDraft ? '#3b82f6' : '#a855f7'}
                 strokeWidth={2}
-                strokeDasharray="6 3"
-                fill="none"
-                pointerEvents="none"
+                dash={[6, 3]}
+                listening={false}
               />
             )}
-          </svg>
 
-          {/* Lasso selection rectangle — rendered in canvas-space */}
-          {lassoRect && lassoRect.w > 2 && lassoRect.h > 2 && (
-            <div
-              style={{
-                position: 'absolute',
-                left: lassoRect.x,
-                top: lassoRect.y,
-                width: lassoRect.w,
-                height: lassoRect.h,
-                border: '1px solid #3b82f6',
-                background: 'rgba(59, 130, 246, 0.1)',
-                pointerEvents: 'none',
-                zIndex: 50,
-              }}
-            />
-          )}
-        </div>
+            {/* Lasso selection rectangle */}
+            {lassoRect && lassoRect.w > 2 && lassoRect.h > 2 && (
+              <Rect
+                x={lassoRect.x}
+                y={lassoRect.y}
+                width={lassoRect.w}
+                height={lassoRect.h}
+                stroke="#3b82f6"
+                strokeWidth={1}
+                fill="rgba(59, 130, 246, 0.1)"
+                listening={false}
+              />
+            )}
+          </Layer>
+        </Stage>
 
-        {/* Executive Summary — top-right */}
+        {/* HTML overlays positioned on top of Konva Stage */}
         <GlobalSummaryWidget />
-
-        {/* Zoom Controls — bottom-left */}
         <CanvasControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={resetViewport} />
-
-        {/* Minimap — bottom-right */}
-        <Minimap onNavigate={panTo} viewportRef={viewportRef} />
-
-        {/* Audit Log Panel — outside zoom/pan area, fixed to bottom of viewport */}
+        <Minimap onNavigate={panTo} viewportRef={containerRef} />
         <AuditLogPanel />
-
-        {/* Property Panel — right sidebar for editing selected entity */}
         <EditorSidebar />
 
-        {/* Context menu popover — context-aware hierarchy menu */}
+        {/* Context menu popover (HTML, positioned above canvas) */}
         {contextMenu && (
           <div
             className="no-canvas-events"
@@ -652,7 +650,6 @@ export function CanvasBoard() {
             }}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            {/* Empty canvas → Add Country only */}
             {contextMenu.kind === 'empty' && (
               <button
                 onClick={handleAddCountryZone}
@@ -660,11 +657,10 @@ export function CanvasBoard() {
                 onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
                 onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
               >
-                {'\uD83C\uDF0D'} Add Country
+                Add Country
               </button>
             )}
 
-            {/* Inside a Country → Add Regime only */}
             {contextMenu.kind === 'country' && (
               <button
                 onClick={handleAddRegimeZone}
@@ -672,11 +668,10 @@ export function CanvasBoard() {
                 onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
                 onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
               >
-                {'\uD83D\uDCCB'} Add Regime
+                Add Regime
               </button>
             )}
 
-            {/* Inside a Regime → Add Company / Person */}
             {contextMenu.kind === 'regime' && (
               <>
                 <button
@@ -685,7 +680,7 @@ export function CanvasBoard() {
                   onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
                   onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
                 >
-                  {'\uD83C\uDFE2'} Add Company
+                  Add Company
                 </button>
                 <button
                   onClick={() => handleContextMenuCreate('person')}
@@ -693,7 +688,7 @@ export function CanvasBoard() {
                   onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
                   onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
                 >
-                  {'\uD83D\uDC64'} Add Person
+                  Add Person
                 </button>
               </>
             )}

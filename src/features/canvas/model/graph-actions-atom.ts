@@ -239,9 +239,6 @@ export const moveNodesAtom = atom(
       if (!prev) return prev;
       return { ...prev, nodes: prev.nodes.map(updateNode) };
     });
-
-    // Physics runs ONLY here (drop phase) — never during transient drag
-    set(physicsAtom);
   },
 );
 
@@ -280,6 +277,8 @@ export interface AddZonePayload {
   y: number;
   w?: number;
   h?: number;
+  /** Explicit parent zone id for strict hierarchy (Country → Regime). */
+  parentId?: string | null;
 }
 
 const ZONE_DEFAULTS: Record<string, { w: number; h: number }> = {
@@ -312,6 +311,7 @@ export const addZoneAtom = atom(
       w: payload.w ?? defaults.w,
       h: payload.h ?? defaults.h,
       zIndex: existingZones.length,
+      parentId: payload.parentId ?? null,
     };
 
     set(zonesAtom, (prev) => [...prev, newZone]);
@@ -320,8 +320,6 @@ export const addZoneAtom = atom(
       return { ...prev, zones: [...prev.zones, newZone] };
     });
 
-    // Physics runs ONLY here (drop phase) — never during transient drag
-    set(physicsAtom);
   },
 );
 
@@ -343,16 +341,30 @@ export const moveZoneAtom = atom(
 
     if (dx === 0 && dy === 0) return;
 
-    // Find child sub-zones: smaller zones whose center lies inside the moved zone
+    // Find child sub-zones using explicit parentId (O(n) instead of O(n²))
     const childZoneIds = new Set<string>();
-    const movedArea = zoneArea(movedZone);
-    for (const z of zones) {
-      if (z.id === movedZone.id) continue;
-      if (zoneArea(z) >= movedArea) continue;
-      const cx = z.x + z.w / 2;
-      const cy = z.y + z.h / 2;
-      if (pointInZone(cx, cy, movedZone)) {
-        childZoneIds.add(z.id);
+    const collectDescendants = (parentId: string) => {
+      for (const z of zones) {
+        if (z.parentId === parentId && !childZoneIds.has(z.id)) {
+          childZoneIds.add(z.id);
+          collectDescendants(z.id);
+        }
+      }
+    };
+    collectDescendants(movedZone.id);
+
+    // Fallback: if no parentId-based children found, use spatial detection
+    // for backwards compatibility with zones that don't have parentId set yet
+    if (childZoneIds.size === 0) {
+      const movedArea = zoneArea(movedZone);
+      for (const z of zones) {
+        if (z.id === movedZone.id) continue;
+        if (zoneArea(z) >= movedArea) continue;
+        const cx = z.x + z.w / 2;
+        const cy = z.y + z.h / 2;
+        if (pointInZone(cx, cy, movedZone)) {
+          childZoneIds.add(z.id);
+        }
       }
     }
 
@@ -390,8 +402,6 @@ export const moveZoneAtom = atom(
       };
     });
 
-    // Physics runs ONLY here (drop phase) — never during transient drag
-    set(physicsAtom);
   },
 );
 
@@ -414,9 +424,6 @@ export const resizeZoneAtom = atom(
         ),
       };
     });
-
-    // Physics runs ONLY here (drop phase) — never during transient drag
-    set(physicsAtom);
   },
 );
 
@@ -447,192 +454,6 @@ export const deleteZoneAtom = atom(
     const sel = get(selectionAtom);
     if (sel?.type === 'zone' && sel.id === zoneId) {
       set(selectionAtom, null);
-    }
-  },
-);
-
-// ─── Physics: Auto-Resize Country Bounds ──────────────────────────────────
-
-const PHYSICS_PADDING = 40;
-const DEFAULT_COUNTRY_WIDTH = 200;
-const DEFAULT_COUNTRY_HEIGHT = 150;
-
-/**
- * Recalculate a country zone's bounds to encompass all child regime sub-zones.
- * Returns updated zones array. Does NOT mutate input.
- *
- * CRITICAL RULES (idempotent, no feedback loop):
- *   - country.x / country.y are NEVER shifted — origin stays stable.
- *   - Width/height can only GROW to fit children, never SHRINK below the
- *     current user-set size. This prevents the "manual resize gets undone"
- *     bug where the user enlarges a country and physics immediately collapses it.
- *   - This function is ONLY called in the drop phase (physicsAtom).
- */
-function recalculateCountryBounds(zones: Zone[]): Zone[] {
-  const updated = zones.map((z) => ({ ...z }));
-  // Snapshot original areas for parent/child detection — immutable during iteration
-  const areaMap = new Map(zones.map((z) => [z.id, z.w * z.h]));
-
-  for (const country of updated) {
-    const countryArea = areaMap.get(country.id) || 0;
-
-    // Find child sub-zones: smaller zones whose center is inside this country.
-    // Use ORIGINAL country bounds (from input) for containment — avoids
-    // cascading shrink where a previously-resized country excludes children.
-    const orig = zones.find((z) => z.id === country.id)!;
-    const children = updated.filter((z) => {
-      if (z.id === country.id) return false;
-      const childArea = areaMap.get(z.id) || 0;
-      if (childArea >= countryArea) return false;
-      const cx = z.x + z.w / 2;
-      const cy = z.y + z.h / 2;
-      return cx >= orig.x && cx <= orig.x + orig.w &&
-             cy >= orig.y && cy <= orig.y + orig.h;
-    });
-
-    if (children.length === 0) continue;
-
-    // Absolute child boundaries
-    const maxRightEdge = Math.max(...children.map((c) => c.x + c.w));
-    const maxBottomEdge = Math.max(...children.map((c) => c.y + c.h));
-
-    // Only GROW to fit children — never shrink below current size.
-    // Math.max(current, needed) preserves user's manual resize as a floor.
-    const neededW = maxRightEdge - country.x + PHYSICS_PADDING;
-    const neededH = maxBottomEdge - country.y + PHYSICS_PADDING;
-    country.w = Math.max(country.w, neededW);
-    country.h = Math.max(country.h, neededH);
-  }
-
-  return updated;
-}
-
-/**
- * Resolve collisions between top-level (country) zones by pushing overlapping
- * countries to the right. Child sub-zones (regimes) are NOT treated as
- * independent collision participants — they only move when their parent moves.
- *
- * Sorts by x, iterates left-to-right. Max 10 iterations to prevent infinite loops.
- */
-function resolveCountryCollisions(zones: Zone[]): Zone[] {
-  const updated = zones.map((z) => ({ ...z }));
-
-  // Build parent/child relationships: a zone is a "child" if its center
-  // lies inside a larger zone. Top-level zones are those that are NOT children.
-  const childIds = new Set<string>();
-  for (const a of updated) {
-    for (const b of updated) {
-      if (a.id === b.id) continue;
-      if (a.w * a.h >= b.w * b.h) continue; // a is smaller than b
-      const cx = a.x + a.w / 2;
-      const cy = a.y + a.h / 2;
-      if (cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h) {
-        childIds.add(a.id); // a is inside b → a is a child
-        break; // a zone can only be a child of one parent
-      }
-    }
-  }
-
-  // Only top-level zones participate in collision resolution
-  const topLevel = updated.filter((z) => !childIds.has(z.id));
-
-  // If there's only one top-level zone, nothing to resolve
-  if (topLevel.length < 2) return updated;
-
-  // Sort by x position (left to right)
-  topLevel.sort((a, b) => a.x - b.x);
-
-  // Resolve collisions: push overlapping top-level zones right
-  for (let iter = 0; iter < 10; iter++) {
-    let anyCollision = false;
-    for (let i = 1; i < topLevel.length; i++) {
-      const prev = topLevel[i - 1];
-      const curr = topLevel[i];
-      // Check AABB overlap
-      const overlapX = prev.x + prev.w + PHYSICS_PADDING > curr.x;
-      const overlapY = !(prev.y + prev.h < curr.y || curr.y + curr.h < prev.y);
-      if (overlapX && overlapY) {
-        const shift = (prev.x + prev.w + PHYSICS_PADDING) - curr.x;
-        // Push curr right
-        curr.x = prev.x + prev.w + PHYSICS_PADDING;
-        // Also shift child sub-zones inside this country by the same amount
-        for (const z of updated) {
-          if (z.id === curr.id) continue;
-          if (!childIds.has(z.id)) continue; // only shift children
-          const cx = z.x + z.w / 2;
-          const cy = z.y + z.h / 2;
-          if (cx >= curr.x - shift && cx <= curr.x - shift + curr.w &&
-              cy >= curr.y && cy <= curr.y + curr.h) {
-            z.x += shift;
-          }
-        }
-        anyCollision = true;
-      }
-    }
-    if (!anyCollision) break;
-    // Re-sort after shifts
-    topLevel.sort((a, b) => a.x - b.x);
-  }
-
-  return updated;
-}
-
-/**
- * Run the full physics pipeline: auto-resize countries, then resolve collisions.
- * Also shifts nodes that belong to shifted zones.
- */
-export const physicsAtom = atom(
-  null,
-  (get, set) => {
-    let zones = get(zonesAtom);
-    if (zones.length < 2) return; // nothing to resolve
-
-    // Step 1: Auto-resize countries to fit their child regimes
-    zones = recalculateCountryBounds(zones);
-
-    // Step 2: Resolve country-country collisions
-    zones = resolveCountryCollisions(zones);
-
-    // Compute zone position deltas to shift child nodes
-    const oldZones = get(zonesAtom);
-    const deltaMap = new Map<string, { dx: number; dy: number }>();
-    for (const newZ of zones) {
-      const oldZ = oldZones.find((z) => z.id === newZ.id);
-      if (oldZ && (oldZ.x !== newZ.x || oldZ.y !== newZ.y)) {
-        deltaMap.set(newZ.id, { dx: newZ.x - oldZ.x, dy: newZ.y - oldZ.y });
-      }
-    }
-
-    // Shift nodes whose zone moved
-    const nodes = get(nodesAtom);
-    const updatedNodes = nodes.map((n) => {
-      if (!n.zoneId) return n;
-      // Find which zone contains this node (check all zones that moved)
-      for (const [zoneId, delta] of deltaMap) {
-        const oldZ = oldZones.find((z) => z.id === zoneId);
-        if (!oldZ) continue;
-        const cx = n.x + n.w / 2;
-        const cy = n.y + n.h / 2;
-        if (cx >= oldZ.x && cx <= oldZ.x + oldZ.w && cy >= oldZ.y && cy <= oldZ.y + oldZ.h) {
-          return { ...n, x: n.x + delta.dx, y: n.y + delta.dy };
-        }
-      }
-      return n;
-    });
-
-    // Only apply if something changed
-    const zonesChanged = zones.some((z, i) => {
-      const old = oldZones[i];
-      return !old || z.x !== old.x || z.y !== old.y || z.w !== old.w || z.h !== old.h;
-    });
-
-    if (zonesChanged) {
-      set(zonesAtom, zones);
-      set(nodesAtom, updatedNodes);
-      set(projectAtom, (prev) => {
-        if (!prev) return prev;
-        return { ...prev, zones, nodes: updatedNodes };
-      });
     }
   },
 );

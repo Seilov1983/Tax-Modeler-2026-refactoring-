@@ -145,6 +145,8 @@ export interface Zone {
   code: string;
   currency: CurrencyCode;
   zIndex: number;
+  /** Explicit parent zone id — replaces implicit spatial hierarchy (O(n²) containment checks). */
+  parentId?: string | null;
   tax?: Partial<ZoneTaxOverride>;
 }
 

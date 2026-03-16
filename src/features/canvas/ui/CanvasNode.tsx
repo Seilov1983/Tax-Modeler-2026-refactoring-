@@ -1,217 +1,150 @@
 'use client';
 
 /**
- * CanvasNode — Transient/Committed State Pattern for 60 FPS drag.
+ * CanvasNode — Konva-based node rendering.
  *
  * Architecture:
- * - During drag: DOM is mutated directly via style.transform (no React re-render)
- * - On drop: final position is committed to Jotai atom → triggers tax recalculation
- * - Drag movement is divided by viewport scale so nodes follow the cursor
- *   accurately at any zoom level.
+ * - Uses Konva <Group> with draggable for built-in drag-and-drop
+ * - Transient drag: useRef for intermediate state, no React re-renders during drag
+ * - On drop (onDragEnd): final position committed to Jotai atom
+ * - dragBoundFunc can be added to constrain child elements within parent zone
+ * - Connection ports (flow + ownership) rendered as Konva <Circle>
  *
- * This bypasses React's reconciliation during pointermove, ensuring smooth drag
- * even when the tax engine is computing in the background via useTransition.
+ * For node types: Konva <Rect>, <Text>, <Circle> replace the DOM elements.
+ * Events use KonvaEventObject for proper typing.
  */
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useRef, useCallback, memo, Suspense, type RefObject } from 'react';
+import { useRef, useCallback, memo } from 'react';
+import { Group, Rect, Text, Circle } from 'react-konva';
 import type { PrimitiveAtom } from 'jotai';
+import type Konva from 'konva';
+import type { KonvaEventObject } from 'konva/lib/Node';
 import type { NodeDTO } from '@shared/types';
-import type { ViewportState } from './useCanvasViewport';
-import { nodeTaxAtomFamily, taxCalculationAtom } from '@features/tax-calculator/model/atoms';
-import { nodeRiskAtomFamily } from '@features/risk-analyzer/model/atoms';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { draftConnectionAtom } from '../model/draft-connection-atom';
 import { addFlowAtom, addOwnershipAtom, moveNodesAtom } from '../model/graph-actions-atom';
-import { fmtMoney, currencySymbol } from '@shared/lib/engine/utils';
 
-// ─── Micro-component: isolates Suspense per node for CIT display ────────────
+// ─── Constants ──────────────────────────────────────────────────────────────
 
-function NodeTaxDisplay({ nodeId }: { nodeId: string }) {
-  const citAmount = useAtomValue(nodeTaxAtomFamily(nodeId));
-  const taxResults = useAtomValue(taxCalculationAtom);
-  const ccy = taxResults?.baseCurrency || 'USD';
+const NODE_COLORS: Record<string, { bg: string; border: string; header: string }> = {
+  company: { bg: '#ffffff', border: '#3b82f6', header: '#eff6ff' },
+  person: { bg: '#ffffff', border: '#22c55e', header: '#f0fdf4' },
+  txa: { bg: '#f8fafc', border: '#94a3b8', header: '#f1f5f9' },
+};
 
-  if (citAmount === null || citAmount === 0) return null;
+const TYPE_BADGES: Record<string, string> = {
+  company: 'CO',
+  person: 'P',
+  txa: 'TXA',
+};
 
-  return (
-    <div className="badge badge-tax">
-      CIT: {currencySymbol(ccy)} {fmtMoney(citAmount)}
-    </div>
-  );
-}
+const HEADER_HEIGHT = 28;
+const PORT_RADIUS = 6;
 
-// ─── Micro-component: isolates Suspense per node for risk display ───────────
-
-function NodeRiskDisplay({ nodeId }: { nodeId: string }) {
-  const risks = useAtomValue(nodeRiskAtomFamily(nodeId));
-
-  if (!risks || risks.length === 0) return null;
-
-  const tooltip = risks.map((r) => `${r.type}${r.lawRef ? ` (${r.lawRef})` : ''}`).join('\n');
-
-  return (
-    <span
-      className="badge badge-risk-engine"
-      title={tooltip}
-      style={{
-        background: '#eab308',
-        color: '#fff',
-        fontSize: '10px',
-        fontWeight: 'bold',
-        padding: '1px 5px',
-        borderRadius: '9px',
-        border: '1px solid #ca8a04',
-        cursor: 'help',
-      }}
-    >
-      ! {risks.length}
-    </span>
-  );
-}
+// ─── Component ──────────────────────────────────────────────────────────────
 
 interface CanvasNodeProps {
   nodeAtom: PrimitiveAtom<NodeDTO>;
-  /** Ref to the current viewport state (scale, panX, panY) — read-only, never causes re-render */
-  viewportStateRef: RefObject<ViewportState>;
 }
 
-export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef }: CanvasNodeProps) {
+export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps) {
   const node = useAtomValue(nodeAtom);
   const selection = useAtomValue(selectionAtom);
   const setSelection = useSetAtom(selectionAtom);
   const [draft, setDraft] = useAtom(draftConnectionAtom);
   const addFlow = useSetAtom(addFlowAtom);
   const addOwnership = useSetAtom(addOwnershipAtom);
-  const domRef = useRef<HTMLDivElement>(null);
-  // Track the live position during drag without triggering re-renders
-  const livePos = useRef({ x: node.x, y: node.y });
-  // Distinguish click from drag
+  const moveNodes = useSetAtom(moveNodesAtom);
+
+  const groupRef = useRef<Konva.Group>(null);
   const hasDragged = useRef(false);
-  /** Re-render shield: while true, React must not overwrite transform from state */
-  const isDraggingRef = useRef(false);
-  // Ref to read selection without stale closures in event handlers
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
 
-  // Whether this node is part of a multi-selection
   const isSelected = selection?.type === 'node' && selection.ids.includes(node.id);
+  const isTxa = node.type === 'txa';
+  const colors = NODE_COLORS[node.type] || NODE_COLORS.company;
+  const riskCount = node.riskFlags?.length || 0;
 
-  const moveNodes = useSetAtom(moveNodesAtom);
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      // Re-entrancy guard: prevent duplicate drag sessions from multi-touch
-      // or rapid pointer events. Without this, multiple pointermove handlers
-      // with different origins fight each other → oscillation/jitter.
-      if (isDraggingRef.current) return;
-
-      e.stopPropagation(); // Prevent zone header from intercepting node drag
-      const target = e.currentTarget;
-      target.setPointerCapture(e.pointerId);
+  // ─── Drag handlers ────────────────────────────────────────────────────
+  const handleDragStart = useCallback(
+    (e: KonvaEventObject<DragEvent>) => {
+      if (isTxa) {
+        e.target.stopDrag();
+        return;
+      }
       hasDragged.current = false;
-      isDraggingRef.current = true;
+    },
+    [isTxa],
+  );
 
-      // Snapshot starting position — this is the locked origin for absolute deltas
-      livePos.current = { x: node.x, y: node.y };
+  const handleDragMove = useCallback(
+    (e: KonvaEventObject<DragEvent>) => {
+      hasDragged.current = true;
 
-      // Lock the initial client pointer position — all displacement is computed
-      // as an absolute delta from this point (never accumulate movementX/Y which
-      // suffers from floating-point drift when divided by scale).
-      const startClientX = e.clientX;
-      const startClientY = e.clientY;
-
-      // Check if this node is part of a multi-selection for bulk drag
+      // Bulk drag: move selected siblings via direct Konva position updates
       const sel = selectionRef.current;
-      const isBulk = sel?.type === 'node' && sel.ids.length > 1 && sel.ids.includes(node.id);
-      // Snapshot sibling DOM elements and their starting positions for bulk drag
-      const siblings: { el: HTMLElement; startX: number; startY: number }[] = [];
-      if (isBulk) {
+      if (sel?.type === 'node' && sel.ids.length > 1 && sel.ids.includes(node.id)) {
+        const stage = e.target.getStage();
+        if (!stage) return;
+        const dx = e.target.x() - node.x;
+        const dy = e.target.y() - node.y;
         for (const id of sel.ids) {
-          if (id === node.id) continue; // skip self — handled by livePos
-          const el = document.querySelector(`[data-node-id="${id}"]`) as HTMLElement | null;
-          if (el) {
-            // Parse current position from the transform style
-            const match = el.style.transform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
-            if (match) {
-              siblings.push({ el, startX: parseFloat(match[1]), startY: parseFloat(match[2]) });
-            }
+          if (id === node.id) continue;
+          const sibling = stage.findOne(`#node-${id}`) as Konva.Group | undefined;
+          if (sibling) {
+            // Read the original position from stored data
+            const origX = sibling.getAttr('data-orig-x') ?? sibling.x();
+            const origY = sibling.getAttr('data-orig-y') ?? sibling.y();
+            sibling.position({ x: origX + dx, y: origY + dy });
           }
         }
       }
-
-      const onPointerMove = (moveEvent: PointerEvent) => {
-        hasDragged.current = true;
-        // Compensate for zoom: divide pixel movement by current scale
-        const scale = viewportStateRef.current?.scale ?? 1;
-
-        // Absolute delta from locked origin — stable, no accumulation drift
-        const totalDx = (moveEvent.clientX - startClientX) / scale;
-        const totalDy = (moveEvent.clientY - startClientY) / scale;
-
-        livePos.current.x = node.x + totalDx;
-        livePos.current.y = node.y + totalDy;
-
-        // DIRECT DOM MUTATION — bypasses React render cycle
-        if (domRef.current) {
-          domRef.current.style.transform = `translate(${livePos.current.x}px, ${livePos.current.y}px) translateZ(0)`;
-        }
-
-        // Bulk: move sibling nodes via direct DOM mutation
-        for (const s of siblings) {
-          s.el.style.transform = `translate(${s.startX + totalDx}px, ${s.startY + totalDy}px) translateZ(0)`;
-        }
-      };
-
-      const onPointerUp = (upEvent: PointerEvent) => {
-        target.removeEventListener('pointermove', onPointerMove);
-        target.removeEventListener('pointerup', onPointerUp);
-        target.releasePointerCapture(upEvent.pointerId);
-
-        isDraggingRef.current = false;
-
-        if (hasDragged.current) {
-          // CRITICAL: Clear ALL transient inline transforms BEFORE committing
-          // to state. Without this, React re-renders with new coordinates from
-          // Jotai, but the stale inline overrides remain → double-delta "jump".
-          if (domRef.current) {
-            domRef.current.style.transform = '';
-          }
-          for (const s of siblings) {
-            s.el.style.transform = '';
-          }
-
-          // Total displacement for final commit
-          const scale = viewportStateRef.current?.scale ?? 1;
-          const totalDx = (upEvent.clientX - startClientX) / scale;
-          const totalDy = (upEvent.clientY - startClientY) / scale;
-
-          // COMMIT via moveNodesAtom — handles position + spatial zone inheritance
-          const entries = [
-            { id: node.id, x: Math.round(node.x + totalDx), y: Math.round(node.y + totalDy) },
-            ...siblings.map((s) => ({
-              id: s.el.getAttribute('data-node-id')!,
-              x: Math.round(s.startX + totalDx),
-              y: Math.round(s.startY + totalDy),
-            })),
-          ];
-          moveNodes(entries);
-        }
-      };
-
-      target.addEventListener('pointermove', onPointerMove);
-      target.addEventListener('pointerup', onPointerUp);
     },
-    [node.x, node.y, node.id, moveNodes, viewportStateRef],
+    [node.id, node.x, node.y],
   );
 
-  const handleClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (hasDragged.current) return; // was a drag, not a click
-      e.stopPropagation();
-      // Shift+click: toggle this node in/out of existing multi-select
+  const handleDragEnd = useCallback(
+    (e: KonvaEventObject<DragEvent>) => {
+      if (!hasDragged.current) return;
+
+      const target = e.target;
+      const x = Math.round(target.x());
+      const y = Math.round(target.y());
+
       const sel = selectionRef.current;
-      if (e.shiftKey) {
+      const isBulk = sel?.type === 'node' && sel.ids.length > 1 && sel.ids.includes(node.id);
+
+      if (isBulk) {
+        const stage = target.getStage();
+        const dx = x - node.x;
+        const dy = y - node.y;
+        const entries = sel.ids.map((id) => {
+          if (id === node.id) return { id, x, y };
+          const sibling = stage?.findOne(`#node-${id}`) as Konva.Group | undefined;
+          if (sibling) {
+            return { id, x: Math.round(sibling.x()), y: Math.round(sibling.y()) };
+          }
+          return { id, x: node.x + dx, y: node.y + dy };
+        });
+        moveNodes(entries);
+      } else {
+        moveNodes([{ id: node.id, x, y }]);
+      }
+    },
+    [node.id, node.x, node.y, moveNodes],
+  );
+
+  // ─── Click to select ──────────────────────────────────────────────────
+  const handleClick = useCallback(
+    (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      if (hasDragged.current) return;
+      e.cancelBubble = true;
+
+      const evt = e.evt;
+      const sel = selectionRef.current;
+      if (evt.shiftKey) {
         if (sel?.type === 'node') {
           const exists = sel.ids.includes(node.id);
           const newIds = exists
@@ -225,35 +158,32 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
         setSelection({ type: 'node', ids: [node.id] });
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [node.id, setSelection],
   );
 
-  // ─── Flow port (right edge, blue): start drawing a flow ─────────────────
+  // ─── Flow port (right edge, blue) ─────────────────────────────────────
   const handleFlowPortDown = useCallback(
-    (e: React.PointerEvent) => {
-      e.stopPropagation();
-      e.preventDefault();
+    (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      e.cancelBubble = true;
       setDraft({ sourceNodeId: node.id, connectionType: 'flow' });
     },
     [node.id, setDraft],
   );
 
-  // ─── Ownership port (bottom edge, purple): start drawing ownership ─────
+  // ─── Ownership port (bottom edge, purple) ─────────────────────────────
   const handleOwnershipPortDown = useCallback(
-    (e: React.PointerEvent) => {
-      e.stopPropagation();
-      e.preventDefault();
+    (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      e.cancelBubble = true;
       setDraft({ sourceNodeId: node.id, connectionType: 'ownership' });
     },
     [node.id, setDraft],
   );
 
-  // ─── Drop target: complete the connection based on type ────────────────
+  // ─── Drop target: complete connection ──────────────────────────────────
   const handleNodePointerUp = useCallback(
-    (e: React.PointerEvent) => {
+    (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
       if (draft && draft.sourceNodeId !== node.id) {
-        e.stopPropagation();
+        e.cancelBubble = true;
         if (draft.connectionType === 'flow') {
           addFlow({ fromId: draft.sourceNodeId, toId: node.id });
         } else {
@@ -265,120 +195,121 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
     [draft, node.id, addFlow, addOwnership, setDraft],
   );
 
-  const riskCount = node.riskFlags?.length || 0;
-  const isCompany = node.type === 'company';
-  const isPerson = node.type === 'person';
-  const isTxa = node.type === 'txa';
-
-  // Skip React-driven transform when this node is being dragged directly
-  // OR when a parent zone is cascade-dragging it (data-cascade-dragging attribute)
-  const isCascadeDragged = domRef.current?.getAttribute('data-cascade-dragging') === '1';
-  const skipTransform = isDraggingRef.current || isCascadeDragged;
+  // Build badge text
+  const badges: string[] = [];
+  if (node.frozen) badges.push('FROZEN');
+  if (riskCount > 0) badges.push(`${riskCount} risk${riskCount > 1 ? 's' : ''}`);
 
   return (
-    <div
-      ref={domRef}
-      onPointerDown={isTxa ? undefined : handlePointerDown}
-      onPointerUp={handleNodePointerUp}
+    <Group
+      ref={groupRef}
+      id={`node-${node.id}`}
+      x={node.x}
+      y={node.y}
+      draggable={!isTxa}
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
+      onDragEnd={handleDragEnd}
       onClick={handleClick}
-      data-node-id={node.id}
-      data-testid="canvas-node"
-      style={{
-        position: 'absolute',
-        ...(skipTransform ? {} : { transform: `translate(${node.x}px, ${node.y}px) translateZ(0)` }),
-        width: node.w,
-        height: node.h,
-        willChange: 'transform',
-        cursor: isTxa ? 'default' : 'grab',
-        touchAction: 'none',
-        userSelect: 'none',
-      }}
-      className={[
-        'canvas-node',
-        isCompany ? 'node-company' : '',
-        isPerson ? 'node-person' : '',
-        isTxa ? 'node-txa' : '',
-        node.frozen ? 'node-frozen' : '',
-        riskCount > 0 ? 'node-has-risks' : '',
-        isSelected ? 'node-selected' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
+      onTap={handleClick}
+      onMouseUp={handleNodePointerUp}
     >
-      <div className="node-header">
-        <span className="node-type-badge">
-          {isCompany ? 'CO' : isPerson ? 'P' : 'TXA'}
-        </span>
-        <span className="node-name" title={node.name}>
-          {node.name}
-        </span>
-      </div>
+      {/* Node body */}
+      <Rect
+        width={node.w}
+        height={node.h}
+        fill={colors.bg}
+        stroke={isSelected ? '#2563eb' : node.frozen ? '#ef4444' : colors.border}
+        strokeWidth={isSelected ? 2.5 : node.frozen ? 2 : 1.5}
+        cornerRadius={8}
+        shadowColor={node.frozen ? '#ef4444' : 'rgba(0,0,0,0.1)'}
+        shadowBlur={node.frozen ? 8 : 4}
+        shadowOffsetY={2}
+        shadowOpacity={node.frozen ? 0.3 : 0.15}
+      />
 
-      <div className="node-badges">
-        {node.frozen && <span className="badge badge-frozen">FROZEN</span>}
-        {riskCount > 0 && (
-          <span className="badge badge-risk">{riskCount} risk{riskCount > 1 ? 's' : ''}</span>
-        )}
-        {node.riskFlags?.some((r) => r.type === 'CFC_RISK') && (
-          <span className="badge badge-cfc">CFC</span>
-        )}
-        {isCompany && (
-          <Suspense fallback={<span className="badge badge-tax-loading">calc...</span>}>
-            <NodeTaxDisplay nodeId={node.id} />
-          </Suspense>
-        )}
-        <Suspense fallback={null}>
-          <NodeRiskDisplay nodeId={node.id} />
-        </Suspense>
-      </div>
+      {/* Header background */}
+      <Rect
+        width={node.w}
+        height={HEADER_HEIGHT}
+        fill={colors.header}
+        cornerRadius={[8, 8, 0, 0]}
+        listening={false}
+      />
 
-      {/* Flow port (right edge, blue) — drag to create cash flow */}
-      {!isTxa && (
-        <div
-          className="no-canvas-events"
-          onPointerDown={handleFlowPortDown}
-          data-testid="port-flow"
-          title="Drag to create flow"
-          style={{
-            position: 'absolute',
-            right: -6,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 12,
-            height: 12,
-            background: '#3b82f6',
-            borderRadius: '50%',
-            border: '2px solid #fff',
-            cursor: 'crosshair',
-            zIndex: 5,
-            transition: 'transform 0.15s',
-          }}
+      {/* Type badge */}
+      <Text
+        x={8}
+        y={7}
+        text={TYPE_BADGES[node.type] || 'N'}
+        fontSize={10}
+        fontStyle="bold"
+        fill={colors.border}
+        listening={false}
+      />
+
+      {/* Node name */}
+      <Text
+        x={35}
+        y={7}
+        text={node.name}
+        fontSize={12}
+        fontStyle="600"
+        fill="#1f2937"
+        width={node.w - 45}
+        ellipsis={true}
+        wrap="none"
+        listening={false}
+      />
+
+      {/* Badges row below header */}
+      {badges.length > 0 && (
+        <Text
+          x={8}
+          y={HEADER_HEIGHT + 6}
+          text={badges.join('  ·  ')}
+          fontSize={10}
+          fill={node.frozen ? '#ef4444' : '#eab308'}
+          fontStyle="bold"
+          listening={false}
         />
       )}
 
-      {/* Ownership port (bottom edge, purple) — drag to create ownership link */}
+      {/* CFC badge */}
+      {node.riskFlags?.some((r) => r.type === 'CFC_RISK') && (
+        <Group x={node.w - 35} y={HEADER_HEIGHT + 4} listening={false}>
+          <Rect width={28} height={14} fill="#fef3c7" cornerRadius={3} stroke="#ca8a04" strokeWidth={0.5} />
+          <Text x={4} y={2} text="CFC" fontSize={9} fontStyle="bold" fill="#ca8a04" />
+        </Group>
+      )}
+
+      {/* Flow port (right edge, blue) */}
       {!isTxa && (
-        <div
-          className="no-canvas-events"
-          onPointerDown={handleOwnershipPortDown}
-          data-testid="port-ownership"
-          title="Drag down to create ownership"
-          style={{
-            position: 'absolute',
-            bottom: -6,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: 12,
-            height: 12,
-            background: '#a855f7',
-            borderRadius: '50%',
-            border: '2px solid #fff',
-            cursor: 'crosshair',
-            zIndex: 5,
-            transition: 'transform 0.15s',
-          }}
+        <Circle
+          x={node.w}
+          y={node.h / 2}
+          radius={PORT_RADIUS}
+          fill="#3b82f6"
+          stroke="#ffffff"
+          strokeWidth={2}
+          onMouseDown={handleFlowPortDown}
+          onTouchStart={handleFlowPortDown}
         />
       )}
-    </div>
+
+      {/* Ownership port (bottom edge, purple) */}
+      {!isTxa && (
+        <Circle
+          x={node.w / 2}
+          y={node.h}
+          radius={PORT_RADIUS}
+          fill="#a855f7"
+          stroke="#ffffff"
+          strokeWidth={2}
+          onMouseDown={handleOwnershipPortDown}
+          onTouchStart={handleOwnershipPortDown}
+        />
+      )}
+    </Group>
   );
 });

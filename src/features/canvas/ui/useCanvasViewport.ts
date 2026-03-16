@@ -1,14 +1,12 @@
 'use client';
 
 /**
- * useCanvasViewport — Pan & Zoom via direct DOM manipulation.
+ * useCanvasViewport — Pan & Zoom for Konva Stage.
  *
  * Architecture:
- * - All viewport state (panX, panY, scale) lives in useRef — NOT in React state.
- * - Wheel/pinch/drag events mutate the #canvas-board transform directly.
- * - Zero React re-renders during scroll or zoom — pure 60 FPS DOM updates.
- * - The ref-based state is exposed for CanvasNode to read the current scale
- *   (needed to compensate drag movementX/Y by 1/scale).
+ * - Viewport state (panX, panY, scale) lives in useRef — NOT in React state.
+ * - Konva Stage position/scale is set imperatively via stage.position() / stage.scale().
+ * - Zero React re-renders during scroll or zoom — pure 60 FPS Konva updates.
  * - An optional onViewportChange callback is throttled via rAF to sync a
  *   Jotai atom for low-frequency UI (zoom controls, minimap).
  *
@@ -16,10 +14,10 @@
  * - Mouse wheel: zoom in/out (centered on cursor)
  * - Middle-click drag OR Space+drag: pan the canvas
  * - Pinch gesture (trackpad): zoom
- * - Double-click: reset to default view
  */
 
-import { useRef, useCallback, useEffect, type RefObject } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
+import type Konva from 'konva';
 
 export interface ViewportState {
   panX: number;
@@ -33,11 +31,9 @@ const ZOOM_SENSITIVITY = 0.001;
 const DEFAULT_STATE: ViewportState = { panX: 0, panY: 0, scale: 1 };
 
 export function useCanvasViewport(
-  viewportRef: RefObject<HTMLDivElement | null>,
-  boardRef: RefObject<HTMLDivElement | null>,
+  stageRef: React.RefObject<Konva.Stage | null>,
   onViewportChange?: (state: ViewportState) => void,
 ) {
-  // All viewport state in a ref — mutations here never trigger React re-renders
   const stateRef = useRef<ViewportState>({ ...DEFAULT_STATE });
   const isPanningRef = useRef(false);
   const spaceDownRef = useRef(false);
@@ -47,79 +43,57 @@ export function useCanvasViewport(
   // ─── Throttled sync to Jotai atom via rAF ─────────────────────────────────
   const notifyChange = useCallback(() => {
     if (!onViewportChange) return;
-    if (rafIdRef.current) return; // already scheduled
+    if (rafIdRef.current) return;
     rafIdRef.current = requestAnimationFrame(() => {
       rafIdRef.current = 0;
       onViewportChange({ ...stateRef.current });
     });
   }, [onViewportChange]);
 
-  // ─── Apply transform directly to DOM ──────────────────────────────────────
+  // ─── Apply transform directly to Konva Stage ──────────────────────────────
   const applyTransform = useCallback(() => {
-    const board = boardRef.current;
-    if (!board) return;
+    const stage = stageRef.current;
+    if (!stage) return;
     const { panX, panY, scale } = stateRef.current;
-    board.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    stage.position({ x: panX, y: panY });
+    stage.scale({ x: scale, y: scale });
+    stage.batchDraw();
     notifyChange();
-  }, [boardRef, notifyChange]);
-
-  // ─── Show zoom indicator (transient DOM element) ──────────────────────────
-  const showZoomIndicator = useCallback(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-
-    let indicator = viewport.querySelector('.zoom-indicator') as HTMLDivElement | null;
-    if (!indicator) {
-      indicator = document.createElement('div');
-      indicator.className = 'zoom-indicator';
-      viewport.appendChild(indicator);
-    }
-
-    const percent = Math.round(stateRef.current.scale * 100);
-    indicator.textContent = `${percent}%`;
-    indicator.style.opacity = '1';
-
-    if (indicatorTimerRef.current) clearTimeout(indicatorTimerRef.current);
-    indicatorTimerRef.current = setTimeout(() => {
-      if (indicator) indicator.style.opacity = '0';
-    }, 1200);
-  }, [viewportRef]);
+  }, [stageRef, notifyChange]);
 
   // ─── Zoom centered on a point ─────────────────────────────────────────────
   const zoomAt = useCallback(
     (clientX: number, clientY: number, delta: number) => {
-      const viewport = viewportRef.current;
-      if (!viewport) return;
+      const stage = stageRef.current;
+      if (!stage) return;
 
-      const rect = viewport.getBoundingClientRect();
+      const container = stage.container();
+      const rect = container.getBoundingClientRect();
       const s = stateRef.current;
 
-      // Cursor position relative to the viewport
       const cursorX = clientX - rect.left;
       const cursorY = clientY - rect.top;
 
-      // Old scale → new scale
       const prevScale = s.scale;
       const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prevScale * (1 - delta * ZOOM_SENSITIVITY)));
 
-      // Adjust pan so the point under the cursor stays fixed
       s.panX = cursorX - (cursorX - s.panX) * (newScale / prevScale);
       s.panY = cursorY - (cursorY - s.panY) * (newScale / prevScale);
       s.scale = newScale;
 
       applyTransform();
-      showZoomIndicator();
     },
-    [viewportRef, applyTransform, showZoomIndicator],
+    [stageRef, applyTransform],
   );
 
   // ─── Programmatic zoom (for buttons) ──────────────────────────────────────
   const zoomBy = useCallback(
     (factor: number) => {
-      const viewport = viewportRef.current;
-      if (!viewport) return;
+      const stage = stageRef.current;
+      if (!stage) return;
 
-      const rect = viewport.getBoundingClientRect();
+      const container = stage.container();
+      const rect = container.getBoundingClientRect();
       const cx = rect.width / 2;
       const cy = rect.height / 2;
       const s = stateRef.current;
@@ -132,17 +106,15 @@ export function useCanvasViewport(
       s.scale = newScale;
 
       applyTransform();
-      showZoomIndicator();
     },
-    [viewportRef, applyTransform, showZoomIndicator],
+    [stageRef, applyTransform],
   );
 
   // ─── Reset viewport ───────────────────────────────────────────────────────
   const resetViewport = useCallback(() => {
     stateRef.current = { ...DEFAULT_STATE };
     applyTransform();
-    showZoomIndicator();
-  }, [applyTransform, showZoomIndicator]);
+  }, [applyTransform]);
 
   // ─── Pan to specific position (for minimap click-to-navigate) ─────────────
   const panTo = useCallback(
@@ -154,21 +126,20 @@ export function useCanvasViewport(
     [applyTransform],
   );
 
-  // ─── Event handlers (attached to DOM, not React) ──────────────────────────
+  // ─── Event handlers (attached to Konva Stage container) ───────────────────
   useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
+    const stage = stageRef.current;
+    if (!stage) return;
 
-    // Wheel → zoom
+    const container = stage.container();
+
+    // Wheel → zoom or pan
     const onWheel = (e: WheelEvent) => {
-      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
       e.preventDefault();
 
-      // Pinch gesture on trackpad sends ctrlKey with wheel
       if (e.ctrlKey || e.metaKey) {
         zoomAt(e.clientX, e.clientY, e.deltaY);
       } else {
-        // Regular scroll → pan
         const s = stateRef.current;
         s.panX -= e.deltaX;
         s.panY -= e.deltaY;
@@ -178,13 +149,11 @@ export function useCanvasViewport(
 
     // Middle-click or Space+click → start pan
     const onPointerDown = (e: PointerEvent) => {
-      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
-      // Middle button (1) or space held down
       if (e.button === 1 || spaceDownRef.current) {
         e.preventDefault();
         isPanningRef.current = true;
-        viewport.setPointerCapture(e.pointerId);
-        viewport.style.cursor = 'grabbing';
+        container.setPointerCapture(e.pointerId);
+        container.style.cursor = 'grabbing';
       }
     };
 
@@ -199,26 +168,8 @@ export function useCanvasViewport(
     const onPointerUp = (e: PointerEvent) => {
       if (isPanningRef.current) {
         isPanningRef.current = false;
-        viewport.releasePointerCapture(e.pointerId);
-        viewport.style.cursor = spaceDownRef.current ? 'grab' : '';
-      }
-    };
-
-    // Native dblclick guard — exits early to skip any viewport reset logic
-    // when the user double-clicks on an interactive element or the canvas
-    // background. Does NOT call stopPropagation/preventDefault so the event
-    // still bubbles up to React's synthetic onDoubleClick (context menu).
-    const onDblClick = (e: MouseEvent) => {
-      console.log('[DEBUG] Native DblClick Fired. Target:', e.target);
-      if (
-        (e.target as HTMLElement).closest('[data-zone-id]') ||
-        (e.target as HTMLElement).closest('.canvas-node') ||
-        (e.target as HTMLElement).closest('button') ||
-        e.target === viewport
-      ) {
-        // Early return — skip any viewport reset but let the event bubble
-        // naturally to React's synthetic tree (CanvasBoard onDoubleClick).
-        return;
+        container.releasePointerCapture(e.pointerId);
+        container.style.cursor = spaceDownRef.current ? 'grab' : '';
       }
     };
 
@@ -227,7 +178,7 @@ export function useCanvasViewport(
       if (e.code === 'Space' && !e.repeat && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
         e.preventDefault();
         spaceDownRef.current = true;
-        viewport.style.cursor = 'grab';
+        container.style.cursor = 'grab';
       }
     };
 
@@ -235,33 +186,30 @@ export function useCanvasViewport(
       if (e.code === 'Space') {
         spaceDownRef.current = false;
         if (!isPanningRef.current) {
-          viewport.style.cursor = '';
+          container.style.cursor = '';
         }
       }
     };
 
-    // Attach with { passive: false } for wheel to allow preventDefault
-    viewport.addEventListener('wheel', onWheel, { passive: false });
-    viewport.addEventListener('dblclick', onDblClick);
-    viewport.addEventListener('pointerdown', onPointerDown);
-    viewport.addEventListener('pointermove', onPointerMove);
-    viewport.addEventListener('pointerup', onPointerUp);
-    viewport.addEventListener('pointercancel', onPointerUp);
+    container.addEventListener('wheel', onWheel, { passive: false });
+    container.addEventListener('pointerdown', onPointerDown);
+    container.addEventListener('pointermove', onPointerMove);
+    container.addEventListener('pointerup', onPointerUp);
+    container.addEventListener('pointercancel', onPointerUp);
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
 
     return () => {
-      viewport.removeEventListener('wheel', onWheel);
-      viewport.removeEventListener('dblclick', onDblClick);
-      viewport.removeEventListener('pointerdown', onPointerDown);
-      viewport.removeEventListener('pointermove', onPointerMove);
-      viewport.removeEventListener('pointerup', onPointerUp);
-      viewport.removeEventListener('pointercancel', onPointerUp);
+      container.removeEventListener('wheel', onWheel);
+      container.removeEventListener('pointerdown', onPointerDown);
+      container.removeEventListener('pointermove', onPointerMove);
+      container.removeEventListener('pointerup', onPointerUp);
+      container.removeEventListener('pointercancel', onPointerUp);
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
     };
-  }, [viewportRef, applyTransform, zoomAt, resetViewport]);
+  }, [stageRef, applyTransform, zoomAt]);
 
   return { stateRef, resetViewport, zoomBy, panTo };
 }

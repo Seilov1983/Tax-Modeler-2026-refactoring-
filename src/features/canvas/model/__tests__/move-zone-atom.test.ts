@@ -66,6 +66,7 @@ function makeTestProject(zones: Zone[], nodes: NodeDTO[]): Project {
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     readOnly: false,
+    baseCurrency: 'KZT',
     masterData: defaultMasterData(),
     fx: { fxDate: '2026-03-01', rateToUSD: { USD: 1, KZT: 500 }, source: 'test' },
     zones,
