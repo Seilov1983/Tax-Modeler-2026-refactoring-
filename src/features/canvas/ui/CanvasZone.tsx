@@ -13,13 +13,17 @@
  *
  * Uses useRef for transient drag state (no React re-renders during drag).
  * Coordinates committed to Jotai only in onDragEnd (Commit phase).
+ *
+ * Layout: Uses calculateZoneHeaderLayout for explicit coordinate math
+ * (replaces CSS flexbox / padding that Canvas does not support).
  */
 
-import { memo, useRef, useCallback } from 'react';
+import { memo, useRef, useCallback, useMemo } from 'react';
 import { Group, Rect, Text, Line } from 'react-konva';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { moveZoneAtom, deleteZoneAtom, resizeZoneAtom } from '../model/graph-actions-atom';
+import { calculateZoneHeaderLayout } from '../utils/canvas-layout';
 import type { Zone } from '@shared/types';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
@@ -69,6 +73,12 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
 
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
   const borderColor = ZONE_BORDER_COLORS[zone.jurisdiction] || '#94a3b8';
+
+  // ─── Layout math (replaces CSS flexbox) ─────────────────────────────────
+  const headerLayout = useMemo(
+    () => calculateZoneHeaderLayout({ width: zone.w, padding: 16 }),
+    [zone.w],
+  );
 
   // Ref for transient drag — avoid re-renders during drag
   const groupRef = useRef<Konva.Group>(null);
@@ -189,7 +199,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   );
 
   // Badge text
-  const badgeText = `${zone.jurisdiction} · ${zone.currency}`;
+  const badgeText = `${zone.jurisdiction} \u00b7 ${zone.currency}`;
 
   return (
     <Group
@@ -206,7 +216,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         name="zone-bg"
         width={zone.w}
         height={zone.h}
-        fill={isSelected ? `${bgColor}` : bgColor}
+        fill={bgColor}
         opacity={isSelected ? 0.4 : 0.25}
         cornerRadius={12}
       />
@@ -227,7 +237,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
       <Rect
         x={0}
         y={0}
-        width={Math.min(zone.name.length * 12 + 60, zone.w)}
+        width={zone.w}
         height={HEADER_HEIGHT}
         fill={isSelected ? '#3b82f6' : 'transparent'}
         opacity={isSelected ? 1 : 0.5}
@@ -236,52 +246,64 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         onTap={handleHeaderClick}
       />
 
-      {/* Zone name text */}
+      {/* Zone name text — positioned via layout math, truncated with ellipsis */}
       <Text
-        x={8}
-        y={10}
+        x={headerLayout.title.x}
+        y={headerLayout.title.y - 6}
+        width={headerLayout.title.width}
         text={zone.name.toUpperCase()}
         fontSize={16}
         fontStyle="bold"
         fill={isSelected ? '#ffffff' : borderColor}
         letterSpacing={1.5}
+        wrap="none"
+        ellipsis={true}
         listening={false}
       />
 
-      {/* Delete button "✕" */}
+      {/* Delete button — real Unicode "✕" instead of HTML entity */}
       <Group
-        x={Math.min(zone.name.length * 12 + 30, zone.w - 30)}
-        y={8}
+        x={headerLayout.closeIcon.x}
+        y={headerLayout.closeIcon.y - 6}
         onClick={handleDeleteClick}
         onTap={handleDeleteClick}
       >
-        <Rect width={20} height={20} fill="transparent" />
+        <Rect
+          width={headerLayout.closeIcon.width}
+          height={headerLayout.closeIcon.width}
+          fill="transparent"
+        />
         <Text
-          text="\u2715"
+          text={'\u2715'}
           fontSize={14}
           fill={isSelected ? 'rgba(255,255,255,0.7)' : '#dc2626'}
           align="center"
-          width={20}
+          verticalAlign="middle"
+          width={headerLayout.closeIcon.width}
+          height={headerLayout.closeIcon.width}
         />
       </Group>
 
-      {/* Jurisdiction badge (top-right) */}
-      <Group x={zone.w - badgeText.length * 6 - 16} y={12} listening={false}>
+      {/* Jurisdiction badge (positioned via layout math) */}
+      <Group x={headerLayout.badge.x} y={headerLayout.badge.y - 4} listening={false}>
         <Rect
-          width={badgeText.length * 6 + 16}
+          width={headerLayout.badge.width}
           height={18}
-          fill={`${borderColor}`}
+          fill={borderColor}
           opacity={0.15}
           cornerRadius={4}
         />
         <Text
           x={8}
           y={3}
+          width={headerLayout.badge.width - 16}
           text={badgeText}
           fontSize={11}
           fontStyle="bold"
           fill={borderColor}
           opacity={0.6}
+          wrap="none"
+          ellipsis={true}
         />
       </Group>
 

@@ -12,10 +12,13 @@
  *
  * For node types: Konva <Rect>, <Text>, <Circle> replace the DOM elements.
  * Events use KonvaEventObject for proper typing.
+ *
+ * Layout: Uses calculateNodeCardLayout for explicit padding math
+ * (Canvas has no CSS padding — offsets are computed manually).
  */
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useRef, useCallback, memo } from 'react';
+import { useRef, useCallback, memo, useMemo } from 'react';
 import { Group, Rect, Text, Circle } from 'react-konva';
 import type { PrimitiveAtom } from 'jotai';
 import type Konva from 'konva';
@@ -24,6 +27,7 @@ import type { NodeDTO } from '@shared/types';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { draftConnectionAtom } from '../model/draft-connection-atom';
 import { addFlowAtom, addOwnershipAtom, moveNodesAtom } from '../model/graph-actions-atom';
+import { calculateNodeCardLayout } from '../utils/canvas-layout';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -41,6 +45,7 @@ const TYPE_BADGES: Record<string, string> = {
 
 const HEADER_HEIGHT = 28;
 const PORT_RADIUS = 6;
+const NODE_PADDING = 10;
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -66,6 +71,12 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const isTxa = node.type === 'txa';
   const colors = NODE_COLORS[node.type] || NODE_COLORS.company;
   const riskCount = node.riskFlags?.length || 0;
+
+  // ─── Layout math (replaces CSS padding) ──────────────────────────────
+  const cardLayout = useMemo(
+    () => calculateNodeCardLayout(node.w, node.h, NODE_PADDING),
+    [node.w, node.h],
+  );
 
   // ─── Drag handlers ────────────────────────────────────────────────────
   const handleDragStart = useCallback(
@@ -214,10 +225,10 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       onTap={handleClick}
       onMouseUp={handleNodePointerUp}
     >
-      {/* Node body */}
+      {/* Node body — uses layout background dimensions */}
       <Rect
-        width={node.w}
-        height={node.h}
+        width={cardLayout.background.width}
+        height={cardLayout.background.height}
         fill={colors.bg}
         stroke={isSelected ? '#2563eb' : node.frozen ? '#ef4444' : colors.border}
         strokeWidth={isSelected ? 2.5 : node.frozen ? 2 : 1.5}
@@ -230,17 +241,17 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
 
       {/* Header background */}
       <Rect
-        width={node.w}
+        width={cardLayout.background.width}
         height={HEADER_HEIGHT}
         fill={colors.header}
         cornerRadius={[8, 8, 0, 0]}
         listening={false}
       />
 
-      {/* Type badge */}
+      {/* Type badge — offset by padding */}
       <Text
-        x={8}
-        y={7}
+        x={cardLayout.title.x}
+        y={cardLayout.title.y - 3}
         text={TYPE_BADGES[node.type] || 'N'}
         fontSize={10}
         fontStyle="bold"
@@ -248,36 +259,39 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         listening={false}
       />
 
-      {/* Node name */}
+      {/* Node name — offset by padding, width constrained to prevent overflow */}
       <Text
-        x={35}
-        y={7}
+        x={cardLayout.title.x + 25}
+        y={cardLayout.title.y - 3}
         text={node.name}
         fontSize={12}
         fontStyle="600"
         fill="#1f2937"
-        width={node.w - 45}
+        width={cardLayout.title.width - 25}
         ellipsis={true}
         wrap="none"
         listening={false}
       />
 
-      {/* Badges row below header */}
+      {/* Badges row below header — offset by padding */}
       {badges.length > 0 && (
         <Text
-          x={8}
+          x={cardLayout.title.x}
           y={HEADER_HEIGHT + 6}
-          text={badges.join('  ·  ')}
+          text={badges.join('  \u00b7  ')}
           fontSize={10}
           fill={node.frozen ? '#ef4444' : '#eab308'}
           fontStyle="bold"
+          width={cardLayout.title.width}
+          wrap="none"
+          ellipsis={true}
           listening={false}
         />
       )}
 
       {/* CFC badge */}
       {node.riskFlags?.some((r) => r.type === 'CFC_RISK') && (
-        <Group x={node.w - 35} y={HEADER_HEIGHT + 4} listening={false}>
+        <Group x={node.w - NODE_PADDING - 28} y={HEADER_HEIGHT + 4} listening={false}>
           <Rect width={28} height={14} fill="#fef3c7" cornerRadius={3} stroke="#ca8a04" strokeWidth={0.5} />
           <Text x={4} y={2} text="CFC" fontSize={9} fontStyle="bold" fill="#ca8a04" />
         </Group>
