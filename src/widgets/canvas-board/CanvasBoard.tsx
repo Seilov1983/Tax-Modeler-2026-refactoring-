@@ -127,7 +127,10 @@ export function CanvasBoard() {
       e.preventDefault();
 
       const { x, y } = clientToCanvas(e.clientX, e.clientY);
-      setContextMenu({ x: e.clientX, y: e.clientY, canvasX: Math.round(x - NODE_WIDTH / 2), canvasY: Math.round(y - NODE_HEIGHT / 2) });
+      const canvasX = Math.round(x - NODE_WIDTH / 2);
+      const canvasY = Math.round(y - NODE_HEIGHT / 2);
+      console.log('[DEBUG] React DblClick Fired. Coords:', canvasX, canvasY);
+      setContextMenu({ x: e.clientX, y: e.clientY, canvasX, canvasY });
     },
     [clientToCanvas],
   );

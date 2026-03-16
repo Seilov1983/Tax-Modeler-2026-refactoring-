@@ -204,9 +204,24 @@ export function useCanvasViewport(
       }
     };
 
-    // NOTE: Double-click reset was removed to avoid collision with the React
-    // onDoubleClick handler in CanvasBoard (context menu). Camera reset is
-    // available via the dedicated button in CanvasControls.
+    // Native dblclick guard — intercepts the DOM event before React's synthetic
+    // onDoubleClick so that no residual handler can reset the viewport when the
+    // user double-clicks on an interactive element or the canvas background.
+    const onDblClick = (e: MouseEvent) => {
+      console.log('[DEBUG] Native DblClick Fired. Target:', e.target);
+      if (
+        (e.target as HTMLElement).closest('[data-zone-id]') ||
+        (e.target as HTMLElement).closest('.canvas-node') ||
+        (e.target as HTMLElement).closest('button') ||
+        e.target === viewport
+      ) {
+        // User clicked on an interactive element or the canvas board itself —
+        // prevent the event from reaching any handler that might reset the camera.
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+      }
+    };
 
     // Space key for pan mode
     const onKeyDown = (e: KeyboardEvent) => {
@@ -228,6 +243,7 @@ export function useCanvasViewport(
 
     // Attach with { passive: false } for wheel to allow preventDefault
     viewport.addEventListener('wheel', onWheel, { passive: false });
+    viewport.addEventListener('dblclick', onDblClick);
     viewport.addEventListener('pointerdown', onPointerDown);
     viewport.addEventListener('pointermove', onPointerMove);
     viewport.addEventListener('pointerup', onPointerUp);
@@ -237,6 +253,7 @@ export function useCanvasViewport(
 
     return () => {
       viewport.removeEventListener('wheel', onWheel);
+      viewport.removeEventListener('dblclick', onDblClick);
       viewport.removeEventListener('pointerdown', onPointerDown);
       viewport.removeEventListener('pointermove', onPointerMove);
       viewport.removeEventListener('pointerup', onPointerUp);
