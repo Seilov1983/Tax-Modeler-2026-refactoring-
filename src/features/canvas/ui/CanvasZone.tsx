@@ -322,12 +322,12 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         transition: 'border-color 0.15s, background 0.15s',
       }}
     >
-      {/* Draggable + clickable zone header label */}
+      {/* Draggable + clickable zone header label — statically positioned
+          so it inherits left/top from the container. NEVER give this div
+          its own transform or absolute positioning. */}
       <div
         style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
+          display: 'inline-block',
           padding: '8px 16px',
           fontSize: '18px',
           fontWeight: 800,
@@ -340,6 +340,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
           pointerEvents: 'auto',
           cursor: 'grab',
           borderBottomRightRadius: '12px',
+          borderTopLeftRadius: '10px',
           touchAction: 'none',
           transition: 'color 0.15s, background 0.15s, opacity 0.15s',
         }}
