@@ -88,6 +88,8 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
   const livePos = useRef({ x: node.x, y: node.y });
   // Distinguish click from drag
   const hasDragged = useRef(false);
+  /** Re-render shield: while true, React must not overwrite transform from state */
+  const isDraggingRef = useRef(false);
   // Ref to read selection without stale closures in event handlers
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
@@ -102,6 +104,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
       hasDragged.current = false;
+      isDraggingRef.current = true;
 
       // Snapshot starting position
       livePos.current = { x: node.x, y: node.y };
@@ -154,6 +157,8 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
         target.removeEventListener('pointermove', onPointerMove);
         target.removeEventListener('pointerup', onPointerUp);
         target.releasePointerCapture(upEvent.pointerId);
+
+        isDraggingRef.current = false;
 
         if (hasDragged.current) {
           // COMMIT via moveNodesAtom — handles position + spatial zone inheritance
@@ -250,7 +255,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
       data-testid="canvas-node"
       style={{
         position: 'absolute',
-        transform: `translate(${node.x}px, ${node.y}px) translateZ(0)`,
+        ...(isDraggingRef.current ? {} : { transform: `translate(${node.x}px, ${node.y}px) translateZ(0)` }),
         width: node.w,
         height: node.h,
         willChange: 'transform',

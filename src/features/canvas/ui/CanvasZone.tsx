@@ -108,6 +108,8 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
   const livePos = useRef({ x: zone.x, y: zone.y });
   const hasDragged = useRef(false);
   const childElsRef = useRef<ChildSnapshot[]>([]);
+  /** Re-render shield: while true, React must not overwrite inline left/top from state */
+  const isDraggingRef = useRef(false);
 
   const handleHeaderPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -115,6 +117,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
       hasDragged.current = false;
+      isDraggingRef.current = true;
       livePos.current = { x: zone.x, y: zone.y };
 
       // Snapshot child elements once at drag start for 60fps DOM-level cascading
@@ -156,6 +159,8 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         target.removeEventListener('pointermove', onPointerMove);
         target.removeEventListener('pointerup', onPointerUp);
         target.releasePointerCapture(upEvent.pointerId);
+
+        isDraggingRef.current = false;
 
         if (hasDragged.current) {
           // CRITICAL: Clear ALL transient inline styles BEFORE committing to state.
@@ -263,8 +268,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
       data-testid="canvas-zone"
       style={{
         position: 'absolute',
-        left: zone.x,
-        top: zone.y,
+        ...(isDraggingRef.current ? {} : { left: zone.x, top: zone.y }),
         width: zone.w,
         height: zone.h,
         zIndex: zone.zIndex,
