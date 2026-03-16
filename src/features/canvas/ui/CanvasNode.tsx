@@ -101,6 +101,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom, viewportStateRef 
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      e.stopPropagation(); // Prevent zone header from intercepting node drag
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
       hasDragged.current = false;
