@@ -11,6 +11,7 @@
  * - useCanvasViewport for 60 FPS pan & zoom via direct DOM manipulation
  * - Draft connection line for interactive flow/ownership creation
  * - viewportAtom sync (rAF-throttled) for minimap + zoom controls
+ * - Context-aware creation: strict hierarchy Country > Regime > Node
  */
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
@@ -35,7 +36,15 @@ import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
 import { addNodeAtom, addZoneAtom, NODE_WIDTH, NODE_HEIGHT } from '@features/canvas/model/graph-actions-atom';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { ProjectHeader } from '@features/project-management';
-import type { JurisdictionCode, CurrencyCode } from '@shared/types';
+import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
+import type { JurisdictionCode, CurrencyCode, Zone } from '@shared/types';
+
+// ─── Context menu types ─────────────────────────────────────────────────────
+
+type ContextMenuTarget =
+  | { kind: 'empty'; x: number; y: number; canvasX: number; canvasY: number }
+  | { kind: 'country'; x: number; y: number; canvasX: number; canvasY: number; zone: Zone }
+  | { kind: 'regime'; x: number; y: number; canvasX: number; canvasY: number; zone: Zone };
 
 export function CanvasBoard() {
   const zones = useAtomValue(zonesAtom);
@@ -112,8 +121,42 @@ export function CanvasBoard() {
     [viewportRef, viewportStateRef],
   );
 
-  // ─── Context menu state (popover on double-click) ────────────────────────
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
+  // ─── Context menu state (popover on double-click / right-click) ──────────
+  const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null);
+
+  // ─── Determine context based on click position (hierarchy-aware) ─────────
+  const detectClickContext = useCallback(
+    (canvasX: number, canvasY: number, clientX: number, clientY: number): ContextMenuTarget => {
+      // Find all zones containing the click point
+      const hitZones = zones.filter((z) => pointInZone(canvasX, canvasY, z));
+
+      if (hitZones.length === 0) {
+        // Empty canvas: only allow "Add Country"
+        return { kind: 'empty', x: clientX, y: clientY, canvasX, canvasY };
+      }
+
+      // Sort by area ascending (smallest first = most specific)
+      hitZones.sort((a, b) => zoneArea(a) - zoneArea(b));
+      const smallestZone = hitZones[0];
+
+      // Check if this zone is a "country" (has child sub-zones) or a "regime" (leaf)
+      const isCountry = zones.some((z) => {
+        if (z.id === smallestZone.id) return false;
+        if (zoneArea(z) >= zoneArea(smallestZone)) return false;
+        const cx = z.x + z.w / 2;
+        const cy = z.y + z.h / 2;
+        return pointInZone(cx, cy, smallestZone);
+      });
+
+      if (isCountry) {
+        return { kind: 'country', x: clientX, y: clientY, canvasX, canvasY, zone: smallestZone };
+      }
+
+      // It's a leaf zone (regime/sub-zone) → allow adding nodes
+      return { kind: 'regime', x: clientX, y: clientY, canvasX, canvasY, zone: smallestZone };
+    },
+    [zones],
+  );
 
   // ─── Double-click on empty canvas → open context menu ───────────────────
   const handleDoubleClick = useCallback(
@@ -129,21 +172,78 @@ export function CanvasBoard() {
       const { x, y } = clientToCanvas(e.clientX, e.clientY);
       const canvasX = Math.round(x - NODE_WIDTH / 2);
       const canvasY = Math.round(y - NODE_HEIGHT / 2);
-      console.log('[DEBUG] React DblClick Fired. Coords:', canvasX, canvasY);
-      setContextMenu({ x: e.clientX, y: e.clientY, canvasX, canvasY });
+      const ctx = detectClickContext(x, y, e.clientX, e.clientY);
+      // Override canvasX/canvasY for node placement offset
+      if (ctx.kind === 'empty') {
+        setContextMenu({ ...ctx, canvasX, canvasY });
+      } else {
+        setContextMenu({ ...ctx, canvasX, canvasY });
+      }
     },
-    [clientToCanvas],
+    [clientToCanvas, detectClickContext],
   );
+
+  // ─── Right-click context menu ────────────────────────────────────────────
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
+      if ((e.target as HTMLElement).closest('.canvas-node')) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const { x, y } = clientToCanvas(e.clientX, e.clientY);
+      const ctx = detectClickContext(x, y, e.clientX, e.clientY);
+      const canvasX = Math.round(x - NODE_WIDTH / 2);
+      const canvasY = Math.round(y - NODE_HEIGHT / 2);
+      setContextMenu({ ...ctx, canvasX, canvasY });
+    },
+    [clientToCanvas, detectClickContext],
+  );
+
+  // ─── Context menu action handlers ────────────────────────────────────────
 
   const handleContextMenuCreate = useCallback(
     (type: 'company' | 'person') => {
       if (!contextMenu) return;
       const name = type === 'company' ? 'New Company' : 'New Person';
-      addNode({ type, name, x: contextMenu.canvasX, y: contextMenu.canvasY });
+      const zoneId = (contextMenu.kind === 'regime') ? contextMenu.zone.id : undefined;
+      addNode({ type, name, x: contextMenu.canvasX, y: contextMenu.canvasY, zoneId });
       setContextMenu(null);
     },
     [contextMenu, addNode],
   );
+
+  const handleAddCountryZone = useCallback(() => {
+    if (!contextMenu) return;
+    addZone({
+      jurisdiction: 'KZ' as JurisdictionCode,
+      code: `KZ_${Date.now().toString(36).toUpperCase()}`,
+      name: 'New Country',
+      currency: 'KZT' as CurrencyCode,
+      x: contextMenu.canvasX - 200,
+      y: contextMenu.canvasY - 100,
+      w: 600,
+      h: 400,
+    });
+    setContextMenu(null);
+  }, [contextMenu, addZone]);
+
+  const handleAddRegimeZone = useCallback(() => {
+    if (!contextMenu || contextMenu.kind !== 'country') return;
+    const parentZone = contextMenu.zone;
+    addZone({
+      jurisdiction: parentZone.jurisdiction,
+      code: `${parentZone.jurisdiction}_REG_${Date.now().toString(36).toUpperCase()}`,
+      name: 'New Regime',
+      currency: parentZone.currency,
+      x: contextMenu.canvasX - 100,
+      y: contextMenu.canvasY - 50,
+      w: 320,
+      h: 250,
+    });
+    setContextMenu(null);
+  }, [contextMenu, addZone]);
 
   // ─── Drag & Drop: country from MasterDataModal → canvas zone ────────────
 
@@ -175,8 +275,12 @@ export function CanvasBoard() {
       const regimeCountryId = e.dataTransfer.getData('application/tax-regime-country-id');
 
       if (regimeId && regimeCountryId) {
-        // Create a smaller sub-zone for the regime, visually nested inside the parent country zone
-        const parentZone = zones.find((z) => z.jurisdiction === regimeCountryId);
+        // Validate: regime can only be dropped inside a country zone
+        const hitZones = zones.filter((z) => pointInZone(x, y, z));
+        const countryZone = hitZones.find((z) => z.jurisdiction === regimeCountryId);
+
+        // Create a smaller sub-zone for the regime
+        const parentZone = countryZone || zones.find((z) => z.jurisdiction === regimeCountryId);
         const subX = parentZone ? parentZone.x + 30 : Math.round(x - 150);
         const subY = parentZone ? parentZone.y + 60 : Math.round(y - 100);
 
@@ -197,6 +301,28 @@ export function CanvasBoard() {
       const countryId = e.dataTransfer.getData('application/tax-country-id');
       const countryName = e.dataTransfer.getData('application/tax-country-name');
       if (!countryId) return;
+
+      // Validate: country cannot be dropped inside another country
+      const hitZones = zones.filter((z) => pointInZone(x, y, z));
+      if (hitZones.length > 0) {
+        // There's a zone at the drop location — check if dropping country inside country
+        const largestHit = [...hitZones].sort((a, b) => zoneArea(b) - zoneArea(a))[0];
+        if (largestHit) {
+          // Allow dropping but place outside existing zones
+          const rightEdge = Math.max(...zones.map((z) => z.x + z.w)) + 60;
+          addZone({
+            jurisdiction: countryId as JurisdictionCode,
+            code: `${countryId}_${Date.now().toString(36).toUpperCase()}`,
+            name: countryName || countryId,
+            currency: COUNTRY_CURRENCY[countryId] || 'USD',
+            x: rightEdge,
+            y: Math.round(y - 200),
+            w: 600,
+            h: 400,
+          });
+          return;
+        }
+      }
 
       addZone({
         jurisdiction: countryId as JurisdictionCode,
@@ -344,6 +470,14 @@ export function CanvasBoard() {
   // Draft stroke color: blue for flow, purple for ownership
   const draftStroke = isFlowDraft ? '#3b82f6' : '#a855f7';
 
+  // ─── Context menu button style helper ──────────────────────────────────
+  const menuBtnStyle: React.CSSProperties = {
+    display: 'block', width: '100%', padding: '8px 12px',
+    background: 'none', border: 'none', cursor: 'pointer',
+    fontSize: '13px', fontWeight: 500, textAlign: 'left',
+    borderRadius: '4px', color: '#1f2937',
+  };
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       {/* Project header — fixed to top of window */}
@@ -354,6 +488,7 @@ export function CanvasBoard() {
         id="viewport"
         onClick={handleBackgroundClick}
         onDoubleClick={handleDoubleClick}
+        onContextMenu={handleContextMenu}
         onPointerDown={handleBoardPointerDown}
         onPointerMove={handleBoardPointerMove}
         onPointerUp={handleBoardPointerUp}
@@ -474,7 +609,7 @@ export function CanvasBoard() {
         {/* Property Panel — right sidebar for editing selected entity */}
         <EditorSidebar />
 
-        {/* Context menu popover — appears on double-click */}
+        {/* Context menu popover — context-aware hierarchy menu */}
         {contextMenu && (
           <div
             className="no-canvas-events"
@@ -488,36 +623,55 @@ export function CanvasBoard() {
               boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
               border: '1px solid #e5e7eb',
               padding: '4px',
-              minWidth: '160px',
+              minWidth: '180px',
             }}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => handleContextMenuCreate('company')}
-              style={{
-                display: 'block', width: '100%', padding: '8px 12px',
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '13px', fontWeight: 500, textAlign: 'left',
-                borderRadius: '4px', color: '#1f2937',
-              }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
-              onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
-            >
-              {'\uD83C\uDFE2'} Create Company
-            </button>
-            <button
-              onClick={() => handleContextMenuCreate('person')}
-              style={{
-                display: 'block', width: '100%', padding: '8px 12px',
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '13px', fontWeight: 500, textAlign: 'left',
-                borderRadius: '4px', color: '#1f2937',
-              }}
-              onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
-              onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
-            >
-              {'\uD83D\uDC64'} Create Person
-            </button>
+            {/* Empty canvas → Add Country only */}
+            {contextMenu.kind === 'empty' && (
+              <button
+                onClick={handleAddCountryZone}
+                style={menuBtnStyle}
+                onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
+                onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
+              >
+                {'\uD83C\uDF0D'} Add Country
+              </button>
+            )}
+
+            {/* Inside a Country → Add Regime only */}
+            {contextMenu.kind === 'country' && (
+              <button
+                onClick={handleAddRegimeZone}
+                style={menuBtnStyle}
+                onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
+                onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
+              >
+                {'\uD83D\uDCCB'} Add Regime
+              </button>
+            )}
+
+            {/* Inside a Regime → Add Company / Person */}
+            {contextMenu.kind === 'regime' && (
+              <>
+                <button
+                  onClick={() => handleContextMenuCreate('company')}
+                  style={menuBtnStyle}
+                  onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
+                  onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
+                >
+                  {'\uD83C\uDFE2'} Add Company
+                </button>
+                <button
+                  onClick={() => handleContextMenuCreate('person')}
+                  style={menuBtnStyle}
+                  onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
+                  onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
+                >
+                  {'\uD83D\uDC64'} Add Person
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
