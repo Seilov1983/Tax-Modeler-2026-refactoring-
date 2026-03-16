@@ -255,6 +255,30 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
     [addZone, onClose],
   );
 
+  // ─── One-click add regime as sub-zone to canvas ───────────────────────
+
+  const handleAddRegimeToCanvas = useCallback(
+    (regime: TaxRegime) => {
+      // Find parent country zone on canvas to position inside it
+      const parentZone = project?.zones?.find((z) => z.jurisdiction === regime.countryId);
+      const x = parentZone ? parentZone.x + 30 : 120;
+      const y = parentZone ? parentZone.y + 60 : 120;
+
+      addZone({
+        jurisdiction: regime.countryId as JurisdictionCode,
+        code: `${regime.countryId}_${regime.id}`,
+        name: regime.name,
+        currency: COUNTRY_CURRENCY[regime.countryId] || 'USD',
+        x,
+        y,
+        w: 320,
+        h: 250,
+      });
+      onClose();
+    },
+    [addZone, onClose, project?.zones],
+  );
+
   if (!project) return null;
 
   return (
@@ -360,7 +384,17 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
                 {isExpanded && (
                   <>
                     {countryRegimes.map((regime) => (
-                      <div key={regime.id} style={regimeRowStyle}>
+                      <div
+                        key={regime.id}
+                        style={{ ...regimeRowStyle, cursor: 'grab' }}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('application/tax-regime-id', regime.id);
+                          e.dataTransfer.setData('application/tax-regime-name', regime.name);
+                          e.dataTransfer.setData('application/tax-regime-country-id', regime.countryId);
+                          e.dataTransfer.effectAllowed = 'copy';
+                        }}
+                      >
                         {/* Regime name */}
                         <input
                           type="text"
@@ -393,6 +427,19 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
                           min="0"
                           max="100"
                         />
+
+                        {/* One-click add regime as sub-zone to canvas */}
+                        <button
+                          onClick={() => handleAddRegimeToCanvas(regime)}
+                          title="Add regime as sub-zone to canvas"
+                          style={{
+                            background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb',
+                            fontSize: '11px', fontWeight: 600, padding: '3px 8px',
+                            borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          + Canvas
+                        </button>
 
                         {/* Delete regime */}
                         <button

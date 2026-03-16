@@ -8,13 +8,7 @@ import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom, deleteZoneAtom } 
 import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
 import type { NodeDTO, FlowDTO, OwnershipEdge, FlowType, Zone, TaxRegime } from '@shared/types';
 
-const ZONE_OPTIONS = [
-  { value: 'KZ_HUB', label: 'Kazakhstan Astana Hub' },
-  { value: 'KZ_AIFC', label: 'Kazakhstan AIFC' },
-  { value: 'UAE_FREEZONE_QFZP', label: 'UAE Free Zone (QFZP)' },
-  { value: 'UAE_FREEZONE_NONQFZP', label: 'UAE Free Zone (Non-QFZP)' },
-  { value: 'HK_OFFSHORE', label: 'Hong Kong Offshore' },
-] as const;
+// Zone options are now derived dynamically from project.zones
 
 const FLOW_TYPE_OPTIONS: FlowType[] = [
   'Dividends', 'Royalties', 'Interest', 'Services', 'Salary', 'Goods', 'Equipment',
@@ -43,11 +37,13 @@ function NodeEditor({
   onChange,
   onBlur,
   availableRegimes,
+  projectZones,
 }: {
   node: NodeDTO;
   onChange: (field: string, value: unknown) => void;
   onBlur: () => void;
   availableRegimes: TaxRegime[];
+  projectZones: Zone[];
 }) {
   const blurOnEnter = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
 
@@ -72,13 +68,15 @@ function NodeEditor({
           onBlur={onBlur}
         >
           <option value="">— none —</option>
-          {ZONE_OPTIONS.map((z) => (
-            <option key={z.value} value={z.value}>{z.label}</option>
+          {projectZones.map((z) => (
+            <option key={z.id} value={z.id}>
+              {z.name} ({z.jurisdiction} · {z.currency})
+            </option>
           ))}
         </select>
       </Field>
 
-      {node.type === 'company' && availableRegimes.length > 0 && (
+      {node.type === 'company' && (
         <Field label="Tax Regime">
           <select
             style={selectStyle}
@@ -495,12 +493,14 @@ export function EditorSidebar() {
   const availableRegimes: TaxRegime[] = (() => {
     if (selection.type !== 'node' || !entity || (entity as NodeDTO).type !== 'company') return [];
     const node = entity as NodeDTO;
-    const zone = project.zones?.find((z) => z.id === node.zoneId);
-    if (!zone) return [];
-    const jurisdictionCode = zone.jurisdiction;
-    // Find country matching this jurisdiction (countryId matches jurisdiction code)
     const allRegimes = project.masterData?.regimes ?? [];
-    return allRegimes.filter((r) => r.countryId === jurisdictionCode);
+    const zone = project.zones?.find((z) => z.id === node.zoneId);
+    if (zone) {
+      // Filter to regimes matching the zone's jurisdiction
+      return allRegimes.filter((r) => r.countryId === zone.jurisdiction);
+    }
+    // No zone assigned — show all regimes so the user can still pick one
+    return allRegimes;
   })();
 
   const label = isMultiNode
@@ -566,7 +566,7 @@ export function EditorSidebar() {
         ) : (
           <>
             {selection.type === 'node' && entity && (
-              <NodeEditor node={entity as NodeDTO} onChange={updateField} onBlur={handleBlur} availableRegimes={availableRegimes} />
+              <NodeEditor node={entity as NodeDTO} onChange={updateField} onBlur={handleBlur} availableRegimes={availableRegimes} projectZones={project.zones ?? []} />
             )}
             {selection.type === 'flow' && (
               <FlowEditor flow={entity as FlowDTO} onChange={updateField} onBlur={handleBlur} />
