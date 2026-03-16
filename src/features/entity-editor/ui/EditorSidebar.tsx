@@ -1,7 +1,7 @@
 'use client';
 
-import { useAtom, useSetAtom } from 'jotai';
-import { useRef, useCallback } from 'react';
+import { useAtom, useSetAtom, useAtomValue } from 'jotai';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import { selectionAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom, deleteZoneAtom } from '@features/canvas/model/graph-actions-atom';
@@ -30,23 +30,87 @@ const inputStyle: React.CSSProperties = {
 
 const selectStyle: React.CSSProperties = { ...inputStyle, background: '#fff' };
 
+// ─── Formatted numeric input ────────────────────────────────────────────────
+
+const numFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 10 });
+
+function NumericInput({
+  value,
+  onChange,
+  style,
+  step,
+  min,
+  max,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  style?: React.CSSProperties;
+  step?: string;
+  min?: number;
+  max?: number;
+}) {
+  const [display, setDisplay] = useState(() => formatNum(value));
+  const focusedRef = useRef(false);
+
+  // Sync display when value changes externally (not during editing)
+  useEffect(() => {
+    if (!focusedRef.current) {
+      setDisplay(formatNum(value));
+    }
+  }, [value]);
+
+  function formatNum(n: number): string {
+    if (n === 0) return '0';
+    return numFormatter.format(n);
+  }
+
+  function parseNum(s: string): number {
+    const cleaned = s.replace(/[^0-9.\-]/g, '');
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+
+  return (
+    <input
+      style={style ?? inputStyle}
+      type="text"
+      inputMode="decimal"
+      value={display}
+      onFocus={() => {
+        focusedRef.current = true;
+        // Show raw number on focus for easier editing
+        setDisplay(String(value));
+      }}
+      onBlur={() => {
+        focusedRef.current = false;
+        const parsed = parseNum(display);
+        const clamped = min != null && parsed < min ? min : max != null && parsed > max ? max : parsed;
+        onChange(clamped);
+        setDisplay(formatNum(clamped));
+      }}
+      onChange={(e) => {
+        setDisplay(e.target.value);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+    />
+  );
+}
+
 // ─── Node editor ────────────────────────────────────────────────────────────
 
 function NodeEditor({
   node,
   onChange,
-  onBlur,
   availableRegimes,
   projectZones,
 }: {
   node: NodeDTO;
   onChange: (field: string, value: unknown) => void;
-  onBlur: () => void;
   availableRegimes: TaxRegime[];
   projectZones: Zone[];
 }) {
-  const blurOnEnter = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
-
   return (
     <>
       <Field label="Name">
@@ -55,8 +119,6 @@ function NodeEditor({
           type="text"
           value={node.name}
           onChange={(e) => onChange('name', e.target.value)}
-          onBlur={onBlur}
-          onKeyDown={blurOnEnter}
         />
       </Field>
 
@@ -65,7 +127,6 @@ function NodeEditor({
           style={selectStyle}
           value={node.zoneId || ''}
           onChange={(e) => onChange('zoneId', e.target.value || null)}
-          onBlur={onBlur}
         >
           <option value="">— none —</option>
           {projectZones.map((z) => (
@@ -82,7 +143,6 @@ function NodeEditor({
             style={selectStyle}
             value={node.regimeId || ''}
             onChange={(e) => onChange('regimeId', e.target.value || null)}
-            onBlur={onBlur}
           >
             <option value="">— none —</option>
             {availableRegimes.map((r) => (
@@ -95,28 +155,22 @@ function NodeEditor({
       )}
 
       <Field label="Annual Income">
-        <input
+        <NumericInput
           style={inputStyle}
-          type="number"
           value={node.annualIncome}
-          onChange={(e) => onChange('annualIncome', parseFloat(e.target.value) || 0)}
-          onBlur={onBlur}
-          onKeyDown={blurOnEnter}
+          onChange={(v) => onChange('annualIncome', v)}
         />
       </Field>
 
       {node.type === 'company' && (
         <Field label="ETR (manual)">
-          <input
+          <NumericInput
             style={inputStyle}
-            type="number"
-            step="0.01"
-            min="0"
-            max="1"
             value={node.etr}
-            onChange={(e) => onChange('etr', parseFloat(e.target.value) || 0)}
-            onBlur={onBlur}
-            onKeyDown={blurOnEnter}
+            onChange={(v) => onChange('etr', v)}
+            step="0.01"
+            min={0}
+            max={1}
           />
         </Field>
       )}
@@ -133,8 +187,6 @@ function NodeEditor({
                 e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
               )
             }
-            onBlur={onBlur}
-            onKeyDown={blurOnEnter}
           />
         </Field>
       )}
@@ -155,14 +207,10 @@ function NodeEditor({
 function FlowEditor({
   flow,
   onChange,
-  onBlur,
 }: {
   flow: FlowDTO;
   onChange: (field: string, value: unknown) => void;
-  onBlur: () => void;
 }) {
-  const blurOnEnter = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
-
   return (
     <>
       <Field label="Flow Type">
@@ -170,7 +218,6 @@ function FlowEditor({
           style={selectStyle}
           value={flow.flowType}
           onChange={(e) => onChange('flowType', e.target.value)}
-          onBlur={onBlur}
         >
           {FLOW_TYPE_OPTIONS.map((ft) => (
             <option key={ft} value={ft}>{ft}</option>
@@ -179,13 +226,10 @@ function FlowEditor({
       </Field>
 
       <Field label="Gross Amount">
-        <input
+        <NumericInput
           style={inputStyle}
-          type="number"
           value={flow.grossAmount}
-          onChange={(e) => onChange('grossAmount', parseFloat(e.target.value) || 0)}
-          onBlur={onBlur}
-          onKeyDown={blurOnEnter}
+          onChange={(v) => onChange('grossAmount', v)}
         />
       </Field>
 
@@ -194,7 +238,6 @@ function FlowEditor({
           style={selectStyle}
           value={flow.currency}
           onChange={(e) => onChange('currency', e.target.value)}
-          onBlur={onBlur}
         >
           {CURRENCY_OPTIONS.map((c) => (
             <option key={c} value={c}>{c}</option>
@@ -203,16 +246,13 @@ function FlowEditor({
       </Field>
 
       <Field label="WHT Rate">
-        <input
+        <NumericInput
           style={inputStyle}
-          type="number"
-          step="0.01"
-          min="0"
-          max="1"
           value={flow.whtRate}
-          onChange={(e) => onChange('whtRate', parseFloat(e.target.value) || 0)}
-          onBlur={onBlur}
-          onKeyDown={blurOnEnter}
+          onChange={(v) => onChange('whtRate', v)}
+          step="0.01"
+          min={0}
+          max={1}
         />
       </Field>
 
@@ -221,7 +261,6 @@ function FlowEditor({
           style={selectStyle}
           value={flow.paymentMethod}
           onChange={(e) => onChange('paymentMethod', e.target.value)}
-          onBlur={onBlur}
         >
           <option value="bank">Bank</option>
           <option value="cash">Cash</option>
@@ -246,39 +285,29 @@ function FlowEditor({
 function OwnershipEditor({
   edge,
   onChange,
-  onBlur,
 }: {
   edge: OwnershipEdge;
   onChange: (field: string, value: unknown) => void;
-  onBlur: () => void;
 }) {
-  const blurOnEnter = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
-
   return (
     <>
       <Field label="Ownership (%)">
-        <input
+        <NumericInput
           style={inputStyle}
-          type="number"
+          value={edge.percent}
+          onChange={(v) => onChange('percent', v)}
           min={0}
           max={100}
-          step={0.01}
-          value={edge.percent}
-          onChange={(e) => onChange('percent', parseFloat(e.target.value) || 0)}
-          onBlur={onBlur}
-          onKeyDown={blurOnEnter}
+          step="0.01"
         />
       </Field>
 
       <Field label="Manual Adjustment">
-        <input
+        <NumericInput
           style={inputStyle}
-          type="number"
-          step={0.01}
           value={edge.manualAdjustment}
-          onChange={(e) => onChange('manualAdjustment', parseFloat(e.target.value) || 0)}
-          onBlur={onBlur}
-          onKeyDown={blurOnEnter}
+          onChange={(v) => onChange('manualAdjustment', v)}
+          step="0.01"
         />
       </Field>
 
@@ -296,14 +325,10 @@ function OwnershipEditor({
 function ZoneEditor({
   zone,
   onChange,
-  onBlur,
 }: {
   zone: Zone;
   onChange: (field: string, value: unknown) => void;
-  onBlur: () => void;
 }) {
-  const blurOnEnter = (e: React.KeyboardEvent) => { if (e.key === 'Enter') e.currentTarget.blur(); };
-
   return (
     <>
       <Field label="Name">
@@ -312,57 +337,39 @@ function ZoneEditor({
           type="text"
           value={zone.name || ''}
           onChange={(e) => onChange('name', e.target.value)}
-          onBlur={onBlur}
-          onKeyDown={blurOnEnter}
         />
       </Field>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
         <Field label="Width">
-          <input
+          <NumericInput
             style={inputStyle}
-            type="number"
-            step={50}
             value={zone.w || 0}
-            onChange={(e) => onChange('w', parseInt(e.target.value) || 600)}
-            onBlur={onBlur}
-            onKeyDown={blurOnEnter}
+            onChange={(v) => onChange('w', v || 600)}
           />
         </Field>
         <Field label="Height">
-          <input
+          <NumericInput
             style={inputStyle}
-            type="number"
-            step={50}
             value={zone.h || 0}
-            onChange={(e) => onChange('h', parseInt(e.target.value) || 400)}
-            onBlur={onBlur}
-            onKeyDown={blurOnEnter}
+            onChange={(v) => onChange('h', v || 400)}
           />
         </Field>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
         <Field label="X">
-          <input
+          <NumericInput
             style={inputStyle}
-            type="number"
-            step={10}
             value={zone.x || 0}
-            onChange={(e) => onChange('x', parseInt(e.target.value) || 0)}
-            onBlur={onBlur}
-            onKeyDown={blurOnEnter}
+            onChange={(v) => onChange('x', v)}
           />
         </Field>
         <Field label="Y">
-          <input
+          <NumericInput
             style={inputStyle}
-            type="number"
-            step={10}
             value={zone.y || 0}
-            onChange={(e) => onChange('y', parseInt(e.target.value) || 0)}
-            onBlur={onBlur}
-            onKeyDown={blurOnEnter}
+            onChange={(v) => onChange('y', v)}
           />
         </Field>
       </div>
@@ -405,15 +412,9 @@ export function EditorSidebar() {
   const deleteZone = useSetAtom(deleteZoneAtom);
   const commitHistory = useSetAtom(commitHistoryAtom);
 
-  // Track whether the field was actually edited during focus → blur cycle
-  const dirtyRef = useRef(false);
-
-  const handleBlur = useCallback(() => {
-    if (dirtyRef.current) {
-      commitHistory();
-      dirtyRef.current = false;
-    }
-  }, [commitHistory]);
+  // ─── Draft state: local copy of the entity being edited ────────────────
+  const [draft, setDraft] = useState<Record<string, unknown> | null>(null);
+  const draftInitRef = useRef<string | null>(null); // track which entity the draft is for
 
   if (!selection || !project) return null;
 
@@ -422,35 +423,59 @@ export function EditorSidebar() {
 
   // Look up the selected entity from the correct collection
   let entity: NodeDTO | FlowDTO | OwnershipEdge | Zone | undefined;
+  let entityKey: string | null = null;
   if (selection.type === 'node') {
     if (selection.ids.length === 1) {
       entity = project.nodes.find((n) => n.id === selection.ids[0]);
+      entityKey = selection.ids[0];
     }
-    // multi-select: entity stays undefined, show summary instead
   } else if (selection.type === 'flow') {
     entity = project.flows.find((f) => f.id === selection.id);
+    entityKey = selection.id;
   } else if (selection.type === 'zone') {
     entity = project.zones?.find((z) => z.id === selection.id);
+    entityKey = selection.id;
   } else {
     entity = project.ownership.find((o) => o.id === selection.id);
+    entityKey = selection.id;
   }
 
   if (!entity && !isMultiNode) return null;
 
-  const singleNodeId = selection.type === 'node' && selection.ids.length === 1 ? selection.ids[0] : null;
+  // Initialize draft when entity changes
+  if (entity && entityKey && draftInitRef.current !== entityKey) {
+    draftInitRef.current = entityKey;
+    // Use setTimeout-free synchronous init via setState during render
+    // React handles this correctly
+    if (draft === null || draftInitRef.current !== entityKey) {
+      // We set draft in the next line; React will re-render
+      // eslint-disable-next-line react-hooks/rules-of-hooks
+      queueMicrotask(() => setDraft({ ...entity as unknown as Record<string, unknown> }));
+    }
+  }
 
-  // Single entity ID for flow/ownership/zone editing
+  // If draft hasn't initialized yet, use entity directly
+  const currentDraft = (draft && draftInitRef.current === entityKey) ? draft : (entity ? { ...entity as unknown as Record<string, unknown> } : null);
+
+  const singleNodeId = selection.type === 'node' && selection.ids.length === 1 ? selection.ids[0] : null;
   const entityId = (selection.type === 'flow' || selection.type === 'ownership' || selection.type === 'zone') ? selection.id : null;
 
-  const updateField = (field: string, value: unknown) => {
-    dirtyRef.current = true;
+  // Update draft field (local state only, no Jotai mutation)
+  const updateDraftField = (field: string, value: unknown) => {
+    setDraft((prev) => prev ? { ...prev, [field]: value } : prev);
+  };
+
+  // ─── Save: commit draft to Jotai ────────────────────────────────────────
+  const handleSave = () => {
+    if (!currentDraft) return;
+    commitHistory();
     setProject((prev) => {
       if (!prev) return prev;
       if (singleNodeId) {
         return {
           ...prev,
           nodes: prev.nodes.map((n) =>
-            n.id === singleNodeId ? { ...n, [field]: value } : n,
+            n.id === singleNodeId ? { ...n, ...currentDraft } as NodeDTO : n,
           ),
         };
       }
@@ -458,7 +483,7 @@ export function EditorSidebar() {
         return {
           ...prev,
           flows: prev.flows.map((f) =>
-            f.id === entityId ? { ...f, [field]: value } : f,
+            f.id === entityId ? { ...f, ...currentDraft } as FlowDTO : f,
           ),
         };
       }
@@ -466,7 +491,7 @@ export function EditorSidebar() {
         return {
           ...prev,
           zones: (prev.zones || []).map((z) =>
-            z.id === entityId ? { ...z, [field]: value } : z,
+            z.id === entityId ? { ...z, ...currentDraft } as Zone : z,
           ),
         };
       }
@@ -474,32 +499,43 @@ export function EditorSidebar() {
         return {
           ...prev,
           ownership: prev.ownership.map((o) =>
-            o.id === entityId ? { ...o, [field]: value } : o,
+            o.id === entityId ? { ...o, ...currentDraft } as OwnershipEdge : o,
           ),
         };
       }
       return prev;
     });
+    setSelection(null);
+    setDraft(null);
+    draftInitRef.current = null;
   };
 
+  // ─── Cancel: discard draft and close ─────────────────────────────────────
+  const handleCancel = () => {
+    setSelection(null);
+    setDraft(null);
+    draftInitRef.current = null;
+  };
+
+  // ─── Delete: remove entity and close ─────────────────────────────────────
   const handleDelete = () => {
     if (selection.type === 'node') deleteNodes(selection.ids);
     else if (selection.type === 'flow') deleteFlow(selection.id);
     else if (selection.type === 'zone') deleteZone(selection.id);
     else deleteOwnership(selection.id);
+    setDraft(null);
+    draftInitRef.current = null;
   };
 
   // ─── Compute available regimes for node based on zone → jurisdiction → country
   const availableRegimes: TaxRegime[] = (() => {
-    if (selection.type !== 'node' || !entity || (entity as NodeDTO).type !== 'company') return [];
-    const node = entity as NodeDTO;
+    if (selection.type !== 'node' || !currentDraft || (currentDraft as unknown as NodeDTO).type !== 'company') return [];
+    const node = currentDraft as unknown as NodeDTO;
     const allRegimes = project.masterData?.regimes ?? [];
     const zone = project.zones?.find((z) => z.id === node.zoneId);
     if (zone) {
-      // Filter to regimes matching the zone's jurisdiction
       return allRegimes.filter((r) => r.countryId === zone.jurisdiction);
     }
-    // No zone assigned — show all regimes so the user can still pick one
     return allRegimes;
   })();
 
@@ -541,7 +577,7 @@ export function EditorSidebar() {
           Edit {label}
         </span>
         <button
-          onClick={() => setSelection(null)}
+          onClick={handleCancel}
           style={{
             background: 'none',
             border: 'none',
@@ -563,32 +599,37 @@ export function EditorSidebar() {
             <br /><br />
             Drag any selected node to move all. Press <kbd style={{ padding: '1px 4px', background: '#dbeafe', borderRadius: '3px', fontSize: '11px' }}>Delete</kbd> to remove all.
           </div>
-        ) : (
+        ) : currentDraft ? (
           <>
-            {selection.type === 'node' && entity && (
-              <NodeEditor node={entity as NodeDTO} onChange={updateField} onBlur={handleBlur} availableRegimes={availableRegimes} projectZones={project.zones ?? []} />
+            {selection.type === 'node' && (
+              <NodeEditor node={currentDraft as unknown as NodeDTO} onChange={updateDraftField} availableRegimes={availableRegimes} projectZones={project.zones ?? []} />
             )}
             {selection.type === 'flow' && (
-              <FlowEditor flow={entity as FlowDTO} onChange={updateField} onBlur={handleBlur} />
+              <FlowEditor flow={currentDraft as unknown as FlowDTO} onChange={updateDraftField} />
             )}
             {selection.type === 'ownership' && (
-              <OwnershipEditor edge={entity as OwnershipEdge} onChange={updateField} onBlur={handleBlur} />
+              <OwnershipEditor edge={currentDraft as unknown as OwnershipEdge} onChange={updateDraftField} />
             )}
             {selection.type === 'zone' && (
-              <ZoneEditor zone={entity as Zone} onChange={updateField} onBlur={handleBlur} />
+              <ZoneEditor zone={currentDraft as unknown as Zone} onChange={updateDraftField} />
             )}
           </>
-        )}
+        ) : null}
       </div>
 
-      {/* Footer — delete action */}
-      <div style={{ padding: '12px 16px', borderTop: '1px solid #e5e7eb' }}>
+      {/* Sticky Footer — Delete / Cancel / Save */}
+      <div style={{
+        padding: '12px 16px',
+        borderTop: '1px solid #e5e7eb',
+        display: 'flex',
+        gap: '8px',
+      }}>
         <button
           onClick={handleDelete}
           data-testid="btn-delete-entity"
           style={{
-            width: '100%',
-            padding: '8px 0',
+            flex: '0 0 auto',
+            padding: '8px 14px',
             background: '#fef2f2',
             color: '#dc2626',
             fontWeight: 600,
@@ -598,7 +639,39 @@ export function EditorSidebar() {
             cursor: 'pointer',
           }}
         >
-          Delete {label}
+          Delete
+        </button>
+        <div style={{ flex: 1 }} />
+        <button
+          onClick={handleCancel}
+          style={{
+            padding: '8px 14px',
+            background: '#f3f4f6',
+            color: '#374151',
+            fontWeight: 500,
+            fontSize: '13px',
+            border: '1px solid #d1d5db',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSave}
+          data-testid="btn-save-entity"
+          style={{
+            padding: '8px 14px',
+            background: '#2563eb',
+            color: '#fff',
+            fontWeight: 600,
+            fontSize: '13px',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+          }}
+        >
+          Save
         </button>
       </div>
     </div>

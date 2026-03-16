@@ -250,9 +250,9 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
         w: 600,
         h: 400,
       });
-      onClose();
+      // Modal stays open for continuous addition
     },
-    [addZone, onClose],
+    [addZone],
   );
 
   // ─── One-click add regime as sub-zone to canvas ───────────────────────
@@ -274,9 +274,9 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
         w: 320,
         h: 250,
       });
-      onClose();
+      // Modal stays open for continuous addition
     },
-    [addZone, onClose, project?.zones],
+    [addZone, project?.zones],
   );
 
   if (!project) return null;
