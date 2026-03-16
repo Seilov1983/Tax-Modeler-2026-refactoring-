@@ -18,6 +18,8 @@ import {
   pastStatesAtom, futureStatesAtom,
 } from '../model/history-atoms';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
+import { addNodeAtom } from '@features/canvas/model/graph-actions-atom';
+import { viewportAtom } from '@features/canvas/model/viewport-atom';
 import { defaultProject } from '@entities/project';
 import {
   ensureMasterData, ensureZoneTaxDefaults,
@@ -46,10 +48,31 @@ export function ProjectHeader() {
   const canUndo = useAtomValue(canUndoAtom);
   const canRedo = useAtomValue(canRedoAtom);
   const setSelection = useSetAtom(selectionAtom);
+  const addNode = useSetAtom(addNodeAtom);
+  const viewport = useAtomValue(viewportAtom);
   const setPastStates = useSetAtom(pastStatesAtom);
   const setFutureStates = useSetAtom(futureStatesAtom);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showMasterData, setShowMasterData] = useState(false);
+
+  const getViewportCenter = useCallback(() => {
+    const vp = document.getElementById('viewport');
+    if (!vp) return { x: 400, y: 300 };
+    const rect = vp.getBoundingClientRect();
+    const cx = (rect.width / 2 - viewport.panX) / viewport.scale;
+    const cy = (rect.height / 2 - viewport.panY) / viewport.scale;
+    return { x: Math.round(cx - 90), y: Math.round(cy - 40) };
+  }, [viewport]);
+
+  const handleAddCompany = useCallback(() => {
+    const pos = getViewportCenter();
+    addNode({ type: 'company', name: 'New Company', x: pos.x, y: pos.y });
+  }, [addNode, getViewportCenter]);
+
+  const handleAddPerson = useCallback(() => {
+    const pos = getViewportCenter();
+    addNode({ type: 'person', name: 'New Person', x: pos.x + 20, y: pos.y + 20 });
+  }, [addNode, getViewportCenter]);
 
   const handleCurrencyChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -189,6 +212,23 @@ export function ProjectHeader() {
         </button>
 
         <div style={{ width: '1px', height: '20px', background: '#d1d5db' }} />
+
+        <button
+          onClick={handleAddCompany}
+          data-testid="btn-add-company"
+          title="Add a new company node to the canvas"
+          style={{ ...btnSecondary, background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' }}
+        >
+          + Company
+        </button>
+        <button
+          onClick={handleAddPerson}
+          data-testid="btn-add-person"
+          title="Add a new person node to the canvas"
+          style={{ ...btnSecondary, background: '#f0fdf4', color: '#16a34a', borderColor: '#bbf7d0' }}
+        >
+          + Person
+        </button>
 
         <button
           onClick={() => setShowMasterData(true)}

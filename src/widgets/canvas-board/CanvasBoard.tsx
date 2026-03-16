@@ -32,7 +32,7 @@ import { draftConnectionAtom } from '@features/canvas/model/draft-connection-ato
 import { viewportAtom } from '@features/canvas/model/viewport-atom';
 import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
-import { addZoneAtom } from '@features/canvas/model/graph-actions-atom';
+import { addNodeAtom, addZoneAtom } from '@features/canvas/model/graph-actions-atom';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { ProjectHeader } from '@features/project-management';
 import type { JurisdictionCode, CurrencyCode } from '@shared/types';
@@ -50,6 +50,7 @@ export function CanvasBoard() {
 
   // Global keyboard shortcuts (Undo, Redo, Delete, Escape)
   useKeyboardShortcuts();
+  const addNode = useSetAtom(addNodeAtom);
   const addZone = useSetAtom(addZoneAtom);
   const [draft, setDraft] = useAtom(draftConnectionAtom);
   const setViewport = useSetAtom(viewportAtom);
@@ -94,6 +95,19 @@ export function CanvasBoard() {
     if (lassoDraggedRef.current) return; // lasso drag, don't deselect
     setSelection(null);
   }, [setSelection]);
+
+  // ─── Double-click on empty canvas → create a new Company node ────────────
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest('.no-canvas-events')) return;
+      if ((e.target as HTMLElement).closest('.canvas-node')) return;
+      if ((e.target as HTMLElement).closest('button')) return;
+
+      const { x, y } = clientToCanvas(e.clientX, e.clientY);
+      addNode({ type: 'company', name: 'New Company', x: Math.round(x - 90), y: Math.round(y - 40) });
+    },
+    [clientToCanvas, addNode],
+  );
 
   // Convert client coordinates to canvas-space coordinates
   const clientToCanvas = useCallback(
@@ -292,6 +306,7 @@ export function CanvasBoard() {
         ref={viewportRef}
         id="viewport"
         onClick={handleBackgroundClick}
+        onDoubleClick={handleDoubleClick}
         onPointerDown={handleBoardPointerDown}
         onPointerMove={handleBoardPointerMove}
         onPointerUp={handleBoardPointerUp}
