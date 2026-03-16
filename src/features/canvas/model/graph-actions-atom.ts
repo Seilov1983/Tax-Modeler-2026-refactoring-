@@ -366,12 +366,20 @@ export const deleteZoneAtom = atom(
   (get, set, zoneId: string) => {
     set(commitHistoryAtom);
 
+    // Soft delete: remove zone but keep all nodes at their coordinates.
+    // Clear zoneId on orphaned nodes so they are spatially re-detected
+    // and flagged as NO_JURISDICTION if outside all remaining zones.
+    const clearZoneRef = (n: NodeDTO) =>
+      n.zoneId === zoneId ? { ...n, zoneId: null } : n;
+
     set(zonesAtom, (prev) => prev.filter((z) => z.id !== zoneId));
+    set(nodesAtom, (prev) => prev.map(clearZoneRef));
     set(projectAtom, (prev) => {
       if (!prev) return prev;
       return {
         ...prev,
         zones: prev.zones?.filter((z) => z.id !== zoneId) || [],
+        nodes: prev.nodes.map(clearZoneRef),
       };
     });
 

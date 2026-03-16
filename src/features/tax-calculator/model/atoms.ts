@@ -76,6 +76,9 @@ export const taxCalculationAtom = atom(async (get) => {
         const localCurrency = mdEntry?.baseCurrency || 'KZT';
         const convertedCit = convert(p, rawCit, localCurrency, baseCurrency);
         citResults.push({ nodeId: node.id, citAmount: convertedCit });
+      } else {
+        // Node outside any zone — default tax rate is 0
+        citResults.push({ nodeId: node.id, citAmount: 0 });
       }
     }
   }
