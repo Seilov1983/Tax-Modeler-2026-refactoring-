@@ -240,7 +240,7 @@ export const moveNodesAtom = atom(
       return { ...prev, nodes: prev.nodes.map(updateNode) };
     });
 
-    // Trigger physics after node movement
+    // Physics runs ONLY here (drop phase) — never during transient drag
     set(physicsAtom);
   },
 );
@@ -320,7 +320,7 @@ export const addZoneAtom = atom(
       return { ...prev, zones: [...prev.zones, newZone] };
     });
 
-    // Trigger physics: auto-resize parent country + resolve collisions
+    // Physics runs ONLY here (drop phase) — never during transient drag
     set(physicsAtom);
   },
 );
@@ -390,7 +390,7 @@ export const moveZoneAtom = atom(
       };
     });
 
-    // Trigger physics: auto-resize parent country + resolve collisions
+    // Physics runs ONLY here (drop phase) — never during transient drag
     set(physicsAtom);
   },
 );
@@ -415,7 +415,7 @@ export const resizeZoneAtom = atom(
       };
     });
 
-    // Trigger physics after resize
+    // Physics runs ONLY here (drop phase) — never during transient drag
     set(physicsAtom);
   },
 );
@@ -461,48 +461,49 @@ const DEFAULT_COUNTRY_HEIGHT = 150;
  * Recalculate a country zone's bounds to encompass all child regime sub-zones.
  * Returns updated zones array. Does NOT mutate input.
  *
- * IMPORTANT: Bounds are computed absolutely from children's coordinates.
- * We never reference country.w / country.h to avoid additive runaway.
+ * CRITICAL RULES (idempotent, no feedback loop):
+ *   - country.x / country.y are NEVER shifted — origin stays stable.
+ *   - Width/height are computed absolutely from children's edge coordinates
+ *     relative to the country's fixed origin.
+ *   - We NEVER reference the country's current w/h in the formula.
+ *   - This function is ONLY called in the drop phase (physicsAtom).
  */
 function recalculateCountryBounds(zones: Zone[]): Zone[] {
-  // Identify countries (large zones) and regimes (sub-zones inside them)
-  // A zone is a "country" if any smaller zone's center is inside it
   const updated = zones.map((z) => ({ ...z }));
-  const areaMap = new Map(updated.map((z) => [z.id, z.w * z.h]));
+  // Snapshot original areas for parent/child detection — immutable during iteration
+  const areaMap = new Map(zones.map((z) => [z.id, z.w * z.h]));
 
   for (const country of updated) {
     const countryArea = areaMap.get(country.id) || 0;
-    // Find child sub-zones: smaller zones whose center is inside this country
+
+    // Find child sub-zones: smaller zones whose center is inside this country.
+    // Use ORIGINAL country bounds (from input) for containment — avoids
+    // cascading shrink where a previously-resized country excludes children.
+    const orig = zones.find((z) => z.id === country.id)!;
     const children = updated.filter((z) => {
       if (z.id === country.id) return false;
       const childArea = areaMap.get(z.id) || 0;
       if (childArea >= countryArea) return false;
       const cx = z.x + z.w / 2;
       const cy = z.y + z.h / 2;
-      return cx >= country.x && cx <= country.x + country.w &&
-             cy >= country.y && cy <= country.y + country.h;
+      return cx >= orig.x && cx <= orig.x + orig.w &&
+             cy >= orig.y && cy <= orig.y + orig.h;
     });
 
-    if (children.length === 0) continue;
+    if (children.length === 0) {
+      // No children — snap to default minimums (never leave oversized ghost)
+      country.w = DEFAULT_COUNTRY_WIDTH;
+      country.h = DEFAULT_COUNTRY_HEIGHT;
+      continue;
+    }
 
-    // Absolute bounds from children — never reference country.w / country.h
-    const maxChildRightEdge = Math.max(...children.map((c) => c.x + c.w));
-    const maxChildBottomEdge = Math.max(...children.map((c) => c.y + c.h));
-    const minChildX = Math.min(...children.map((c) => c.x));
-    const minChildY = Math.min(...children.map((c) => c.y));
+    // Absolute child boundaries
+    const maxRightEdge = Math.max(...children.map((c) => c.x + c.w));
+    const maxBottomEdge = Math.max(...children.map((c) => c.y + c.h));
 
-    // Expand origin if children sit outside the current top-left
-    const newX = Math.min(country.x, minChildX - PHYSICS_PADDING);
-    const newY = Math.min(country.y, minChildY - PHYSICS_PADDING - 30); // extra for header
-
-    // Width/height are absolute: based on child edges relative to origin
-    const newW = Math.max(DEFAULT_COUNTRY_WIDTH, maxChildRightEdge - newX + PHYSICS_PADDING);
-    const newH = Math.max(DEFAULT_COUNTRY_HEIGHT, maxChildBottomEdge - newY + PHYSICS_PADDING);
-
-    country.x = newX;
-    country.y = newY;
-    country.w = newW;
-    country.h = newH;
+    // Width/height relative to the STABLE country origin — never shifts x/y
+    country.w = Math.max(DEFAULT_COUNTRY_WIDTH, maxRightEdge - country.x + PHYSICS_PADDING);
+    country.h = Math.max(DEFAULT_COUNTRY_HEIGHT, maxBottomEdge - country.y + PHYSICS_PADDING);
   }
 
   return updated;
