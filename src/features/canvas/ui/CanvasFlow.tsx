@@ -1,77 +1,36 @@
 'use client';
 
 /**
- * CanvasFlow — renders a flow arrow between two nodes with optional WHT badge.
+ * CanvasFlow — Konva-based flow arrow between two nodes.
  *
- * Uses cubic Bezier curves (SVG <path> C command) for smooth S-shaped routing:
- * - Exits horizontally from the right edge of the source node
- * - Enters horizontally into the left edge of the target node
- * - Dynamic control-point offset scales with horizontal distance
+ * Uses Konva <Shape> for custom cubic Bezier curves.
+ * Flow exits horizontally from right edge of source → left edge of target.
+ * Includes flow label and WHT badge via Konva <Text> and <Rect>.
  *
- * Each flow gets its own local <Suspense> boundary so WHT calculation
- * doesn't block arrow rendering or other flows.
- *
- * FROZEN: SVG Hit-Areas — visible stroke 2px, invisible hit-area 12px.
+ * Hit area: 12px invisible stroke for easy clicking.
  */
 
-import { useAtomValue, useAtom } from 'jotai';
-import { memo, Suspense, useCallback } from 'react';
+import { useAtom } from 'jotai';
+import { memo, useCallback } from 'react';
+import { Group, Shape, Text, Rect, Line } from 'react-konva';
 import type { FlowDTO, NodeDTO } from '@shared/types';
-import { flowTaxAtomFamily, taxCalculationAtom } from '@features/tax-calculator/model/atoms';
+import type { KonvaEventObject } from 'konva/lib/Node';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
-import { fmtMoney, currencySymbol } from '@shared/lib/engine/utils';
 
-// ─── Bezier path builder ────────────────────────────────────────────────────
+// ─── Bezier path builder (reused for draft connections) ─────────────────────
 
-/**
- * Builds an SVG cubic Bezier path string from (x1,y1) to (x2,y2).
- * Control points extend horizontally so the curve exits/enters the ports
- * smoothly regardless of node arrangement.
- */
 export function buildBezierPath(x1: number, y1: number, x2: number, y2: number): string {
   const dx = Math.abs(x2 - x1);
   const cpOffset = Math.max(dx * 0.45, 50);
-
   return `M ${x1} ${y1} C ${x1 + cpOffset} ${y1}, ${x2 - cpOffset} ${y2}, ${x2} ${y2}`;
 }
 
-// ─── Sub-components ─────────────────────────────────────────────────────────
+// ─── Component ──────────────────────────────────────────────────────────────
 
 interface CanvasFlowProps {
   flow: FlowDTO;
   nodes: NodeDTO[];
 }
-
-function FlowTaxDisplay({ flowId, midX, midY }: { flowId: string; midX: number; midY: number }) {
-  const whtAmount = useAtomValue(flowTaxAtomFamily(flowId));
-  const taxResults = useAtomValue(taxCalculationAtom);
-  const ccy = taxResults?.baseCurrency || 'USD';
-
-  if (whtAmount === null || whtAmount === 0) return null;
-
-  const label = `WHT: ${currencySymbol(ccy)} ${fmtMoney(whtAmount)}`;
-
-  return (
-    <foreignObject x={midX - 45} y={midY + 8} width="90" height="20">
-      <div
-        style={{
-          background: 'rgba(255, 237, 213, 0.95)',
-          color: '#9a3412',
-          fontSize: '10px',
-          textAlign: 'center',
-          borderRadius: '3px',
-          border: '1px solid #fdba74',
-          padding: '1px 3px',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {label}
-      </div>
-    </foreignObject>
-  );
-}
-
-// ─── Main component ─────────────────────────────────────────────────────────
 
 export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowProps) {
   const fromNode = nodes.find((n) => n.id === flow.fromId);
@@ -80,8 +39,8 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowPr
   const isSelected = selection?.type === 'flow' && selection.id === flow.id;
 
   const handleClick = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
+    (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+      e.cancelBubble = true;
       setSelection({ type: 'flow', id: flow.id });
     },
     [flow.id, setSelection],
@@ -95,47 +54,88 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowPr
   const x2 = toNode.x;
   const y2 = toNode.y + toNode.h / 2;
 
-  const pathData = buildBezierPath(x1, y1, x2, y2);
+  const dx = Math.abs(x2 - x1);
+  const cpOffset = Math.max(dx * 0.45, 50);
 
-  // Label position at parametric midpoint of Bezier (t=0.5)
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
 
-  return (
-    <g onClick={handleClick} style={{ cursor: 'pointer', pointerEvents: 'auto' }}>
-      {/* Invisible wider hit area for easier clicking (FROZEN: 12px) */}
-      <path d={pathData} stroke="transparent" strokeWidth={12} fill="none" />
+  const label = `${flow.flowType}${flow.grossAmount > 0 ? ' ' + flow.grossAmount.toLocaleString('ru-RU') : ''}`;
 
-      {/* Visible Bezier curve — highlighted when selected */}
-      <path
-        d={pathData}
-        stroke={isSelected ? '#2563eb' : 'var(--stroke, #94a3b8)'}
+  return (
+    <Group onClick={handleClick} onTap={handleClick}>
+      {/* Invisible wider hit area (12px) */}
+      <Shape
+        sceneFunc={(ctx, shape) => {
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.bezierCurveTo(x1 + cpOffset, y1, x2 - cpOffset, y2, x2, y2);
+          ctx.strokeShape(shape);
+        }}
+        stroke="transparent"
+        strokeWidth={12}
+        listening={true}
+      />
+
+      {/* Visible Bezier curve */}
+      <Shape
+        sceneFunc={(ctx, shape) => {
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.bezierCurveTo(x1 + cpOffset, y1, x2 - cpOffset, y2, x2, y2);
+          ctx.strokeShape(shape);
+        }}
+        stroke={isSelected ? '#2563eb' : '#94a3b8'}
         strokeWidth={isSelected ? 4 : 1.5}
-        fill="none"
-        markerEnd="url(#arrowhead)"
+        listening={false}
+      />
+
+      {/* Arrowhead at target */}
+      <Line
+        points={[
+          x2 - 8, y2 - 4,
+          x2, y2,
+          x2 - 8, y2 + 4,
+        ]}
+        stroke={isSelected ? '#2563eb' : '#94a3b8'}
+        strokeWidth={1.5}
+        listening={false}
       />
 
       {/* Flow label */}
-      <text
-        x={midX}
-        y={midY - 4}
-        textAnchor="middle"
-        fontSize="10"
-        fill="var(--muted, #64748b)"
-      >
-        {flow.flowType} {flow.grossAmount > 0 ? flow.grossAmount.toLocaleString('ru-RU') : ''}
-      </text>
+      <Text
+        x={midX - 40}
+        y={midY - 14}
+        text={label}
+        fontSize={10}
+        fill="#64748b"
+        align="center"
+        width={80}
+        listening={false}
+      />
 
-      {/* WHT badge — local Suspense boundary */}
-      <Suspense
-        fallback={
-          <text x={midX} y={midY + 16} textAnchor="middle" fontSize="9" fill="#94a3b8">
-            calc...
-          </text>
-        }
-      >
-        <FlowTaxDisplay flowId={flow.id} midX={midX} midY={midY} />
-      </Suspense>
-    </g>
+      {/* WHT badge (if applicable) */}
+      {flow.whtRate > 0 && (
+        <Group x={midX - 30} y={midY + 6} listening={false}>
+          <Rect
+            width={60}
+            height={16}
+            fill="#fff7ed"
+            stroke="#fdba74"
+            strokeWidth={0.5}
+            cornerRadius={3}
+          />
+          <Text
+            x={3}
+            y={3}
+            text={`WHT: ${flow.whtRate}%`}
+            fontSize={9}
+            fill="#9a3412"
+            width={54}
+            align="center"
+          />
+        </Group>
+      )}
+    </Group>
   );
 });
