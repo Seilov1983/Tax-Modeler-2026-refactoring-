@@ -337,6 +337,28 @@ export const moveZoneAtom = atom(
   },
 );
 
+// ─── Resize Zone ──────────────────────────────────────────────────────────────
+
+export const resizeZoneAtom = atom(
+  null,
+  (_get, set, payload: { id: string; w: number; h: number }) => {
+    set(commitHistoryAtom);
+
+    set(zonesAtom, (prev) =>
+      prev.map((z) => (z.id === payload.id ? { ...z, w: payload.w, h: payload.h } : z)),
+    );
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        zones: prev.zones.map((z) =>
+          z.id === payload.id ? { ...z, w: payload.w, h: payload.h } : z,
+        ),
+      };
+    });
+  },
+);
+
 // ─── Delete Zone ─────────────────────────────────────────────────────────────
 
 export const deleteZoneAtom = atom(

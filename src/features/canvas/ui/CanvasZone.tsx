@@ -15,7 +15,7 @@
 import { memo, useRef, useCallback, type RefObject } from 'react';
 import { useAtom, useSetAtom } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
-import { moveZoneAtom, deleteZoneAtom } from '../model/graph-actions-atom';
+import { moveZoneAtom, deleteZoneAtom, resizeZoneAtom } from '../model/graph-actions-atom';
 import type { Zone } from '@shared/types';
 import type { ViewportState } from './useCanvasViewport';
 
@@ -55,6 +55,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
   const [selection, setSelection] = useAtom(selectionAtom);
   const moveZone = useSetAtom(moveZoneAtom);
   const deleteZone = useSetAtom(deleteZoneAtom);
+  const resizeZone = useSetAtom(resizeZoneAtom);
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
 
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
@@ -117,6 +118,48 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
       }
     },
     [zone.id, setSelection],
+  );
+
+  // ─── Resize handle (bottom-right corner) ──────────────────────────────
+  const liveSize = useRef({ w: zone.w, h: zone.h });
+
+  const handleResizePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.stopPropagation();
+      const target = e.currentTarget;
+      target.setPointerCapture(e.pointerId);
+      liveSize.current = { w: zone.w, h: zone.h };
+
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        const scale = viewportStateRef.current?.scale ?? 1;
+        const dw = moveEvent.movementX / scale;
+        const dh = moveEvent.movementY / scale;
+
+        liveSize.current.w = Math.max(200, liveSize.current.w + dw);
+        liveSize.current.h = Math.max(150, liveSize.current.h + dh);
+
+        if (containerRef.current) {
+          containerRef.current.style.width = `${liveSize.current.w}px`;
+          containerRef.current.style.height = `${liveSize.current.h}px`;
+        }
+      };
+
+      const onPointerUp = (upEvent: PointerEvent) => {
+        target.removeEventListener('pointermove', onPointerMove);
+        target.removeEventListener('pointerup', onPointerUp);
+        target.releasePointerCapture(upEvent.pointerId);
+
+        resizeZone({
+          id: zone.id,
+          w: Math.round(liveSize.current.w),
+          h: Math.round(liveSize.current.h),
+        });
+      };
+
+      target.addEventListener('pointermove', onPointerMove);
+      target.addEventListener('pointerup', onPointerUp);
+    },
+    [zone.w, zone.h, zone.id, resizeZone, viewportStateRef],
   );
 
   const handleDeleteZone = useCallback(
@@ -229,6 +272,29 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         }}
       >
         {zone.jurisdiction} · {zone.currency}
+      </div>
+
+      {/* Resize handle — bottom-right corner */}
+      <div
+        onPointerDown={handleResizePointerDown}
+        style={{
+          position: 'absolute',
+          right: 0,
+          bottom: 0,
+          width: 18,
+          height: 18,
+          cursor: 'nwse-resize',
+          pointerEvents: 'auto',
+          touchAction: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" style={{ opacity: 0.4 }}>
+          <line x1="9" y1="1" x2="1" y2="9" stroke={borderColor} strokeWidth="1.5" />
+          <line x1="9" y1="5" x2="5" y2="9" stroke={borderColor} strokeWidth="1.5" />
+        </svg>
       </div>
     </div>
   );
