@@ -21,34 +21,42 @@ import { nodesAtom } from '@entities/node';
 import type { Zone } from '@shared/types';
 import type { ViewportState } from './useCanvasViewport';
 
+interface ChildSnapshot {
+  el: HTMLElement;
+  origX: number;
+  origY: number;
+  /** Nodes use CSS transform; zones use left/top */
+  usesTransform: boolean;
+}
+
 /** Collect DOM elements of child sub-zones and nodes that are spatially inside the given zone. */
-function collectChildElements(zone: Zone, allZones: Zone[], allNodes: { id: string; x: number; y: number; w: number; h: number }[]) {
-  const zoneArea = zone.w * zone.h;
-  const childEls: { el: HTMLElement; origLeft: number; origTop: number }[] = [];
+function collectChildElements(zone: Zone, allZones: Zone[], allNodes: { id: string; x: number; y: number; w: number; h: number }[]): ChildSnapshot[] {
+  const area = zone.w * zone.h;
+  const children: ChildSnapshot[] = [];
 
   // Child sub-zones: smaller zones whose center is inside the moved zone
   for (const z of allZones) {
     if (z.id === zone.id) continue;
-    if (z.w * z.h >= zoneArea) continue;
+    if (z.w * z.h >= area) continue;
     const cx = z.x + z.w / 2;
     const cy = z.y + z.h / 2;
     if (cx >= zone.x && cx <= zone.x + zone.w && cy >= zone.y && cy <= zone.y + zone.h) {
       const el = document.querySelector(`[data-zone-id="${z.id}"]`) as HTMLElement | null;
-      if (el) childEls.push({ el, origLeft: z.x, origTop: z.y });
+      if (el) children.push({ el, origX: z.x, origY: z.y, usesTransform: false });
     }
   }
 
-  // Child nodes: nodes whose center is inside the moved zone
+  // Child nodes: nodes whose center is inside the moved zone (nodes use transform)
   for (const n of allNodes) {
     const cx = n.x + (n.w || 0) / 2;
     const cy = n.y + (n.h || 0) / 2;
     if (cx >= zone.x && cx <= zone.x + zone.w && cy >= zone.y && cy <= zone.y + zone.h) {
       const el = document.querySelector(`[data-node-id="${n.id}"]`) as HTMLElement | null;
-      if (el) childEls.push({ el, origLeft: n.x, origTop: n.y });
+      if (el) children.push({ el, origX: n.x, origY: n.y, usesTransform: true });
     }
   }
 
-  return childEls;
+  return children;
 }
 
 interface CanvasZoneProps {
@@ -99,7 +107,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
   const containerRef = useRef<HTMLDivElement>(null);
   const livePos = useRef({ x: zone.x, y: zone.y });
   const hasDragged = useRef(false);
-  const childElsRef = useRef<{ el: HTMLElement; origLeft: number; origTop: number }[]>([]);
+  const childElsRef = useRef<ChildSnapshot[]>([]);
 
   const handleHeaderPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -131,8 +139,16 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         const totalDx = livePos.current.x - zone.x;
         const totalDy = livePos.current.y - zone.y;
         for (const child of childElsRef.current) {
-          child.el.style.left = `${child.origLeft + totalDx}px`;
-          child.el.style.top = `${child.origTop + totalDy}px`;
+          const newX = child.origX + totalDx;
+          const newY = child.origY + totalDy;
+          if (child.usesTransform) {
+            // Nodes use CSS transform for positioning
+            child.el.style.transform = `translate(${newX}px, ${newY}px) translateZ(0)`;
+          } else {
+            // Sub-zones use left/top for positioning
+            child.el.style.left = `${newX}px`;
+            child.el.style.top = `${newY}px`;
+          }
         }
       };
 
@@ -140,15 +156,37 @@ export const CanvasZone = memo(function CanvasZone({ zone, viewportStateRef }: C
         target.removeEventListener('pointermove', onPointerMove);
         target.removeEventListener('pointerup', onPointerUp);
         target.releasePointerCapture(upEvent.pointerId);
-        childElsRef.current = [];
 
         if (hasDragged.current) {
+          // CRITICAL: Clear ALL transient inline styles BEFORE committing to state.
+          // Without this, React re-renders with new coordinates from Jotai,
+          // but the stale inline overrides remain → double-delta "jump".
+
+          // Clear zone container's own inline position
+          if (containerRef.current) {
+            containerRef.current.style.left = '';
+            containerRef.current.style.top = '';
+          }
+
+          // Clear child elements' inline overrides
+          for (const child of childElsRef.current) {
+            if (child.usesTransform) {
+              child.el.style.transform = '';
+            } else {
+              child.el.style.left = '';
+              child.el.style.top = '';
+            }
+          }
+
+          // Now commit new positions — React will re-render with correct values
           moveZone({
             id: zone.id,
             x: Math.round(livePos.current.x),
             y: Math.round(livePos.current.y),
           });
         }
+
+        childElsRef.current = [];
       };
 
       target.addEventListener('pointermove', onPointerMove);
