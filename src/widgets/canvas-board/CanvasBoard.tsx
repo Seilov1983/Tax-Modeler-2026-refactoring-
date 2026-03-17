@@ -51,6 +51,7 @@ import { notificationAtom } from '@features/canvas/model/notification-atom';
 import { MasterDataModal } from '@features/project-management/ui/MasterDataModal';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { ProjectHeader } from '@features/project-management';
+import { isSidebarOpenAtom, sidebarContextAtom } from '@features/master-data-sidebar';
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
 import type { JurisdictionCode, CurrencyCode, Zone } from '@shared/types';
 import type Konva from 'konva';
@@ -143,6 +144,10 @@ export function CanvasBoard() {
   // ─── Context menu state (Jotai atom — rendered as DOM overlay) ──────
   const [contextMenu, setContextMenu] = useAtom(contextMenuAtom);
   const setSpawnCoordinates = useSetAtom(spawnCoordinatesAtom);
+
+  // ─── Sidebar state (contextual open/close) ─────────────────────────
+  const setIsSidebarOpen = useSetAtom(isSidebarOpenAtom);
+  const setSidebarContext = useSetAtom(sidebarContextAtom);
 
   // ─── MasterDataModal state (opened from context menu for strict zone creation)
   const [masterDataModal, setMasterDataModal] = useState<{
@@ -316,16 +321,17 @@ export function CanvasBoard() {
     [detectClickContext, setContextMenu, getScreenPointerPosition, setSpawnCoordinates, setMasterDataModal],
   );
 
-  // ─── Stage click → deselect ────────────────────────────────────────────
+  // ─── Stage click → deselect + open sidebar ─────────────────────────────
   const handleStageClick = useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
-      // Only deselect if clicking directly on Stage (empty area)
+      // Only trigger on direct Stage clicks (empty area)
       if (e.target === e.target.getStage()) {
         setSelection(null);
         setContextMenu(null);
+        setIsSidebarOpen(true);
       }
     },
-    [setSelection, setContextMenu],
+    [setSelection, setContextMenu, setIsSidebarOpen],
   );
 
   // ─── Right-click context menu ────────────────────────────────────────
@@ -648,13 +654,7 @@ export function CanvasBoard() {
     return map;
   }, [zones]);
 
-  // ─── Context menu button style ────────────────────────────────────────
-  const menuBtnStyle: React.CSSProperties = {
-    display: 'block', width: '100%', padding: '8px 12px',
-    background: 'none', border: 'none', cursor: 'pointer',
-    fontSize: '13px', fontWeight: 500, textAlign: 'left',
-    borderRadius: '4px', color: '#1f2937',
-  };
+  // (menu styles moved inline to Apple Liquid Glass redesign below)
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -787,9 +787,10 @@ export function CanvasBoard() {
           />
         )}
 
-        {/* Context menu — DOM overlay with position: absolute + high z-index.
-            Uses screen-space coordinates from getPointerPosition() via Jotai atom.
-            Rendered OUTSIDE Konva to avoid canvas clipping and zoom scaling. */}
+        {/* Add Node Menu — Apple Liquid Glass floating popover.
+            Rendered as DOM overlay OUTSIDE Konva to avoid canvas clipping.
+            Event propagation stopped on all pointer/mouse/touch events to
+            prevent underlying Konva zone drag. */}
         {contextMenu && (
           <div
             className="no-canvas-events"
@@ -798,35 +799,57 @@ export function CanvasBoard() {
               left: contextMenu.screenX,
               top: contextMenu.screenY,
               zIndex: 9999,
-              background: '#fff',
-              borderRadius: '8px',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-              border: '1px solid #e5e7eb',
-              padding: '4px',
+              background: 'rgba(255, 255, 255, 0.70)',
+              backdropFilter: 'blur(12px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(12px) saturate(180%)',
+              borderRadius: '16px',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
+              border: '1px solid rgba(255, 255, 255, 0.20)',
+              padding: '6px',
               minWidth: '180px',
               pointerEvents: 'auto',
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif",
             }}
             onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             {contextMenu.kind === 'empty' && (
               <button
                 onClick={handleAddCountryZone}
-                style={menuBtnStyle}
-                onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
-                onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  width: '100%', padding: '10px 14px',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: '13px', fontWeight: 500, textAlign: 'left',
+                  borderRadius: '10px', color: '#1d1d1f',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.05)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
               >
-                Add Country
+                <span style={{ fontSize: '15px', lineHeight: 1 }}>+</span>
+                <span>Country</span>
               </button>
             )}
 
             {contextMenu.kind === 'country' && (
               <button
                 onClick={handleAddRegimeZone}
-                style={menuBtnStyle}
-                onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
-                onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                  width: '100%', padding: '10px 14px',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: '13px', fontWeight: 500, textAlign: 'left',
+                  borderRadius: '10px', color: '#1d1d1f',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.05)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
               >
-                Add Regime
+                <span style={{ fontSize: '15px', lineHeight: 1 }}>+</span>
+                <span>Regime</span>
               </button>
             )}
 
@@ -834,19 +857,36 @@ export function CanvasBoard() {
               <>
                 <button
                   onClick={() => handleContextMenuCreate('company')}
-                  style={menuBtnStyle}
-                  onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
-                  onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    width: '100%', padding: '10px 14px',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontSize: '13px', fontWeight: 500, textAlign: 'left',
+                    borderRadius: '10px', color: '#1d1d1f',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.05)'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
                 >
-                  Add Company
+                  <span style={{ fontSize: '15px', lineHeight: 1, color: '#007aff' }}>+</span>
+                  <span>Company</span>
                 </button>
+                <div style={{ height: '1px', background: 'rgba(0, 0, 0, 0.04)', margin: '2px 10px' }} />
                 <button
                   onClick={() => handleContextMenuCreate('person')}
-                  style={menuBtnStyle}
-                  onMouseEnter={(e) => { (e.target as HTMLElement).style.background = '#f3f4f6'; }}
-                  onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    width: '100%', padding: '10px 14px',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontSize: '13px', fontWeight: 500, textAlign: 'left',
+                    borderRadius: '10px', color: '#1d1d1f',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.05)'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
                 >
-                  Add Person
+                  <span style={{ fontSize: '15px', lineHeight: 1, color: '#30d158' }}>+</span>
+                  <span>Person</span>
                 </button>
               </>
             )}

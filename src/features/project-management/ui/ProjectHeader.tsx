@@ -6,8 +6,7 @@
  */
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useRef, useCallback, useState } from 'react';
-import { MasterDataModal } from './MasterDataModal';
+import { useRef, useCallback } from 'react';
 import { SettingsModal } from '@features/settings/ui/SettingsModal';
 import { settingsOpenAtom } from '@features/settings/model/settings-atom';
 import { projectAtom, hydrateProjectAtom } from '@features/canvas';
@@ -52,7 +51,6 @@ export function ProjectHeader() {
   const setPastStates = useSetAtom(pastStatesAtom);
   const setFutureStates = useSetAtom(futureStatesAtom);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showMasterData, setShowMasterData] = useState(false);
   const [showSettings, setShowSettings] = useAtom(settingsOpenAtom);
 
   const getViewportCenter = useCallback(() => {
@@ -230,14 +228,6 @@ export function ProjectHeader() {
           + Person
         </button>
 
-        <button
-          onClick={() => setShowMasterData(true)}
-          data-testid="btn-master-data"
-          style={{ ...btnSecondary, background: 'rgba(255,159,10,0.06)', color: '#ff9f0a', borderColor: 'transparent' }}
-        >
-          Master Data
-        </button>
-
         <div style={{ width: '1px', height: '20px', background: 'rgba(0,0,0,0.06)', margin: '0 4px' }} />
 
         <button
@@ -286,7 +276,6 @@ export function ProjectHeader() {
         </button>
       </div>
 
-      {showMasterData && <MasterDataModal onClose={() => setShowMasterData(false)} />}
       {showSettings && <SettingsModal />}
     </div>
   );
