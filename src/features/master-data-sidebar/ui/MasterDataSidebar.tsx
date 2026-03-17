@@ -18,7 +18,12 @@ import { createPortal } from 'react-dom';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useSpring, animated, config } from '@react-spring/web';
 import { projectAtom } from '@features/canvas/model/project-atom';
+import { settingsAtom } from '@features/settings';
 import { isSidebarOpenAtom, sidebarContextAtom } from '../model/atoms';
+import { masterDataAtom } from '../model/atoms';
+import { t } from '@shared/lib/i18n';
+import { currencySymbol } from '@shared/lib/currency';
+import { EditRegimeModal } from './EditRegimeModal';
 import type { Country, TaxRegime, MasterDataEntry, JurisdictionCode } from '@shared/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -93,19 +98,25 @@ function rateBadgeColor(rate: number | null | undefined): { bg: string; text: st
 
 export function MasterDataSidebar() {
   const project = useAtomValue(projectAtom);
+  const settings = useAtomValue(settingsAtom);
+  const lang = settings.language || 'en';
   const [isOpen, setIsOpen] = useAtom(isSidebarOpenAtom);
   const [sidebarContext, setSidebarContext] = useAtom(sidebarContextAtom);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingRegime, setEditingRegime] = useState<TaxRegime | null>(null);
   const ghostRef = useRef<HTMLElement | null>(null);
 
+  // Read from masterDataAtom (persisted) with fallback to project
+  const storedMasterData = useAtomValue(masterDataAtom);
   const countries: Country[] = useMemo(
-    () => project?.masterData?.countries ?? [],
-    [project?.masterData?.countries],
+    () => storedMasterData?.countries ?? project?.masterData?.countries ?? [],
+    [storedMasterData?.countries, project?.masterData?.countries],
   );
   const regimes: TaxRegime[] = useMemo(
-    () => project?.masterData?.regimes ?? [],
-    [project?.masterData?.regimes],
+    () => storedMasterData?.regimes ?? project?.masterData?.regimes ?? [],
+    [storedMasterData?.regimes, project?.masterData?.regimes],
   );
   const masterData = project?.masterData as Record<string, MasterDataEntry> | undefined;
 
@@ -276,7 +287,7 @@ export function MasterDataSidebar() {
       <div style={{ padding: '16px 20px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.02em' }}>
-            Master Data
+            {t('masterData', lang)}
           </h2>
           <button
             onClick={() => setIsOpen(false)}
@@ -296,13 +307,13 @@ export function MasterDataSidebar() {
             }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.08)'; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.04)'; }}
-            title="Close sidebar (Esc)"
+            title={t('closeSidebar', lang)}
           >
             {'\u2715'}
           </button>
         </div>
         <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#86868b' }}>
-          Drag a row onto the canvas
+          {t('dragHint', lang)}
         </p>
       </div>
 
@@ -327,7 +338,7 @@ export function MasterDataSidebar() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search countries, regimes, rates..."
+            placeholder={t('search', lang)}
             style={{
               width: '100%',
               padding: '9px 12px 9px 34px',
@@ -355,7 +366,7 @@ export function MasterDataSidebar() {
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 16px' }}>
         {filteredData.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 20px', color: '#86868b', fontSize: '13px' }}>
-            No matching jurisdictions
+            {t('noMatching', lang)}
           </div>
         )}
 
@@ -371,9 +382,64 @@ export function MasterDataSidebar() {
             onCountryDragEnd={handleCountryDragEnd}
             onRegimeDragStart={handleRegimeDragStart}
             onRegimeDragEnd={handleRegimeDragEnd}
+            isEditMode={isEditMode}
+            onEditRegime={setEditingRegime}
           />
         ))}
       </div>
+
+      {/* Edit Master Data toggle */}
+      <div style={{
+        padding: '12px 20px',
+        borderTop: '1px solid rgba(0, 0, 0, 0.06)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: '13px', fontWeight: 500, color: '#1d1d1f' }}>
+          {t('editMasterData', lang)}
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isEditMode}
+          onClick={() => setIsEditMode(!isEditMode)}
+          style={{
+            position: 'relative',
+            width: '44px',
+            height: '24px',
+            borderRadius: '12px',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            flexShrink: 0,
+            background: isEditMode ? '#007aff' : 'rgba(0, 0, 0, 0.12)',
+            transition: 'background 0.2s',
+            boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.06)',
+          }}
+        >
+          <div style={{
+            position: 'absolute',
+            top: '2px',
+            left: isEditMode ? '22px' : '2px',
+            width: '20px',
+            height: '20px',
+            borderRadius: '10px',
+            background: '#ffffff',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+            transition: 'left 0.2s',
+          }} />
+        </button>
+      </div>
+
+      {/* Edit Regime Modal */}
+      {editingRegime && (
+        <EditRegimeModal
+          regime={editingRegime}
+          onClose={() => setEditingRegime(null)}
+        />
+      )}
     </animated.aside>
   );
 }
@@ -390,6 +456,8 @@ interface CountryRowProps {
   onCountryDragEnd: (e: React.DragEvent) => void;
   onRegimeDragStart: (e: React.DragEvent, regime: TaxRegime, countryName: string) => void;
   onRegimeDragEnd: (e: React.DragEvent) => void;
+  isEditMode: boolean;
+  onEditRegime: (regime: TaxRegime) => void;
 }
 
 function CountryRow({
@@ -402,6 +470,8 @@ function CountryRow({
   onCountryDragEnd,
   onRegimeDragStart,
   onRegimeDragEnd,
+  isEditMode,
+  onEditRegime,
 }: CountryRowProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -423,8 +493,8 @@ function CountryRow({
     <div style={{ marginBottom: '2px' }}>
       {/* Country header */}
       <div
-        draggable
-        onDragStart={(e) => onCountryDragStart(e, country)}
+        draggable={!isEditMode}
+        onDragStart={(e) => !isEditMode && onCountryDragStart(e, country)}
         onDragEnd={onCountryDragEnd}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -436,23 +506,25 @@ function CountryRow({
           padding: '10px 12px',
           borderRadius: '14px',
           background: isHovered ? 'rgba(0, 0, 0, 0.04)' : 'transparent',
-          cursor: 'grab',
+          cursor: isEditMode ? 'pointer' : 'grab',
           userSelect: 'none',
           transition: 'background 0.15s',
         }}
       >
-        {/* Gripper — visible on hover */}
-        <span style={{
-          fontSize: '10px',
-          color: '#c7c7cc',
-          letterSpacing: '1px',
-          width: '12px',
-          flexShrink: 0,
-          opacity: isHovered ? 1 : 0,
-          transition: 'opacity 0.15s',
-        }}>
-          {'\u22ee\u22ee'}
-        </span>
+        {/* Gripper — hidden in edit mode */}
+        {!isEditMode && (
+          <span style={{
+            fontSize: '10px',
+            color: '#c7c7cc',
+            letterSpacing: '1px',
+            width: '12px',
+            flexShrink: 0,
+            opacity: isHovered ? 1 : 0,
+            transition: 'opacity 0.15s',
+          }}>
+            {'\u22ee\u22ee'}
+          </span>
+        )}
 
         {/* Chevron */}
         <animated.span style={{
@@ -522,6 +594,8 @@ function CountryRow({
               countryName={country.name}
               onDragStart={onRegimeDragStart}
               onDragEnd={onRegimeDragEnd}
+              isEditMode={isEditMode}
+              onEditRegime={onEditRegime}
             />
           ))}
         </div>
@@ -537,9 +611,11 @@ interface RegimeRowProps {
   countryName: string;
   onDragStart: (e: React.DragEvent, regime: TaxRegime, countryName: string) => void;
   onDragEnd: (e: React.DragEvent) => void;
+  isEditMode: boolean;
+  onEditRegime: (regime: TaxRegime) => void;
 }
 
-function RegimeRow({ regime, countryName, onDragStart, onDragEnd }: RegimeRowProps) {
+function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, onEditRegime }: RegimeRowProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [tooltip, setTooltip] = useState<{ x: number; y: number } | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -584,8 +660,8 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd }: RegimeRowPro
     <>
       <div
         ref={rowRef}
-        draggable
-        onDragStart={(e) => onDragStart(e, regime, countryName)}
+        draggable={!isEditMode}
+        onDragStart={(e) => !isEditMode && onDragStart(e, regime, countryName)}
         onDragEnd={onDragEnd}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -598,23 +674,48 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd }: RegimeRowPro
           borderRadius: '10px',
           borderLeft: '2px solid rgba(0, 0, 0, 0.06)',
           background: isHovered ? 'rgba(0, 0, 0, 0.03)' : 'transparent',
-          cursor: 'grab',
+          cursor: isEditMode ? 'pointer' : 'grab',
           userSelect: 'none',
           transition: 'background 0.15s',
         }}
       >
-        {/* Gripper */}
-        <span style={{
-          fontSize: '9px',
-          color: '#c7c7cc',
-          letterSpacing: '1px',
-          width: '10px',
-          flexShrink: 0,
-          opacity: isHovered ? 1 : 0,
-          transition: 'opacity 0.15s',
-        }}>
-          {'\u22ee\u22ee'}
-        </span>
+        {/* Gripper — hidden in edit mode */}
+        {!isEditMode && (
+          <span style={{
+            fontSize: '9px',
+            color: '#c7c7cc',
+            letterSpacing: '1px',
+            width: '10px',
+            flexShrink: 0,
+            opacity: isHovered ? 1 : 0,
+            transition: 'opacity 0.15s',
+          }}>
+            {'\u22ee\u22ee'}
+          </span>
+        )}
+
+        {/* Edit icon — visible in edit mode */}
+        {isEditMode && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onEditRegime(regime); }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '13px',
+              padding: '0 2px',
+              flexShrink: 0,
+              lineHeight: 1,
+              opacity: 0.7,
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.7'; }}
+            title="Edit regime"
+          >
+            {'\u270f\ufe0f'}
+          </button>
+        )}
 
         {/* Name */}
         <span style={{

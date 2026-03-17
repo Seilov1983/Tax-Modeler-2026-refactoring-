@@ -9,17 +9,20 @@ import { atom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
+export type Language = 'en' | 'ru';
 
 export interface AppSettings {
   theme: ThemeMode;
   canvasSnapToGrid: boolean;
   baseCurrency: string;
+  language: Language;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   canvasSnapToGrid: true,
   baseCurrency: 'USD',
+  language: 'en',
 };
 
 export const settingsAtom = atomWithStorage<AppSettings>(

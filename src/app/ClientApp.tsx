@@ -12,6 +12,7 @@ import { useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { projectAtom, hydrateProjectAtom } from '@features/canvas';
 import { defaultProject } from '@entities/project';
+import { settingsAtom } from '@features/settings';
 
 /**
  * Konva requires browser APIs (canvas, window) that are unavailable during SSR.
@@ -39,6 +40,27 @@ const STORAGE_KEY = 'tsm26_onefile_project_v2';
 function AppContent() {
   const hydrate = useSetAtom(hydrateProjectAtom);
   const project = useAtomValue(projectAtom);
+  const settings = useAtomValue(settingsAtom);
+
+  // ─── Theme: sync dark class on <html> based on settings.theme ──────────
+  useEffect(() => {
+    const root = document.documentElement;
+    if (settings.theme === 'dark') {
+      root.classList.add('dark');
+    } else if (settings.theme === 'light') {
+      root.classList.remove('dark');
+    } else {
+      // system: follow OS preference
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      const apply = () => {
+        if (mq.matches) root.classList.add('dark');
+        else root.classList.remove('dark');
+      };
+      apply();
+      mq.addEventListener('change', apply);
+      return () => mq.removeEventListener('change', apply);
+    }
+  }, [settings.theme]);
 
   useEffect(() => {
     // Hydrate from localStorage or create demo project
