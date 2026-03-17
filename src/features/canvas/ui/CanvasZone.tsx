@@ -10,6 +10,8 @@
  * - Scale-to-Width pattern: onTransformEnd extracts scaleX/Y, multiplies by
  *   current width/height, dispatches new dimensions, resets scale to 1
  * - Visual highlight when selected (blue border + header)
+ * - Apple Liquid Glass Transformer: round squircle anchors, soft gray border
+ * - Guard-rails: soft glow on valid parent Country, red stroke on invalid target
  * - Child zones and nodes are rendered inside parent <Group>
  *
  * Uses useRef for transient drag state (no React re-renders during drag).
@@ -23,7 +25,9 @@ import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { moveZoneAtom, deleteZoneAtom, resizeZoneAtom, flagZoneErrorAtom } from '../model/graph-actions-atom';
 import { showNotificationAtom } from '../model/notification-atom';
+import { dragOverFeedbackAtom } from '../model/drag-over-feedback-atom';
 import { zonesAtom } from '@entities/zone';
+import { pointInZone } from '@shared/lib/engine/engine-core';
 import { calculateZoneHeaderLayout } from '../utils/canvas-layout';
 import type { Zone } from '@shared/types';
 import type Konva from 'konva';
@@ -55,6 +59,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   const resizeZone = useSetAtom(resizeZoneAtom);
   const flagZoneError = useSetAtom(flagZoneErrorAtom);
   const showNotification = useSetAtom(showNotificationAtom);
+  const [dragOverFeedback, setDragOverFeedback] = useAtom(dragOverFeedbackAtom);
   const allZones = useAtomValue(zonesAtom);
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
 
@@ -65,6 +70,10 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     () => calculateZoneHeaderLayout({ width: zone.w, padding: 16 }),
     [zone.w],
   );
+
+  // ─── Guard-rail visual state for THIS zone ─────────────────────────────────
+  const isValidDropTarget = dragOverFeedback.validParentId === zone.id;
+  const isInvalidDropTarget = dragOverFeedback.invalidZoneId === zone.id;
 
   // Refs
   const groupRef = useRef<Konva.Group>(null);
@@ -93,7 +102,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   const validateSpatialBounds = useCallback(
     (childX: number, childY: number, childW: number, childH: number) => {
       if (!zone.parentId) return; // Only regimes (with parentId) need validation
-      const parentZone = allZones.find((z) => z.id === zone.parentId);
+      const parentZone = allZones.find((z: Zone) => z.id === zone.parentId);
       if (!parentZone) return;
 
       // All coordinates are absolute — check child rect is inside parent rect
@@ -120,23 +129,59 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     hasDragged.current = false;
   }, []);
 
-  const handleDragMove = useCallback((e: KonvaEventObject<DragEvent>) => {
-    e.cancelBubble = true;
-    hasDragged.current = true;
-  }, []);
+  const handleDragMove = useCallback(
+    (e: KonvaEventObject<DragEvent>) => {
+      e.cancelBubble = true;
+      hasDragged.current = true;
+
+      // ─── Guard-rail feedback: only for regime zones (zones with a parentId) ──
+      if (!zone.parentId) return;
+
+      const node = e.target;
+      const currentX = Math.round(node.x());
+      const currentY = Math.round(node.y());
+      const centerX = currentX + zone.w / 2;
+      const centerY = currentY + zone.h / 2;
+
+      // Find which country zone (no parentId) the regime center is over
+      const countryZones = allZones.filter((z: Zone) => !z.parentId && z.id !== zone.id);
+      const hoveredCountry = countryZones.find((cz: Zone) => pointInZone(centerX, centerY, cz));
+
+      if (hoveredCountry) {
+        if (hoveredCountry.id === zone.parentId) {
+          // Hovering over the correct parent — soft glow
+          setDragOverFeedback({ validParentId: hoveredCountry.id, invalidZoneId: null });
+        } else {
+          // Hovering over the wrong country — red indicator
+          setDragOverFeedback({ validParentId: zone.parentId, invalidZoneId: hoveredCountry.id });
+        }
+      } else {
+        // Not over any country — highlight correct parent as guidance
+        setDragOverFeedback({ validParentId: zone.parentId, invalidZoneId: null });
+      }
+    },
+    [zone.parentId, zone.id, zone.w, zone.h, allZones, setDragOverFeedback],
+  );
 
   const handleDragEnd = useCallback(
     (e: KonvaEventObject<DragEvent>) => {
       e.cancelBubble = true;
+
+      // Clear guard-rail feedback
+      setDragOverFeedback({ validParentId: null, invalidZoneId: null });
+
       if (!hasDragged.current) return;
       const node = e.target;
       const newX = Math.round(node.x());
       const newY = Math.round(node.y());
       moveZone({ id: zone.id, x: newX, y: newY });
-      // Spatial validation temporarily disabled to isolate coordinate fixes
-      // validateSpatialBounds(newX, newY, zone.w, zone.h);
+
+      // Spatial validation for regime zones
+      if (zone.parentId) {
+        validateSpatialBounds(newX, newY, zone.w, zone.h);
+      }
     },
-    [zone.id, moveZone],
+    [zone.id, zone.parentId, zone.w, zone.h, moveZone, validateSpatialBounds, setDragOverFeedback],
   );
 
   // ─── Click / pointer-down to select ─────────────────────────────────────────
@@ -195,6 +240,43 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     resizeZone({ id: zone.id, w: newW, h: newH });
   }, [zone.id, resizeZone]);
 
+  // ─── Compute border visual state ───────────────────────────────────────────
+  // Priority: error > invalid drop target > valid drop target > selected > default
+  const computedBorderStroke = useMemo(() => {
+    if (zone.hasError) return '#ff3b30';
+    if (isInvalidDropTarget) return '#ff3b30';
+    if (isValidDropTarget) return '#34c759';
+    if (isSelected) return '#007aff';
+    return borderColor;
+  }, [zone.hasError, isInvalidDropTarget, isValidDropTarget, isSelected, borderColor]);
+
+  const computedBorderWidth = useMemo(() => {
+    if (zone.hasError || isInvalidDropTarget) return 2.5;
+    if (isValidDropTarget) return 2;
+    return 1.5;
+  }, [zone.hasError, isInvalidDropTarget, isValidDropTarget]);
+
+  const computedShadowColor = useMemo(() => {
+    if (zone.hasError) return '#ff3b30';
+    if (isInvalidDropTarget) return '#ff3b30';
+    if (isValidDropTarget) return '#34c759';
+    return 'transparent';
+  }, [zone.hasError, isInvalidDropTarget, isValidDropTarget]);
+
+  const computedShadowBlur = useMemo(() => {
+    if (zone.hasError) return 16;
+    if (isInvalidDropTarget) return 20;
+    if (isValidDropTarget) return 24;
+    return 0;
+  }, [zone.hasError, isInvalidDropTarget, isValidDropTarget]);
+
+  const computedShadowOpacity = useMemo(() => {
+    if (zone.hasError) return 0.25;
+    if (isInvalidDropTarget) return 0.35;
+    if (isValidDropTarget) return 0.3;
+    return 0;
+  }, [zone.hasError, isInvalidDropTarget, isValidDropTarget]);
+
   const badgeText = `${zone.jurisdiction} \u00b7 ${zone.currency}`;
 
   return (
@@ -217,23 +299,23 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         width={zone.w}
         height={zone.h}
         fill={bgColor}
-        opacity={isSelected ? 0.35 : 0.2}
+        opacity={isSelected ? 0.35 : isValidDropTarget ? 0.3 : 0.2}
         cornerRadius={16}
         onPointerDown={handleZonePointerDown}
       />
 
-      {/* Zone border (dashed) — refined red glow if hasError */}
+      {/* Zone border — guard-rail visual feedback + refined red glow if hasError */}
       <Rect
         name="zone-border"
         width={zone.w}
         height={zone.h}
-        stroke={zone.hasError ? '#ff3b30' : isSelected ? '#007aff' : borderColor}
-        strokeWidth={zone.hasError ? 2 : 1.5}
-        dash={zone.hasError ? undefined : [8, 4]}
+        stroke={computedBorderStroke}
+        strokeWidth={computedBorderWidth}
+        dash={zone.hasError || isInvalidDropTarget ? undefined : isValidDropTarget ? [12, 4] : [8, 4]}
         cornerRadius={16}
-        shadowColor={zone.hasError ? '#ff3b30' : 'transparent'}
-        shadowBlur={zone.hasError ? 16 : 0}
-        shadowOpacity={zone.hasError ? 0.25 : 0}
+        shadowColor={computedShadowColor}
+        shadowBlur={computedShadowBlur}
+        shadowOpacity={computedShadowOpacity}
         listening={false}
       />
 
@@ -311,7 +393,8 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         />
       </Group>
 
-      {/* Konva Transformer — only when selected, rotation disabled */}
+      {/* Konva Transformer — Apple Liquid Glass style: round squircle anchors,
+          soft gray borders, no rotation. */}
       {isSelected && (
         <Transformer
           ref={transformerRef}
@@ -328,12 +411,12 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
             return newBox;
           }}
           onTransformEnd={handleTransformEnd}
-          borderStroke="#007aff"
+          borderStroke="rgba(150, 150, 150, 0.4)"
           borderStrokeWidth={1.5}
           anchorFill="#ffffff"
-          anchorStroke="#007aff"
-          anchorSize={8}
-          anchorCornerRadius={4}
+          anchorStroke="rgba(150, 150, 150, 0.4)"
+          anchorSize={12}
+          anchorCornerRadius={6}
         />
       )}
 
