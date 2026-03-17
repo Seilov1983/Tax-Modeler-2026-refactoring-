@@ -6,10 +6,13 @@
  *
  * Single-clicking a Flow, Node, Ownership, or Zone opens this modal.
  * Uses local draft state to avoid Jotai re-renders during editing.
+ *
+ * Liquid Glass design: frosted glass, spring mount animation.
  */
 
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { useRef, useCallback, useState, useEffect } from 'react';
+import { useSpring, animated, config } from '@react-spring/web';
 import { selectionAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom, deleteZoneAtom } from '@features/canvas/model/graph-actions-atom';
@@ -22,19 +25,20 @@ const FLOW_TYPE_OPTIONS: FlowType[] = [
 
 const CURRENCY_OPTIONS = ['KZT', 'USD', 'EUR', 'AED', 'HKD', 'SGD', 'GBP', 'SCR', 'CNY'] as const;
 
-// ─── Shared styles ──────────────────────────────────────────────────────────
+// ─── Shared styles (Liquid Glass) ────────────────────────────────────────────
 
 const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: '11px', color: '#6b7280',
-  textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px',
+  display: 'block', fontSize: '11px', color: '#86868b',
+  fontWeight: 500, letterSpacing: '0.02em', marginBottom: '6px',
 };
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', border: '1px solid #d1d5db', borderRadius: '4px',
-  padding: '6px 8px', fontSize: '13px', outline: 'none',
+  width: '100%', border: '1px solid rgba(0,0,0,0.08)', borderRadius: '12px',
+  padding: '8px 12px', fontSize: '13px', outline: 'none',
+  background: 'rgba(255,255,255,0.8)', transition: 'border-color 0.2s, box-shadow 0.2s',
 };
 
-const selectStyle: React.CSSProperties = { ...inputStyle, background: '#fff' };
+const selectStyle: React.CSSProperties = { ...inputStyle, background: 'rgba(255,255,255,0.8)' };
 
 // ─── Formatted numeric input ────────────────────────────────────────────────
 
@@ -142,7 +146,7 @@ function NodeEditor({
           <input style={inputStyle} type="text" value={node.citizenship.join(', ')} onChange={(e) => onChange('citizenship', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))} />
         </Field>
       )}
-      <div style={{ marginTop: '12px', padding: '8px', background: '#f9fafb', borderRadius: '4px', fontSize: '11px', color: '#9ca3af' }}>
+      <div style={{ marginTop: '16px', padding: '10px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '12px', fontSize: '11px', color: '#86868b' }}>
         ID: {node.id}<br />Type: {node.type}<br />Frozen: {node.frozen ? 'Yes' : 'No'}
         {node.computedEtr != null && <><br />Computed ETR: {(node.computedEtr * 100).toFixed(2)}%</>}
         {node.computedCitKZT != null && <><br />Computed CIT (KZT): {node.computedCitKZT.toLocaleString('ru-RU')}</>}
@@ -171,9 +175,9 @@ function FlowEditor({ flow, onChange }: { flow: FlowDTO; onChange: (field: strin
           <option value="bank">Bank</option><option value="cash">Cash</option><option value="crypto">Crypto</option>
         </select>
       </Field>
-      <div style={{ marginTop: '12px', padding: '8px', background: '#f9fafb', borderRadius: '4px', fontSize: '11px', color: '#9ca3af' }}>
+      <div style={{ marginTop: '16px', padding: '10px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '12px', fontSize: '11px', color: '#86868b' }}>
         ID: {flow.id}<br />From: {flow.fromId} → To: {flow.toId}<br />Status: {flow.status}
-        {flow.compliance?.exceeded && <><br /><span style={{ color: '#dc2626' }}>Violation: {flow.compliance.violationType}</span></>}
+        {flow.compliance?.exceeded && <><br /><span style={{ color: '#ff3b30', fontWeight: 500 }}>Violation: {flow.compliance.violationType}</span></>}
       </div>
     </>
   );
@@ -184,7 +188,7 @@ function OwnershipEditor({ edge, onChange }: { edge: OwnershipEdge; onChange: (f
     <>
       <Field label="Ownership (%)"><NumericInput style={inputStyle} value={edge.percent} onChange={(v) => onChange('percent', v)} min={0} max={100} step="0.01" /></Field>
       <Field label="Manual Adjustment"><NumericInput style={inputStyle} value={edge.manualAdjustment} onChange={(v) => onChange('manualAdjustment', v)} step="0.01" /></Field>
-      <div style={{ marginTop: '12px', padding: '8px', background: '#f9fafb', borderRadius: '4px', fontSize: '11px', color: '#9ca3af' }}>
+      <div style={{ marginTop: '16px', padding: '10px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '12px', fontSize: '11px', color: '#86868b' }}>
         ID: {edge.id}<br />Parent: {edge.fromId}<br />Subsidiary: {edge.toId}
       </div>
     </>
@@ -195,15 +199,15 @@ function ZoneEditor({ zone, onChange }: { zone: Zone; onChange: (field: string, 
   return (
     <>
       <Field label="Name"><input style={inputStyle} type="text" value={zone.name || ''} onChange={(e) => onChange('name', e.target.value)} /></Field>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
         <Field label="Width"><NumericInput style={inputStyle} value={zone.w || 0} onChange={(v) => onChange('w', v || 200)} /></Field>
         <Field label="Height"><NumericInput style={inputStyle} value={zone.h || 0} onChange={(v) => onChange('h', v || 400)} /></Field>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
         <Field label="X"><NumericInput style={inputStyle} value={zone.x || 0} onChange={(v) => onChange('x', v)} /></Field>
         <Field label="Y"><NumericInput style={inputStyle} value={zone.y || 0} onChange={(v) => onChange('y', v)} /></Field>
       </div>
-      <div style={{ marginTop: '12px', padding: '8px', background: '#f9fafb', borderRadius: '4px', fontSize: '11px', color: '#9ca3af' }}>
+      <div style={{ marginTop: '16px', padding: '10px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '12px', fontSize: '11px', color: '#86868b' }}>
         ID: {zone.id}<br />Jurisdiction: {zone.jurisdiction}<br />Currency: {zone.currency}
       </div>
     </>
@@ -212,7 +216,7 @@ function ZoneEditor({ zone, onChange }: { zone: Zone; onChange: (field: string, 
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: '12px' }}>
+    <div style={{ marginBottom: '14px' }}>
       <label style={labelStyle}>{label}</label>
       {children}
     </div>
@@ -236,6 +240,19 @@ export function EditorModal() {
 
   const [draft, setDraft] = useState<Record<string, unknown> | null>(null);
   const draftInitRef = useRef<string | null>(null);
+
+  // Spring animation for modal entrance
+  const springStyles = useSpring({
+    from: { opacity: 0, transform: 'scale(0.95) translateY(8px)' },
+    to: { opacity: 1, transform: 'scale(1) translateY(0px)' },
+    config: config.stiff,
+  });
+
+  const backdropSpring = useSpring({
+    from: { opacity: 0 },
+    to: { opacity: 1 },
+    config: { tension: 300, friction: 30 },
+  });
 
   if (!selection || !project) return null;
 
@@ -328,33 +345,42 @@ export function EditorModal() {
     : ENTITY_LABELS[selection.type] ?? selection.type;
 
   return (
-    <div
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40"
+    <animated.div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/20 backdrop-blur-sm"
+      style={backdropSpring}
       onClick={handleCancel}
     >
-      <div
-        className="no-canvas-events flex max-h-[80vh] w-[420px] flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+      <animated.div
+        className="no-canvas-events flex max-h-[80vh] w-[440px] flex-col overflow-hidden rounded-3xl bg-white/72 shadow-2xl backdrop-blur-[40px] backdrop-saturate-[180%] border border-white/25"
+        style={springStyles}
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '16px 20px', borderBottom: '1px solid #e5e7eb',
+          padding: '20px 24px 16px',
         }}>
-          <span style={{ fontWeight: 700, fontSize: '15px' }}>Edit {label}</span>
-          <button onClick={handleCancel} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#6b7280', lineHeight: 1 }}>
+          <span style={{ fontWeight: 600, fontSize: '18px', letterSpacing: '-0.02em', color: '#1d1d1f' }}>Edit {label}</span>
+          <button onClick={handleCancel} style={{
+            background: 'rgba(0,0,0,0.05)', border: 'none', fontSize: '14px', cursor: 'pointer',
+            color: '#86868b', width: '28px', height: '28px', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.1)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
+          >
             {'\u00d7'}
           </button>
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 16px' }}>
           {isMultiNode ? (
-            <div style={{ padding: '12px', background: '#eff6ff', borderRadius: '6px', fontSize: '13px', color: '#1e40af' }}>
+            <div style={{ padding: '14px 16px', background: 'rgba(0,122,255,0.06)', borderRadius: '16px', fontSize: '13px', color: '#007aff' }}>
               <strong>{selection.ids.length} nodes</strong> selected.
               <br /><br />
-              Drag any selected node to move all. Press <kbd style={{ padding: '1px 4px', background: '#dbeafe', borderRadius: '3px', fontSize: '11px' }}>Delete</kbd> to remove all.
+              Drag any selected node to move all. Press <kbd style={{ padding: '2px 6px', background: 'rgba(0,122,255,0.1)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit' }}>Delete</kbd> to remove all.
             </div>
           ) : currentDraft ? (
             <>
@@ -366,22 +392,34 @@ export function EditorModal() {
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '8px' }}>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: '8px' }}>
           <button onClick={handleDelete} data-testid="btn-delete-entity" style={{
-            flex: '0 0 auto', padding: '8px 14px', background: '#fef2f2', color: '#dc2626',
-            fontWeight: 600, fontSize: '13px', border: '1px solid #fecaca', borderRadius: '4px', cursor: 'pointer',
-          }}>Delete</button>
+            flex: '0 0 auto', padding: '10px 16px', background: 'rgba(255,59,48,0.08)', color: '#ff3b30',
+            fontWeight: 600, fontSize: '13px', border: 'none', borderRadius: '12px', cursor: 'pointer',
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,59,48,0.15)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,59,48,0.08)')}
+          >Delete</button>
           <div style={{ flex: 1 }} />
           <button onClick={handleCancel} style={{
-            padding: '8px 14px', background: '#f3f4f6', color: '#374151', fontWeight: 500,
-            fontSize: '13px', border: '1px solid #d1d5db', borderRadius: '4px', cursor: 'pointer',
-          }}>Cancel</button>
+            padding: '10px 16px', background: 'rgba(0,0,0,0.05)', color: '#1d1d1f', fontWeight: 500,
+            fontSize: '13px', border: 'none', borderRadius: '12px', cursor: 'pointer',
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.1)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
+          >Cancel</button>
           <button onClick={handleSave} data-testid="btn-save-entity" style={{
-            padding: '8px 14px', background: '#2563eb', color: '#fff', fontWeight: 600,
-            fontSize: '13px', border: 'none', borderRadius: '4px', cursor: 'pointer',
-          }}>Save</button>
+            padding: '10px 16px', background: '#007aff', color: '#fff', fontWeight: 600,
+            fontSize: '13px', border: 'none', borderRadius: '12px', cursor: 'pointer',
+            transition: 'background 0.15s, transform 0.1s',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = '#0071e3')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = '#007aff')}
+          >Save</button>
         </div>
-      </div>
-    </div>
+      </animated.div>
+    </animated.div>
   );
 }

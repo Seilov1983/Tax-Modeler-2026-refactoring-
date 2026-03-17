@@ -2,10 +2,7 @@
 
 /**
  * ProjectHeader — top bar with project title, Save/Load JSON, and Export PNG.
- *
- * On Load: runs the same engine pipeline as ClientApp hydration
- * (ensureMasterData → recomputeRisks) then commits via hydrateProjectAtom
- * to keep all entity atoms in sync.
+ * Liquid Glass design: frosted glass bar, refined typography, subtle borders.
  */
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
@@ -97,7 +94,6 @@ export function ProjectHeader() {
       try {
         const p = await importProjectJson(file) as Project;
 
-        // Run the same engine pipeline as initial hydration
         ensureMasterData(p);
         ensureCountriesAndRegimes(p);
         ensureZoneTaxDefaults(p);
@@ -105,7 +101,6 @@ export function ProjectHeader() {
         recomputeFrozen(p);
         recomputeRisks(p);
 
-        // Batched commit to all entity atoms
         hydrate(p);
       } catch {
         alert('Failed to load project file.');
@@ -145,29 +140,30 @@ export function ProjectHeader() {
         top: 0,
         left: 0,
         width: '100%',
-        height: '48px',
-        background: '#fff',
-        borderBottom: '1px solid #e5e7eb',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+        height: '52px',
+        background: 'rgba(255, 255, 255, 0.72)',
+        backdropFilter: 'blur(40px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+        borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 16px',
+        padding: '0 20px',
         zIndex: 100,
       }}
     >
       {/* Left: branding + title + base currency */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <span style={{ fontWeight: 700, fontSize: '15px', color: '#1f2937', letterSpacing: '-0.02em' }}>
+        <span style={{ fontWeight: 700, fontSize: '15px', color: '#1d1d1f', letterSpacing: '-0.02em' }}>
           Tax-Modeler 2026
         </span>
-        <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+        <span style={{ fontSize: '12px', color: '#86868b' }}>
           {project.title}
         </span>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px', paddingLeft: '12px', borderLeft: '1px solid #d1d5db' }}>
-          <label style={{ fontSize: '11px', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase' as const }}>
-            Base Currency:
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px', paddingLeft: '12px', borderLeft: '1px solid rgba(0,0,0,0.06)' }}>
+          <label style={{ fontSize: '11px', color: '#86868b', fontWeight: 500, letterSpacing: '0.02em' }}>
+            Currency:
           </label>
           <select
             value={baseCurrency}
@@ -175,12 +171,13 @@ export function ProjectHeader() {
             data-testid="select-base-currency"
             style={{
               fontSize: '13px',
-              border: '1px solid #d1d5db',
-              borderRadius: '4px',
-              background: '#f9fafb',
-              padding: '2px 6px',
+              border: '1px solid rgba(0,0,0,0.08)',
+              borderRadius: '8px',
+              background: 'rgba(255,255,255,0.6)',
+              padding: '3px 8px',
               cursor: 'pointer',
               outline: 'none',
+              fontWeight: 500,
             }}
           >
             {CURRENCY_OPTIONS.map((c) => (
@@ -191,7 +188,7 @@ export function ProjectHeader() {
       </div>
 
       {/* Right: undo/redo + actions */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         <button
           onClick={() => undo()}
           disabled={!canUndo}
@@ -211,13 +208,13 @@ export function ProjectHeader() {
           &#x21AA;
         </button>
 
-        <div style={{ width: '1px', height: '20px', background: '#d1d5db' }} />
+        <div style={{ width: '1px', height: '20px', background: 'rgba(0,0,0,0.06)', margin: '0 4px' }} />
 
         <button
           onClick={handleAddCompany}
           data-testid="btn-add-company"
           title="Add a new company node to the canvas"
-          style={{ ...btnSecondary, background: '#eff6ff', color: '#2563eb', borderColor: '#bfdbfe' }}
+          style={{ ...btnSecondary, background: 'rgba(0,122,255,0.06)', color: '#007aff', borderColor: 'transparent' }}
         >
           + Company
         </button>
@@ -225,7 +222,7 @@ export function ProjectHeader() {
           onClick={handleAddPerson}
           data-testid="btn-add-person"
           title="Add a new person node to the canvas"
-          style={{ ...btnSecondary, background: '#f0fdf4', color: '#16a34a', borderColor: '#bbf7d0' }}
+          style={{ ...btnSecondary, background: 'rgba(48,209,88,0.06)', color: '#30d158', borderColor: 'transparent' }}
         >
           + Person
         </button>
@@ -233,20 +230,20 @@ export function ProjectHeader() {
         <button
           onClick={() => setShowMasterData(true)}
           data-testid="btn-master-data"
-          style={{ ...btnSecondary, background: '#fef3c7', color: '#b45309', borderColor: '#fde68a' }}
+          style={{ ...btnSecondary, background: 'rgba(255,159,10,0.06)', color: '#ff9f0a', borderColor: 'transparent' }}
         >
           Master Data
         </button>
 
-        <div style={{ width: '1px', height: '20px', background: '#d1d5db' }} />
+        <div style={{ width: '1px', height: '20px', background: 'rgba(0,0,0,0.06)', margin: '0 4px' }} />
 
         <button
           onClick={handleNewProject}
           data-testid="btn-new-project"
           title="Create a new blank project"
-          style={{ ...btnSecondary, background: '#fef2f2', color: '#dc2626', borderColor: '#fecaca' }}
+          style={{ ...btnSecondary, background: 'rgba(255,59,48,0.06)', color: '#ff3b30', borderColor: 'transparent' }}
         >
-          New / Clear
+          New
         </button>
 
         <input
@@ -260,7 +257,7 @@ export function ProjectHeader() {
           Load
         </button>
         <button onClick={handleSave} style={btnSecondary}>
-          Save JSON
+          Save
         </button>
         <button onClick={handleExportPng} style={btnPrimary}>
           Export PNG
@@ -273,21 +270,25 @@ export function ProjectHeader() {
 }
 
 const btnSecondary: React.CSSProperties = {
-  padding: '5px 12px',
+  padding: '6px 14px',
   fontSize: '13px',
-  background: '#f3f4f6',
-  color: '#374151',
-  border: '1px solid #d1d5db',
-  borderRadius: '4px',
+  fontWeight: 500,
+  background: 'rgba(0, 0, 0, 0.04)',
+  color: '#1d1d1f',
+  border: 'none',
+  borderRadius: '10px',
   cursor: 'pointer',
+  transition: 'background 0.15s, transform 0.1s',
 };
 
 const btnPrimary: React.CSSProperties = {
-  padding: '5px 12px',
+  padding: '6px 14px',
   fontSize: '13px',
-  background: '#2563eb',
+  fontWeight: 600,
+  background: '#007aff',
   color: '#fff',
   border: 'none',
-  borderRadius: '4px',
+  borderRadius: '10px',
   cursor: 'pointer',
+  transition: 'background 0.15s, transform 0.1s',
 };

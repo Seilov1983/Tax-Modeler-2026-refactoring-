@@ -24,8 +24,7 @@ const ZONE_PRESETS: { jurisdiction: JurisdictionCode; code: string; name: string
 
 /**
  * Floating toolbar for spawning new nodes and zones on the canvas.
- * Computes spawn position at the center of the visible viewport area,
- * accounting for current pan & zoom.
+ * Liquid Glass design: frosted glass panel, generous radius, subtle shadow.
  */
 export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarProps) {
   const addNode = useSetAtom(addNodeAtom);
@@ -39,7 +38,6 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
     if (!vp || !state) return { x: 200, y: 200 };
 
     const rect = vp.getBoundingClientRect();
-    // Convert viewport center to canvas coordinates
     const cx = (rect.width / 2 - state.panX) / state.scale;
     const cy = (rect.height / 2 - state.panY) / state.scale;
     return { x: Math.round(cx - 90), y: Math.round(cy - 40) };
@@ -77,31 +75,33 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
         position: 'absolute',
         top: '16px',
         left: '16px',
-        background: '#fff',
-        border: '1px solid #d1d5db',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-        borderRadius: '6px',
-        padding: '8px',
+        background: 'rgba(255, 255, 255, 0.72)',
+        backdropFilter: 'blur(40px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+        border: '1px solid rgba(255, 255, 255, 0.25)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
+        borderRadius: '20px',
+        padding: '10px',
         zIndex: 40,
         display: 'flex',
         flexDirection: 'column',
-        gap: '6px',
+        gap: '4px',
       }}
     >
-      <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 700, textAlign: 'center', marginBottom: '2px' }}>
+      <div style={{ fontSize: '10px', color: '#86868b', fontWeight: 600, textAlign: 'center', marginBottom: '2px', letterSpacing: '0.05em' }}>
         TOOLS
       </div>
       <button onClick={handleAddCompany} data-testid="btn-add-company" style={btnStyle}>
         + Company
       </button>
-      <button onClick={handleAddPerson} style={{ ...btnStyle, background: '#f0fdf4', color: '#16a34a' }}>
+      <button onClick={handleAddPerson} style={{ ...btnStyle, background: 'rgba(48, 209, 88, 0.08)', color: '#30d158' }}>
         + Person
       </button>
       <div style={{ position: 'relative' }}>
         <button
           onClick={() => setShowZoneMenu((v) => !v)}
           data-testid="btn-add-zone"
-          style={{ ...btnStyle, background: '#fef3c7', color: '#b45309', width: '100%' }}
+          style={{ ...btnStyle, background: 'rgba(255, 159, 10, 0.08)', color: '#ff9f0a', width: '100%' }}
         >
           + Zone
         </button>
@@ -111,13 +111,15 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
               position: 'absolute',
               top: 0,
               left: '100%',
-              marginLeft: '4px',
-              background: '#fff',
-              border: '1px solid #d1d5db',
-              borderRadius: '6px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-              padding: '4px',
-              minWidth: '160px',
+              marginLeft: '6px',
+              background: 'rgba(255, 255, 255, 0.85)',
+              backdropFilter: 'blur(40px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+              border: '1px solid rgba(255, 255, 255, 0.25)',
+              borderRadius: '16px',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.1), 0 4px 12px rgba(0,0,0,0.06)',
+              padding: '6px',
+              minWidth: '170px',
               zIndex: 50,
             }}
           >
@@ -128,17 +130,18 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
                 style={{
                   display: 'block',
                   width: '100%',
-                  padding: '6px 10px',
-                  fontSize: '12px',
+                  padding: '8px 12px',
+                  fontSize: '13px',
                   fontWeight: 500,
                   border: 'none',
                   background: 'transparent',
                   cursor: 'pointer',
                   textAlign: 'left',
-                  borderRadius: '3px',
-                  color: '#374151',
+                  borderRadius: '10px',
+                  color: '#1d1d1f',
+                  transition: 'background 0.15s',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#f3f4f6')}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.04)')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
                 {preset.name}
@@ -147,12 +150,12 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
           </div>
         )}
       </div>
-      <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '2px 0' }} />
+      <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.05)', margin: '4px 0' }} />
       <button
         onClick={() => autoLayout()}
         data-testid="btn-auto-layout"
         title="Arrange nodes into a hierarchy (Dagre)"
-        style={{ ...btnStyle, background: '#eef2ff', color: '#4f46e5', width: '100%' }}
+        style={{ ...btnStyle, background: 'rgba(99, 102, 241, 0.08)', color: '#6366f1', width: '100%' }}
       >
         Auto-Arrange
       </button>
@@ -161,12 +164,13 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
 }
 
 const btnStyle: React.CSSProperties = {
-  padding: '6px 12px',
-  background: '#eff6ff',
-  color: '#2563eb',
+  padding: '8px 14px',
+  background: 'rgba(0, 122, 255, 0.08)',
+  color: '#007aff',
   fontSize: '13px',
   fontWeight: 500,
   border: 'none',
-  borderRadius: '4px',
+  borderRadius: '10px',
   cursor: 'pointer',
+  transition: 'background 0.15s, transform 0.1s',
 };
