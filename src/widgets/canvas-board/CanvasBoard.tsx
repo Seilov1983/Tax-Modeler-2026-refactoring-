@@ -13,10 +13,11 @@
  * - Hierarchical zone nesting via parentId + Konva <Group>
  *
  * Layer architecture (from bottom to top):
- *   Layer 1 (static):  Grid background (cached for perf)
- *   Layer 2 (zones):   Country zones, sub-zones with nested children
- *   Layer 3 (nodes):   Companies, Persons, TXA nodes
- *   Layer 4 (arrows):  Flows, ownership lines, draft connections
+ *   Layer 1 (static):    Grid background (cached for perf)
+ *   Layer 2 (zones):     Country zones, sub-zones with nested children
+ *   Layer 3 (nodes):     Companies, Persons, TXA nodes
+ *   Layer 4 (arrows):    Flows, ownership lines (static — re-renders on data change only)
+ *   Layer 5 (transient): Draft connection line, lasso selection (60 FPS via useRef + batchDraw)
  *
  * Context menu: rendered as HTML/CSS DOM overlay (not inside Konva) to avoid
  * clipping and zoom scaling. Coordinates stored in Jotai contextMenuAtom.
@@ -383,9 +384,10 @@ export function CanvasBoard() {
     [draft, setDraft],
   );
 
-  // ─── Lasso selection ──────────────────────────────────────────────────
+  // ─── Lasso selection — useRef to bypass React reconciliation ─────────
   const lassoStartRef = useRef<{ x: number; y: number } | null>(null);
-  const [lassoRect, setLassoRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const lassoDataRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const lassoKonvaRef = useRef<Konva.Rect>(null);
   const lassoDraggedRef = useRef(false);
 
   const handleStageMouseDown = useCallback(
@@ -403,7 +405,13 @@ export function CanvasBoard() {
 
       lassoStartRef.current = canvasPos;
       lassoDraggedRef.current = false;
-      setLassoRect({ x: canvasPos.x, y: canvasPos.y, w: 0, h: 0 });
+      lassoDataRef.current = { x: canvasPos.x, y: canvasPos.y, w: 0, h: 0 };
+      // Show the lasso rect via direct Konva mutation
+      const lr = lassoKonvaRef.current;
+      if (lr) {
+        lr.setAttrs({ x: canvasPos.x, y: canvasPos.y, width: 0, height: 0, visible: true });
+        lr.getLayer()?.batchDraw();
+      }
 
       if (!e.evt.shiftKey) {
         setSelection(null);
@@ -432,7 +440,13 @@ export function CanvasBoard() {
       if (lw > 5 || lh > 5) {
         lassoDraggedRef.current = true;
       }
-      setLassoRect({ x: lx, y: ly, w: lw, h: lh });
+      // Mutate ref + Konva node directly — no React re-render
+      lassoDataRef.current = { x: lx, y: ly, w: lw, h: lh };
+      const lr = lassoKonvaRef.current;
+      if (lr) {
+        lr.setAttrs({ x: lx, y: ly, width: lw, height: lh });
+        lr.getLayer()?.batchDraw();
+      }
     },
     [],
   );
@@ -441,9 +455,15 @@ export function CanvasBoard() {
     (e: KonvaEventObject<MouseEvent>) => {
       if (!lassoStartRef.current) return;
 
-      const rect = lassoRect;
+      const rect = lassoDataRef.current;
       lassoStartRef.current = null;
-      setLassoRect(null);
+      lassoDataRef.current = null;
+      // Hide the lasso rect
+      const lr = lassoKonvaRef.current;
+      if (lr) {
+        lr.setAttrs({ visible: false, width: 0, height: 0 });
+        lr.getLayer()?.batchDraw();
+      }
 
       if (!rect || (rect.w < 5 && rect.h < 5)) return;
 
@@ -467,7 +487,7 @@ export function CanvasBoard() {
         setSelection({ type: 'node', ids: hitIds });
       }
     },
-    [lassoRect, nodes, setSelection],
+    [nodes, setSelection],
   );
 
   // ─── Draft connection (transient Bezier during port drag) ──────────────
@@ -480,12 +500,13 @@ export function CanvasBoard() {
     ? isFlowDraft ? sourceNode.y + sourceNode.h / 2 : sourceNode.y + sourceNode.h
     : 0;
 
-  // Track pointer for draft connection
-  const [draftEnd, setDraftEnd] = useState<{ x: number; y: number } | null>(null);
+  // Track pointer for draft connection — useRef to bypass React reconciliation
+  const draftEndRef = useRef<{ x: number; y: number } | null>(null);
+  const draftShapeRef = useRef<Konva.Shape>(null);
 
   useEffect(() => {
     if (!draft || !sourceNode) {
-      setDraftEnd(null);
+      draftEndRef.current = null;
       return;
     }
 
@@ -495,15 +516,18 @@ export function CanvasBoard() {
       const container = stage.container();
       const rect = container.getBoundingClientRect();
       const state = viewportStateRef.current;
-      setDraftEnd({
+      // Mutate ref directly — no React re-render
+      draftEndRef.current = {
         x: (e.clientX - rect.left - state.panX) / state.scale,
         y: (e.clientY - rect.top - state.panY) / state.scale,
-      });
+      };
+      // Repaint only the transient layer via Konva
+      draftShapeRef.current?.getLayer()?.batchDraw();
     };
 
     const onPointerUp = () => {
+      draftEndRef.current = null;
       setDraft(null);
-      setDraftEnd(null);
     };
 
     window.addEventListener('pointermove', onPointerMove);
@@ -603,7 +627,7 @@ export function CanvasBoard() {
             ))}
           </Layer>
 
-          {/* Layer 4: Arrows (flows, ownership, draft connection, lasso) */}
+          {/* Layer 4: Arrows (flows, ownership — static, re-renders only on data change) */}
           <Layer>
             {/* Flow arrows */}
             {flows.map((flow) => (
@@ -614,13 +638,21 @@ export function CanvasBoard() {
             {ownership.map((edge) => (
               <CanvasOwnership key={edge.id} edge={edge} nodes={nodes} />
             ))}
+          </Layer>
 
-            {/* Draft connection line */}
-            {draft && sourceNode && draftEnd && (
+          {/* Layer 5: Transient overlay (draft connection + lasso) —
+              Isolated from static arrows to avoid repainting 100+ connections
+              during 60 FPS pointer move. Only this layer is batchDraw'd. */}
+          <Layer>
+            {/* Draft connection line — rendered via ref, no React state during pointer move */}
+            {draft && sourceNode && (
               <Shape
+                ref={draftShapeRef}
                 sceneFunc={(ctx, shape) => {
-                  const ex = draftEnd.x;
-                  const ey = draftEnd.y;
+                  const end = draftEndRef.current;
+                  if (!end) return;
+                  const ex = end.x;
+                  const ey = end.y;
 
                   if (isFlowDraft) {
                     const dx = Math.abs(ex - srcX);
@@ -644,19 +676,15 @@ export function CanvasBoard() {
               />
             )}
 
-            {/* Lasso selection rectangle */}
-            {lassoRect && lassoRect.w > 2 && lassoRect.h > 2 && (
-              <Rect
-                x={lassoRect.x}
-                y={lassoRect.y}
-                width={lassoRect.w}
-                height={lassoRect.h}
-                stroke="#3b82f6"
-                strokeWidth={1}
-                fill="rgba(59, 130, 246, 0.1)"
-                listening={false}
-              />
-            )}
+            {/* Lasso selection rectangle — always mounted, visibility toggled via ref */}
+            <Rect
+              ref={lassoKonvaRef}
+              visible={false}
+              stroke="#3b82f6"
+              strokeWidth={1}
+              fill="rgba(59, 130, 246, 0.1)"
+              listening={false}
+            />
           </Layer>
         </Stage>
 
