@@ -9,7 +9,7 @@
  * - Konva <Transformer> for manual resizing when selected (rotation disabled)
  * - Scale-to-Width pattern: onTransformEnd extracts scaleX/Y, multiplies by
  *   current width/height, dispatches new dimensions, resets scale to 1
- * - Visual highlight when selected (blue border + header)
+ * - Visual highlight when selected (neutral gray border + tinted header)
  * - Apple Liquid Glass Transformer: round squircle anchors, soft gray border
  * - Guard-rails: soft glow on valid parent Country, red stroke on invalid target
  * - Child zones and nodes are rendered inside parent <Group>
@@ -246,7 +246,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     if (zone.hasError) return '#ff3b30';
     if (isInvalidDropTarget) return '#ff3b30';
     if (isValidDropTarget) return '#34c759';
-    if (isSelected) return '#007aff';
+    if (isSelected) return '#969696';
     return borderColor;
   }, [zone.hasError, isInvalidDropTarget, isValidDropTarget, isSelected, borderColor]);
 
@@ -325,8 +325,8 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         y={0}
         width={zone.w}
         height={HEADER_HEIGHT}
-        fill={isSelected ? '#007aff' : 'transparent'}
-        opacity={isSelected ? 0.9 : 0.5}
+        fill={isSelected ? borderColor : 'transparent'}
+        opacity={isSelected ? 0.18 : 0.5}
         cornerRadius={[14, 14, 0, 0]}
         onClick={handleHeaderClick}
         onTap={handleHeaderClick}
@@ -340,7 +340,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         text={zone.name.toUpperCase()}
         fontSize={16}
         fontStyle="bold"
-        fill={isSelected ? '#ffffff' : borderColor}
+        fill={isSelected ? '#1d1d1f' : borderColor}
         letterSpacing={1.5}
         wrap="none"
         ellipsis={true}
@@ -362,7 +362,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         <Text
           text={'\u2715'}
           fontSize={14}
-          fill={isSelected ? 'rgba(255,255,255,0.7)' : '#ff3b30'}
+          fill={isSelected ? '#86868b' : '#ff3b30'}
           align="center"
           verticalAlign="middle"
           width={headerLayout.closeIcon.width}
@@ -411,10 +411,12 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
             return newBox;
           }}
           onTransformEnd={handleTransformEnd}
-          borderStroke="rgba(150, 150, 150, 0.4)"
+          borderStroke="#969696"
           borderStrokeWidth={1.5}
+          borderDash={[6, 3]}
           anchorFill="#ffffff"
-          anchorStroke="rgba(150, 150, 150, 0.4)"
+          anchorStroke="#969696"
+          anchorStrokeWidth={1.5}
           anchorSize={12}
           anchorCornerRadius={6}
         />

@@ -8,6 +8,8 @@
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useRef, useCallback, useState } from 'react';
 import { MasterDataModal } from './MasterDataModal';
+import { SettingsModal } from '@features/settings/ui/SettingsModal';
+import { settingsOpenAtom } from '@features/settings/model/settings-atom';
 import { projectAtom, hydrateProjectAtom } from '@features/canvas';
 import { baseCurrencyAtom } from '@features/canvas/model/project-atom';
 import {
@@ -51,6 +53,7 @@ export function ProjectHeader() {
   const setFutureStates = useSetAtom(futureStatesAtom);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showMasterData, setShowMasterData] = useState(false);
+  const [showSettings, setShowSettings] = useAtom(settingsOpenAtom);
 
   const getViewportCenter = useCallback(() => {
     const vp = document.getElementById('viewport');
@@ -259,12 +262,32 @@ export function ProjectHeader() {
         <button onClick={handleSave} style={btnSecondary}>
           Save
         </button>
+        <button
+          onClick={() => setShowSettings(true)}
+          data-testid="btn-settings"
+          title="Settings"
+          style={{
+            ...btnSecondary,
+            width: '34px',
+            height: '34px',
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '16px',
+          }}
+          aria-label="Open settings"
+        >
+          {'\u2699'}
+        </button>
+
         <button onClick={handleExportPng} style={btnPrimary}>
           Export PNG
         </button>
       </div>
 
       {showMasterData && <MasterDataModal onClose={() => setShowMasterData(false)} />}
+      {showSettings && <SettingsModal />}
     </div>
   );
 }
