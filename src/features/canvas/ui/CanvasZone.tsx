@@ -90,17 +90,22 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
 
   // ─── Drag handlers ──────────────────────────────────────────────────────
   // No dragBoundFunc — free dragging to avoid conflicts with canvas pan/zoom.
-  const handleDragStart = useCallback(() => {
+  const handleDragStart = useCallback((e: KonvaEventObject<DragEvent>) => {
+    e.cancelBubble = true;
     hasDragged.current = false;
   }, []);
 
-  const handleDragMove = useCallback(() => {
+  const handleDragMove = useCallback((e: KonvaEventObject<DragEvent>) => {
+    e.cancelBubble = true;
     hasDragged.current = true;
   }, []);
 
   const handleDragEnd = useCallback(
     (e: KonvaEventObject<DragEvent>) => {
+      e.cancelBubble = true;
       if (!hasDragged.current) return;
+      // node.x() / node.y() are already relative to the parent Country group —
+      // no stage-scale or absolute-position math needed for nested zones.
       const node = e.target;
       moveZone({
         id: zone.id,
