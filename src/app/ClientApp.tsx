@@ -22,6 +22,10 @@ const CanvasBoard = dynamic(
   () => import('@widgets/canvas-board').then((mod) => ({ default: mod.CanvasBoard })),
   { ssr: false },
 );
+const MasterDataSidebar = dynamic(
+  () => import('@features/master-data-sidebar').then((mod) => ({ default: mod.MasterDataSidebar })),
+  { ssr: false },
+);
 import {
   ensureMasterData, ensureZoneTaxDefaults,
   bootstrapNormalizeZones, recomputeRisks, recomputeFrozen,
@@ -73,7 +77,12 @@ function AppContent() {
     }
   }, [project]);
 
-  return <CanvasBoard />;
+  return (
+    <>
+      <MasterDataSidebar />
+      <CanvasBoard />
+    </>
+  );
 }
 
 export function ClientApp() {
