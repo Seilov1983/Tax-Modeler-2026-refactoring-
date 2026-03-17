@@ -107,10 +107,12 @@ export const Minimap = memo(function Minimap({ onNavigate, viewportRef }: Minima
         right: 16,
         width: MINIMAP_W,
         height: MINIMAP_H,
-        background: '#f9fafb',
-        border: '1px solid #d1d5db',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-        borderRadius: '6px',
+        background: 'rgba(255, 255, 255, 0.72)',
+        backdropFilter: 'blur(40px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+        border: '1px solid rgba(255, 255, 255, 0.25)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
+        borderRadius: '14px',
         overflow: 'hidden',
         zIndex: 40,
         cursor: 'crosshair',
@@ -128,11 +130,11 @@ export const Minimap = memo(function Minimap({ onNavigate, viewportRef }: Minima
             height: Math.max(node.h * mapScale, 2),
             background:
               node.type === 'company'
-                ? '#3b82f6'
+                ? '#007aff'
                 : node.type === 'person'
-                  ? '#22c55e'
-                  : '#94a3b8',
-            borderRadius: '1px',
+                  ? '#30d158'
+                  : '#98989d',
+            borderRadius: '2px',
             opacity: 0.7,
           }}
         />
@@ -146,9 +148,9 @@ export const Minimap = memo(function Minimap({ onNavigate, viewportRef }: Minima
           top: toMapY(visibleY),
           width: visibleW * mapScale,
           height: visibleH * mapScale,
-          border: '1.5px solid #3b82f6',
-          background: 'rgba(59, 130, 246, 0.08)',
-          borderRadius: '2px',
+          border: '1.5px solid #007aff',
+          background: 'rgba(0, 122, 255, 0.08)',
+          borderRadius: '3px',
           pointerEvents: 'none',
         }}
       />

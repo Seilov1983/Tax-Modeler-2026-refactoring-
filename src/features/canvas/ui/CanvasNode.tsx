@@ -35,9 +35,9 @@ import { calculateNodeCardLayout } from '../utils/canvas-layout';
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const NODE_COLORS: Record<string, { bg: string; border: string; header: string }> = {
-  company: { bg: '#ffffff', border: '#3b82f6', header: '#eff6ff' },
-  person: { bg: '#ffffff', border: '#22c55e', header: '#f0fdf4' },
-  txa: { bg: '#f8fafc', border: '#94a3b8', header: '#f1f5f9' },
+  company: { bg: '#ffffff', border: '#007aff', header: '#f0f5ff' },
+  person: { bg: '#ffffff', border: '#30d158', header: '#f0fdf4' },
+  txa: { bg: '#fafafa', border: '#98989d', header: '#f5f5f7' },
 };
 
 const TYPE_BADGES: Record<string, string> = {
@@ -346,18 +346,18 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       scaleY={entranceSpring.scaleY.get()}
       opacity={entranceSpring.opacity.get()}
     >
-      {/* Node body — uses layout background dimensions; red stroke if hasError */}
+      {/* Node body — uses layout background dimensions; refined red glow if hasError */}
       <Rect
         width={cardLayout.background.width}
         height={cardLayout.background.height}
         fill={colors.bg}
-        stroke={node.hasError ? '#dc2626' : isSelected ? '#2563eb' : node.frozen ? '#ef4444' : colors.border}
-        strokeWidth={node.hasError ? 3 : isSelected ? 2.5 : node.frozen ? 2 : 1.5}
-        cornerRadius={8}
-        shadowColor={node.hasError ? '#dc2626' : node.frozen ? '#ef4444' : 'rgba(0,0,0,0.1)'}
-        shadowBlur={node.hasError ? 10 : node.frozen ? 8 : 4}
-        shadowOffsetY={2}
-        shadowOpacity={node.hasError ? 0.4 : node.frozen ? 0.3 : 0.15}
+        stroke={node.hasError ? '#ff3b30' : isSelected ? '#007aff' : node.frozen ? '#ff3b30' : colors.border}
+        strokeWidth={node.hasError ? 2 : isSelected ? 2 : node.frozen ? 1.5 : 1}
+        cornerRadius={12}
+        shadowColor={node.hasError ? '#ff3b30' : node.frozen ? '#ff3b30' : 'rgba(0,0,0,0.06)'}
+        shadowBlur={node.hasError ? 16 : node.frozen ? 12 : 8}
+        shadowOffsetY={node.hasError ? 0 : 2}
+        shadowOpacity={node.hasError ? 0.3 : node.frozen ? 0.2 : 0.2}
       />
 
       {/* Header background */}
@@ -365,7 +365,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         width={cardLayout.background.width}
         height={HEADER_HEIGHT}
         fill={colors.header}
-        cornerRadius={[8, 8, 0, 0]}
+        cornerRadius={[12, 12, 0, 0]}
         listening={false}
       />
 
@@ -387,7 +387,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         text={node.name}
         fontSize={12}
         fontStyle="600"
-        fill="#1f2937"
+        fill="#1d1d1f"
         width={cardLayout.title.width - 25}
         ellipsis={true}
         wrap="none"
@@ -401,7 +401,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
           y={HEADER_HEIGHT + 6}
           text={badges.join('  \u00b7  ')}
           fontSize={10}
-          fill={node.frozen ? '#ef4444' : '#eab308'}
+          fill={node.frozen ? '#ff3b30' : '#ff9f0a'}
           fontStyle="bold"
           width={cardLayout.title.width}
           wrap="none"
@@ -413,8 +413,8 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       {/* CFC badge */}
       {node.riskFlags?.some((r) => r.type === 'CFC_RISK') && (
         <Group x={node.w - NODE_PADDING - 28} y={HEADER_HEIGHT + 4} listening={false}>
-          <Rect width={28} height={14} fill="#fef3c7" cornerRadius={3} stroke="#ca8a04" strokeWidth={0.5} />
-          <Text x={4} y={2} text="CFC" fontSize={9} fontStyle="bold" fill="#ca8a04" />
+          <Rect width={28} height={14} fill="rgba(255,159,10,0.1)" cornerRadius={5} stroke="#ff9f0a" strokeWidth={0.5} />
+          <Text x={4} y={2} text="CFC" fontSize={9} fontStyle="bold" fill="#ff9f0a" />
         </Group>
       )}
 
@@ -424,7 +424,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
           x={node.w}
           y={node.h / 2}
           radius={PORT_RADIUS}
-          fill="#3b82f6"
+          fill="#007aff"
           stroke="#ffffff"
           strokeWidth={2}
           onMouseDown={handleFlowPortDown}
@@ -438,7 +438,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
           x={node.w / 2}
           y={node.h}
           radius={PORT_RADIUS}
-          fill="#a855f7"
+          fill="#bf5af2"
           stroke="#ffffff"
           strokeWidth={2}
           onMouseDown={handleOwnershipPortDown}

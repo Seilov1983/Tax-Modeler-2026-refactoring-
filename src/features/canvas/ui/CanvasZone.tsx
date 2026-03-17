@@ -216,20 +216,23 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         width={zone.w}
         height={zone.h}
         fill={bgColor}
-        opacity={isSelected ? 0.4 : 0.25}
-        cornerRadius={12}
+        opacity={isSelected ? 0.35 : 0.2}
+        cornerRadius={16}
         onPointerDown={handleZonePointerDown}
       />
 
-      {/* Zone border (dashed) — red if hasError */}
+      {/* Zone border (dashed) — refined red glow if hasError */}
       <Rect
         name="zone-border"
         width={zone.w}
         height={zone.h}
-        stroke={zone.hasError ? '#dc2626' : isSelected ? '#3b82f6' : borderColor}
-        strokeWidth={zone.hasError ? 3 : 2}
+        stroke={zone.hasError ? '#ff3b30' : isSelected ? '#007aff' : borderColor}
+        strokeWidth={zone.hasError ? 2 : 1.5}
         dash={zone.hasError ? undefined : [8, 4]}
-        cornerRadius={12}
+        cornerRadius={16}
+        shadowColor={zone.hasError ? '#ff3b30' : 'transparent'}
+        shadowBlur={zone.hasError ? 16 : 0}
+        shadowOpacity={zone.hasError ? 0.25 : 0}
         listening={false}
       />
 
@@ -239,9 +242,9 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         y={0}
         width={zone.w}
         height={HEADER_HEIGHT}
-        fill={isSelected ? '#3b82f6' : 'transparent'}
-        opacity={isSelected ? 1 : 0.5}
-        cornerRadius={[10, 0, 12, 0]}
+        fill={isSelected ? '#007aff' : 'transparent'}
+        opacity={isSelected ? 0.9 : 0.5}
+        cornerRadius={[14, 14, 0, 0]}
         onClick={handleHeaderClick}
         onTap={handleHeaderClick}
       />
@@ -276,7 +279,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         <Text
           text={'\u2715'}
           fontSize={14}
-          fill={isSelected ? 'rgba(255,255,255,0.7)' : '#dc2626'}
+          fill={isSelected ? 'rgba(255,255,255,0.7)' : '#ff3b30'}
           align="center"
           verticalAlign="middle"
           width={headerLayout.closeIcon.width}
@@ -324,12 +327,12 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
             return newBox;
           }}
           onTransformEnd={handleTransformEnd}
-          borderStroke="#3b82f6"
-          borderStrokeWidth={2}
+          borderStroke="#007aff"
+          borderStrokeWidth={1.5}
           anchorFill="#ffffff"
-          anchorStroke="#3b82f6"
+          anchorStroke="#007aff"
           anchorSize={8}
-          anchorCornerRadius={2}
+          anchorCornerRadius={4}
         />
       )}
 
