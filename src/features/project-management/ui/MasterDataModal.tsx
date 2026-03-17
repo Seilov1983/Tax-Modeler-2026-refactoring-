@@ -197,6 +197,12 @@ export function MasterDataModal({
     [setProject, project],
   );
 
+  // ─── Default sizes for spawning ──────────────────────────────────────
+  const COUNTRY_DEFAULT_W = 200;
+  const COUNTRY_DEFAULT_H = 400;
+  const REGIME_DEFAULT_W = 100;
+  const REGIME_DEFAULT_H = 200;
+
   // ─── One-click add country as zone to canvas ─────────────────────────
 
   const handleAddToCanvas = useCallback(
@@ -210,13 +216,12 @@ export function MasterDataModal({
         currency: COUNTRY_CURRENCY[country.id] || country.baseCurrency || 'USD',
         x,
         y,
-        w: 600,
-        h: 400,
+        w: COUNTRY_DEFAULT_W,
+        h: COUNTRY_DEFAULT_H,
       });
-      setSpawnCoords(null);
-      onClose();
+      // Do NOT close modal — user can add multiple items successively
     },
-    [addZone, spawnCoords, setSpawnCoords, onClose],
+    [addZone, spawnCoords],
   );
 
   // ─── One-click add regime as sub-zone to canvas ───────────────────────
@@ -225,8 +230,8 @@ export function MasterDataModal({
     (regime: TaxRegime) => {
       const parentZone = spawnCoords?.parentZone
         ?? project?.zones?.find((z) => z.jurisdiction === regime.countryId && !z.parentId);
-      const x = spawnCoords?.x ?? (parentZone ? parentZone.x + 30 : 120);
-      const y = spawnCoords?.y ?? (parentZone ? parentZone.y + 60 : 120);
+      const x = spawnCoords?.x ?? (parentZone ? 30 : 120);
+      const y = spawnCoords?.y ?? (parentZone ? 60 : 120);
 
       addZone({
         jurisdiction: regime.countryId as JurisdictionCode,
@@ -235,14 +240,13 @@ export function MasterDataModal({
         currency: COUNTRY_CURRENCY[regime.countryId] || 'USD',
         x,
         y,
-        w: 320,
-        h: 250,
+        w: REGIME_DEFAULT_W,
+        h: REGIME_DEFAULT_H,
         parentId: parentZone?.id ?? null,
       });
-      setSpawnCoords(null);
-      onClose();
+      // Do NOT close modal — user can add multiple items successively
     },
-    [addZone, project?.zones, spawnCoords, setSpawnCoords, onClose],
+    [addZone, project?.zones, spawnCoords],
   );
 
   if (!project) return null;
