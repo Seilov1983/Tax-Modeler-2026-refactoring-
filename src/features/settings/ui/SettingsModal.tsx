@@ -5,9 +5,12 @@
  *
  * Frosted glass backdrop, spring-animated mount, iOS-style toggle switches.
  * Reads/writes to settingsAtom (atomWithStorage → localStorage).
+ *
+ * Rendered via React portal to escape parent stacking context (ProjectHeader).
  */
 
 import { useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useAtom, useSetAtom } from 'jotai';
 import { useSpring, animated, config } from '@react-spring/web';
 import { settingsAtom, settingsOpenAtom } from '../model/settings-atom';
@@ -66,13 +69,16 @@ export function SettingsModal() {
     config: config.stiff,
   });
 
-  return (
+  return createPortal(
     <animated.div
       style={{
         ...backdropSpring,
         position: 'fixed',
-        inset: 0,
-        zIndex: 1000,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 9999,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -86,14 +92,17 @@ export function SettingsModal() {
         style={{
           ...modalSpring,
           width: '400px',
-          maxHeight: '80vh',
+          maxWidth: 'calc(100vw - 32px)',
+          maxHeight: '90vh',
           borderRadius: '24px',
           background: 'rgba(255, 255, 255, 0.72)',
           backdropFilter: 'blur(20px) saturate(180%)',
           WebkitBackdropFilter: 'blur(20px) saturate(180%)',
           border: '1px solid rgba(255, 255, 255, 0.25)',
           boxShadow: '0 24px 80px rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.06)',
-          overflow: 'hidden',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column' as const,
         }}
         onClick={(e: React.MouseEvent) => e.stopPropagation()}
       >
@@ -105,6 +114,7 @@ export function SettingsModal() {
             justifyContent: 'space-between',
             padding: '20px 24px 16px',
             borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+            flexShrink: 0,
           }}
         >
           <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.02em' }}>
@@ -133,7 +143,7 @@ export function SettingsModal() {
         </div>
 
         {/* ─── Body ────────────────────────────────────────────────── */}
-        <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: '24px', overflowY: 'auto' }}>
 
           {/* Theme */}
           <div>
@@ -184,7 +194,8 @@ export function SettingsModal() {
           </div>
         </div>
       </animated.div>
-    </animated.div>
+    </animated.div>,
+    document.body,
   );
 }
 
