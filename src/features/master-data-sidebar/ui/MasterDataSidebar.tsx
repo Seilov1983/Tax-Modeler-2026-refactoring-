@@ -15,9 +15,10 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useSpring, animated, config } from '@react-spring/web';
 import { projectAtom } from '@features/canvas/model/project-atom';
+import { isSidebarOpenAtom, sidebarContextAtom } from '../model/atoms';
 import type { Country, TaxRegime, MasterDataEntry, JurisdictionCode } from '@shared/types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -92,6 +93,8 @@ function rateBadgeColor(rate: number | null | undefined): { bg: string; text: st
 
 export function MasterDataSidebar() {
   const project = useAtomValue(projectAtom);
+  const [isOpen, setIsOpen] = useAtom(isSidebarOpenAtom);
+  const [sidebarContext, setSidebarContext] = useAtom(sidebarContextAtom);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
   const ghostRef = useRef<HTMLElement | null>(null);
@@ -216,10 +219,34 @@ export function MasterDataSidebar() {
     [cleanupGhost],
   );
 
-  // ─── Entrance animation ────────────────────────────────────────────────
+  // ─── Pre-expand country from context (zone click) ──────────────────────
+  useEffect(() => {
+    if (isOpen && sidebarContext) {
+      setExpandedCountries((prev) => {
+        const next = new Set(prev);
+        next.add(sidebarContext);
+        return next;
+      });
+      setSidebarContext(null);
+    }
+  }, [isOpen, sidebarContext, setSidebarContext]);
+
+  // ─── Close on Escape ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen, setIsOpen]);
+
+  // ─── Slide animation ─────────────────────────────────────────────────
   const sidebarSpring = useSpring({
-    from: { opacity: 0, transform: 'translateX(-24px)' },
-    to: { opacity: 1, transform: 'translateX(0px)' },
+    transform: isOpen ? 'translateX(0px)' : 'translateX(-320px)',
+    opacity: isOpen ? 1 : 0,
     config: config.stiff,
   });
 
@@ -242,13 +269,38 @@ export function MasterDataSidebar() {
         display: 'flex',
         flexDirection: 'column',
         fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif",
+        pointerEvents: isOpen ? 'auto' : 'none',
       }}
     >
       {/* ─── Header ─────────────────────────────────────────────── */}
       <div style={{ padding: '16px 20px 0', flexShrink: 0 }}>
-        <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.02em' }}>
-          Master Data
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.02em' }}>
+            Master Data
+          </h2>
+          <button
+            onClick={() => setIsOpen(false)}
+            style={{
+              background: 'rgba(0, 0, 0, 0.04)',
+              border: 'none',
+              borderRadius: '8px',
+              width: '28px',
+              height: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: '14px',
+              color: '#86868b',
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.08)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.04)'; }}
+            title="Close sidebar (Esc)"
+          >
+            {'\u2715'}
+          </button>
+        </div>
         <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#86868b' }}>
           Drag a row onto the canvas
         </p>

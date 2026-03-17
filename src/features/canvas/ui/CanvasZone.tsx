@@ -23,6 +23,7 @@ import { Group, Rect, Text, Line, Transformer } from 'react-konva';
 import { useSpring, animated } from '@react-spring/konva';
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
+import { isSidebarOpenAtom, sidebarContextAtom } from '@features/master-data-sidebar';
 import { moveZoneAtom, deleteZoneAtom, resizeZoneAtom, flagZoneErrorAtom } from '../model/graph-actions-atom';
 import { showNotificationAtom } from '../model/notification-atom';
 import { dragOverFeedbackAtom } from '../model/drag-over-feedback-atom';
@@ -61,6 +62,8 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   const showNotification = useSetAtom(showNotificationAtom);
   const [dragOverFeedback, setDragOverFeedback] = useAtom(dragOverFeedbackAtom);
   const allZones = useAtomValue(zonesAtom);
+  const setIsSidebarOpen = useSetAtom(isSidebarOpenAtom);
+  const setSidebarContext = useSetAtom(sidebarContextAtom);
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
 
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
@@ -198,12 +201,15 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   // Select zone on pointer-down anywhere on its body (not just the header).
   // cancelBubble prevents the Stage from catching this event and clearing
   // the selection in handleStageClick.
+  // Also opens the sidebar pre-expanded to this zone's jurisdiction.
   const handleZonePointerDown = useCallback(
     (e: KonvaEventObject<PointerEvent>) => {
       e.cancelBubble = true;
       setSelection({ type: 'zone', id: zone.id });
+      setSidebarContext(zone.jurisdiction);
+      setIsSidebarOpen(true);
     },
-    [zone.id, setSelection],
+    [zone.id, zone.jurisdiction, setSelection, setSidebarContext, setIsSidebarOpen],
   );
 
   // ─── Delete zone ──────────────────────────────────────────────────────────
