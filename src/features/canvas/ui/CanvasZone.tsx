@@ -20,9 +20,10 @@
 
 import { memo, useRef, useCallback, useMemo } from 'react';
 import { Group, Rect, Text, Line } from 'react-konva';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useSetAtom, useStore } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { moveZoneAtom, deleteZoneAtom, resizeZoneAtom } from '../model/graph-actions-atom';
+import { zonesAtom } from '@entities/zone';
 import { calculateZoneHeaderLayout } from '../utils/canvas-layout';
 import type { Zone } from '@shared/types';
 import type Konva from 'konva';
@@ -88,10 +89,49 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   const resizeStartRef = useRef<{ w: number; h: number; startX: number; startY: number } | null>(null);
   const liveSizeRef = useRef({ w: zone.w, h: zone.h });
 
+  // ─── Drag constraints ──────────────────────────────────────────────────
+  // Zones with parentId are constrained within their parent zone.
+  // Top-level zones (no parentId) can be dragged anywhere.
+  const store = useStore();
+  const parentBoundsRef = useRef<{ minX: number; maxX: number; minY: number; maxY: number } | null>(null);
+
+  const computeParentBounds = useCallback(() => {
+    if (!zone.parentId) {
+      parentBoundsRef.current = null;
+      return;
+    }
+    const zones = store.get(zonesAtom);
+    const parentZone = zones.find((z: Zone) => z.id === zone.parentId);
+    if (!parentZone) {
+      parentBoundsRef.current = null;
+      return;
+    }
+    const headerMargin = 40;
+    parentBoundsRef.current = {
+      minX: parentZone.x,
+      maxX: parentZone.x + parentZone.w - zone.w,
+      minY: parentZone.y + headerMargin,
+      maxY: parentZone.y + parentZone.h - zone.h,
+    };
+  }, [zone.parentId, zone.w, zone.h, store]);
+
+  const handleDragBound = useCallback(
+    (pos: { x: number; y: number }) => {
+      const bounds = parentBoundsRef.current;
+      if (!bounds) return pos;
+      return {
+        x: Math.max(bounds.minX, Math.min(bounds.maxX, pos.x)),
+        y: Math.max(bounds.minY, Math.min(bounds.maxY, pos.y)),
+      };
+    },
+    [],
+  );
+
   // ─── Drag handlers ──────────────────────────────────────────────────────
   const handleDragStart = useCallback(() => {
     hasDragged.current = false;
-  }, []);
+    computeParentBounds();
+  }, [computeParentBounds]);
 
   const handleDragMove = useCallback(() => {
     hasDragged.current = true;
@@ -207,6 +247,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
       x={zone.x}
       y={zone.y}
       draggable
+      dragBoundFunc={handleDragBound}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
