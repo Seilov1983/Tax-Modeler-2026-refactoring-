@@ -1,0 +1,120 @@
+// ─── Prisma 7 Schema ─────────────────────────────────────────────────────────
+// Models for Master Data dictionaries and Tax Flow Rules.
+// Uses the Prisma 7 Rust-free TypeScript client.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth.js Models ──────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Master Data: Dictionary Country ─────────────────────────────────────────
+
+model DictionaryCountry {
+  id           String   @id @default(cuid())
+  code         String   @unique /// ISO 3166-1 alpha-2 (KZ, UAE, HK, etc.)
+  name         String
+  baseCurrency String   /// ISO 4217 (KZT, USD, EUR, etc.)
+  vatRate      Float    @default(0)
+  citRate      Float    @default(0)
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  regimes DictionaryRegime[]
+
+  @@index([code])
+}
+
+// ─── Master Data: Dictionary Regime ──────────────────────────────────────────
+
+model DictionaryRegime {
+  id        String   @id @default(cuid())
+  countryId String
+  name      String
+  citRate   Float    @default(0)
+  whtRate   Float    @default(0)
+  notes     String?  @db.Text
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  country      DictionaryCountry @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  taxFlowRules TaxFlowRule[]
+
+  @@index([countryId])
+}
+
+// ─── Tax Flow Rule ───────────────────────────────────────────────────────────
+
+model TaxFlowRule {
+  id             String   @id @default(cuid())
+  regimeId       String
+  flowType       String   /// Services, Dividends, Royalties, Interest, Salary, Goods, Equipment
+  whtRate        Float    @default(0)
+  citDeductible  Boolean  @default(true)
+  exemptionRef   String?  /// Law reference for exemption
+  effectiveFrom  DateTime @default(now())
+  effectiveTo    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  regime DictionaryRegime @relation(fields: [regimeId], references: [id], onDelete: Cascade)
+
+  @@unique([regimeId, flowType])
+  @@index([regimeId])
+  @@index([flowType])
+}

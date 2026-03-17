@@ -18,8 +18,9 @@
  */
 
 import { useAtomValue, useSetAtom } from 'jotai';
-import { useRef, useCallback, memo, useMemo } from 'react';
+import { useRef, useCallback, memo, useMemo, useState } from 'react';
 import { Group, Rect, Text, Circle } from 'react-konva';
+import { useSpring, animated } from '@react-spring/konva';
 import type { PrimitiveAtom } from 'jotai';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
@@ -65,6 +66,15 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const hasDragged = useRef(false);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+
+  // ─── Entrance animation — subtle scale-in bypassing React render cycle
+  const [hasAnimated] = useState(() => ({ value: false }));
+  const entranceSpring = useSpring({
+    from: hasAnimated.value ? { scaleX: 1, scaleY: 1, opacity: 1 } : { scaleX: 0.8, scaleY: 0.8, opacity: 0 },
+    to: { scaleX: 1, scaleY: 1, opacity: 1 },
+    config: { tension: 300, friction: 20 },
+    onRest: () => { hasAnimated.value = true; },
+  });
 
   const isSelected = selection?.type === 'node' && selection.ids.includes(node.id);
   const isTxa = node.type === 'txa';
@@ -239,6 +249,9 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       onClick={handleClick}
       onTap={handleClick}
       onPointerUp={handleNodePointerUp}
+      scaleX={entranceSpring.scaleX.get()}
+      scaleY={entranceSpring.scaleY.get()}
+      opacity={entranceSpring.opacity.get()}
     >
       {/* Node body — uses layout background dimensions */}
       <Rect
