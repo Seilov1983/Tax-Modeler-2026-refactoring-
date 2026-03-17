@@ -132,9 +132,10 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
       const newX = Math.round(node.x());
       const newY = Math.round(node.y());
       moveZone({ id: zone.id, x: newX, y: newY });
-      validateSpatialBounds(newX, newY, zone.w, zone.h);
+      // Spatial validation temporarily disabled to isolate coordinate fixes
+      // validateSpatialBounds(newX, newY, zone.w, zone.h);
     },
-    [zone.id, zone.w, zone.h, moveZone, validateSpatialBounds],
+    [zone.id, moveZone],
   );
 
   // ─── Click to select ──────────────────────────────────────────────────────
@@ -168,37 +169,19 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     const scaleX = node.scaleX();
     const scaleY = node.scaleY();
 
-    const newW = Math.max(200, Math.round(node.width() * scaleX));
-    const newH = Math.max(150, Math.round(node.height() * scaleY));
+    // Calculate absolute dimensions from scale, enforce minimums
+    const newW = Math.max(5, Math.round(node.width() * scaleX));
+    const newH = Math.max(5, Math.round(node.height() * scaleY));
 
-    // Reset scale to 1 immediately to prevent text/UI distortion
+    // CRITICAL: Reset scale to 1 immediately to prevent text/UI distortion
     node.scaleX(1);
     node.scaleY(1);
     node.width(newW);
     node.height(newH);
 
+    // Dispatch explicit width/height to Jotai (never scaleX/scaleY)
     resizeZone({ id: zone.id, w: newW, h: newH });
-
-    // Validate this zone's position within parent (if it's a regime)
-    validateSpatialBounds(zone.x, zone.y, newW, newH);
-
-    // Check if children are now out of bounds after resize (for countries)
-    const childZones = allZones.filter((z) => z.parentId === zone.id);
-    for (const child of childZones) {
-      const childOutOfBounds =
-        child.x < 0 ||
-        child.y < 0 ||
-        (child.x + child.w) > newW ||
-        (child.y + child.h) > newH;
-      flagZoneError({ id: child.id, hasError: childOutOfBounds });
-      if (childOutOfBounds) {
-        showNotification({
-          message: 'Invalid placement: Object must reside within its designated parent zone',
-          type: 'error',
-        });
-      }
-    }
-  }, [zone.id, zone.x, zone.y, resizeZone, validateSpatialBounds, allZones, flagZoneError, showNotification]);
+  }, [zone.id, resizeZone]);
 
   const badgeText = `${zone.jurisdiction} \u00b7 ${zone.currency}`;
 
