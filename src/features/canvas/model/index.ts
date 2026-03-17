@@ -8,3 +8,5 @@ export type { AddNodePayload, AddFlowPayload, MoveNodeEntry, AddZonePayload } fr
 export { clipboardAtom, copyAtom, pasteAtom, duplicateAtom } from './clipboard-atoms';
 export { contextMenuAtom } from './context-menu-atom';
 export type { ContextMenuTarget } from './context-menu-atom';
+export { dragOverFeedbackAtom } from './drag-over-feedback-atom';
+export type { DragOverFeedback } from './drag-over-feedback-atom';
