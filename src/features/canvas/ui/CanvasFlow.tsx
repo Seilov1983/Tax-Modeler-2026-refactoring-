@@ -73,7 +73,8 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowPr
           ctx.strokeShape(shape);
         }}
         stroke="transparent"
-        strokeWidth={12}
+        strokeWidth={20}
+        hitStrokeWidth={20}
         listening={true}
       />
 

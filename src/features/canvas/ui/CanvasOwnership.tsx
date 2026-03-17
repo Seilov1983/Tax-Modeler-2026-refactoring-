@@ -61,7 +61,7 @@ export const CanvasOwnership = memo(function CanvasOwnership({ edge, nodes }: Ca
 
   return (
     <Group onClick={handleClick} onTap={handleClick}>
-      {/* Invisible wider hit area (12px) */}
+      {/* Invisible wider hit area (20px) */}
       <Shape
         sceneFunc={(ctx, shape) => {
           ctx.beginPath();
@@ -70,7 +70,8 @@ export const CanvasOwnership = memo(function CanvasOwnership({ edge, nodes }: Ca
           ctx.strokeShape(shape);
         }}
         stroke="transparent"
-        strokeWidth={12}
+        strokeWidth={20}
+        hitStrokeWidth={20}
         listening={true}
       />
 

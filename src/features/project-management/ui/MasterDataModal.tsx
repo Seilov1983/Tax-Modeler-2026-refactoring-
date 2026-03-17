@@ -9,10 +9,11 @@
  * Data stored flat in projectAtom.masterData.{countries,regimes}.
  */
 
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { useState, useCallback } from 'react';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { addZoneAtom } from '@features/canvas/model/graph-actions-atom';
+import { spawnCoordinatesAtom } from '@features/canvas/model/spawn-coordinates-atom';
 import { uid } from '@shared/lib/engine/utils';
 import type { Country, TaxRegime, CurrencyCode, JurisdictionCode } from '@shared/types';
 
@@ -83,10 +84,24 @@ const btnAddRegime: React.CSSProperties = {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export function MasterDataModal({ onClose }: { onClose: () => void }) {
+export function MasterDataModal({
+  onClose,
+  initialTab,
+}: {
+  onClose: () => void;
+  /** Which tab to focus when opened from context menu */
+  initialTab?: 'countries' | 'regimes';
+}) {
   const [project, setProject] = useAtom(projectAtom);
   const addZone = useSetAtom(addZoneAtom);
-  const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
+  const [spawnCoords, setSpawnCoords] = useAtom(spawnCoordinatesAtom);
+  const [expandedCountries, setExpandedCountries] = useState<Set<string>>(() => {
+    // Auto-expand the parent country when opening for regime addition
+    if (initialTab === 'regimes' && spawnCoords?.parentZone) {
+      return new Set([spawnCoords.parentZone.id]);
+    }
+    return new Set<string>();
+  });
 
   const countries: Country[] = project?.masterData?.countries ?? [];
   const regimes: TaxRegime[] = project?.masterData?.regimes ?? [];
@@ -240,29 +255,35 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
 
   const handleAddToCanvas = useCallback(
     (country: Country) => {
+      // Use spawn coordinates if available (from context menu), otherwise default
+      const x = spawnCoords?.x ?? 100;
+      const y = spawnCoords?.y ?? 100;
       addZone({
         jurisdiction: country.id as JurisdictionCode,
         code: `${country.id}_${Date.now().toString(36).toUpperCase()}`,
         name: country.name,
         currency: COUNTRY_CURRENCY[country.id] || country.baseCurrency || 'USD',
-        x: 100,
-        y: 100,
+        x,
+        y,
         w: 600,
         h: 400,
       });
-      // Modal stays open for continuous addition
+      // Clear spawn coordinates after use and close modal
+      setSpawnCoords(null);
+      onClose();
     },
-    [addZone],
+    [addZone, spawnCoords, setSpawnCoords, onClose],
   );
 
   // ─── One-click add regime as sub-zone to canvas ───────────────────────
 
   const handleAddRegimeToCanvas = useCallback(
     (regime: TaxRegime) => {
-      // Find parent country zone on canvas to position inside it
-      const parentZone = project?.zones?.find((z) => z.jurisdiction === regime.countryId);
-      const x = parentZone ? parentZone.x + 30 : 120;
-      const y = parentZone ? parentZone.y + 60 : 120;
+      // Use spawn coordinates if available (from context menu), otherwise find parent zone
+      const parentZone = spawnCoords?.parentZone
+        ?? project?.zones?.find((z) => z.jurisdiction === regime.countryId && !z.parentId);
+      const x = spawnCoords?.x ?? (parentZone ? parentZone.x + 30 : 120);
+      const y = spawnCoords?.y ?? (parentZone ? parentZone.y + 60 : 120);
 
       addZone({
         jurisdiction: regime.countryId as JurisdictionCode,
@@ -273,10 +294,13 @@ export function MasterDataModal({ onClose }: { onClose: () => void }) {
         y,
         w: 320,
         h: 250,
+        parentId: parentZone?.id ?? null,
       });
-      // Modal stays open for continuous addition
+      // Clear spawn coordinates after use and close modal
+      setSpawnCoords(null);
+      onClose();
     },
-    [addZone, project?.zones],
+    [addZone, project?.zones, spawnCoords, setSpawnCoords, onClose],
   );
 
   if (!project) return null;
