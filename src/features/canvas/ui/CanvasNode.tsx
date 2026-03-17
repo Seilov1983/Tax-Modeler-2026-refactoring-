@@ -27,7 +27,9 @@ import type { KonvaEventObject } from 'konva/lib/Node';
 import type { NodeDTO } from '@shared/types';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { draftConnectionAtom, commitDraftConnectionAtom } from '../model/draft-connection-atom';
-import { moveNodesAtom } from '../model/graph-actions-atom';
+import { moveNodesAtom, flagNodeErrorAtom } from '../model/graph-actions-atom';
+import { showNotificationAtom } from '../model/notification-atom';
+import { zonesAtom } from '@entities/zone';
 import { calculateNodeCardLayout } from '../utils/canvas-layout';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -61,6 +63,9 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const setDraft = useSetAtom(draftConnectionAtom);
   const commitDraft = useSetAtom(commitDraftConnectionAtom);
   const moveNodes = useSetAtom(moveNodesAtom);
+  const flagNodeError = useSetAtom(flagNodeErrorAtom);
+  const showNotification = useSetAtom(showNotificationAtom);
+  const allZones = useAtomValue(zonesAtom);
 
   const groupRef = useRef<Konva.Group>(null);
   const hasDragged = useRef(false);
@@ -141,6 +146,30 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
     [node.id, node.x, node.y],
   );
 
+  // ─── Spatial validation: check if node is inside its parent regime zone ──
+  const validateNodeBounds = useCallback(
+    (nodeX: number, nodeY: number, nodeW: number, nodeH: number, nodeId: string, zoneId: string | null) => {
+      if (!zoneId) return;
+      const parentZone = allZones.find((z) => z.id === zoneId);
+      if (!parentZone) return;
+
+      const outOfBounds =
+        nodeX < 0 ||
+        nodeY < 0 ||
+        (nodeX + nodeW) > parentZone.w ||
+        (nodeY + nodeH) > parentZone.h;
+
+      flagNodeError({ id: nodeId, hasError: outOfBounds });
+      if (outOfBounds) {
+        showNotification({
+          message: 'Invalid placement: Object must reside within its designated parent zone',
+          type: 'error',
+        });
+      }
+    },
+    [allZones, flagNodeError, showNotification],
+  );
+
   const handleDragEnd = useCallback(
     (e: KonvaEventObject<DragEvent>) => {
       if (!hasDragged.current) return;
@@ -172,8 +201,11 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       } else {
         moveNodes([{ id: node.id, x, y }]);
       }
+
+      // Spatial validation after move
+      validateNodeBounds(x, y, node.w, node.h, node.id, node.zoneId);
     },
-    [node.id, node.x, node.y, moveNodes],
+    [node.id, node.x, node.y, node.w, node.h, node.zoneId, moveNodes, validateNodeBounds],
   );
 
   // ─── Click to select ──────────────────────────────────────────────────
@@ -253,18 +285,18 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       scaleY={entranceSpring.scaleY.get()}
       opacity={entranceSpring.opacity.get()}
     >
-      {/* Node body — uses layout background dimensions */}
+      {/* Node body — uses layout background dimensions; red stroke if hasError */}
       <Rect
         width={cardLayout.background.width}
         height={cardLayout.background.height}
         fill={colors.bg}
-        stroke={isSelected ? '#2563eb' : node.frozen ? '#ef4444' : colors.border}
-        strokeWidth={isSelected ? 2.5 : node.frozen ? 2 : 1.5}
+        stroke={node.hasError ? '#dc2626' : isSelected ? '#2563eb' : node.frozen ? '#ef4444' : colors.border}
+        strokeWidth={node.hasError ? 3 : isSelected ? 2.5 : node.frozen ? 2 : 1.5}
         cornerRadius={8}
-        shadowColor={node.frozen ? '#ef4444' : 'rgba(0,0,0,0.1)'}
-        shadowBlur={node.frozen ? 8 : 4}
+        shadowColor={node.hasError ? '#dc2626' : node.frozen ? '#ef4444' : 'rgba(0,0,0,0.1)'}
+        shadowBlur={node.hasError ? 10 : node.frozen ? 8 : 4}
         shadowOffsetY={2}
-        shadowOpacity={node.frozen ? 0.3 : 0.15}
+        shadowOpacity={node.hasError ? 0.4 : node.frozen ? 0.3 : 0.15}
       />
 
       {/* Header background */}

@@ -148,6 +148,8 @@ export interface Zone {
   /** Explicit parent zone id — replaces implicit spatial hierarchy (O(n²) containment checks). */
   parentId?: string | null;
   tax?: Partial<ZoneTaxOverride>;
+  /** Spatial validation error — true when zone is outside its parent bounds */
+  hasError?: boolean;
 }
 
 // ─── Node ────────────────────────────────────────────────────────────────────
@@ -189,6 +191,8 @@ export interface NodeDTO {
   effectiveTo?: string | null;
   balances: NodeBalances;
   regimeId?: string | null;
+  /** Spatial validation error — true when node is outside its parent zone bounds */
+  hasError?: boolean;
   // Company-specific
   ledger?: CompanyLedger;
   complianceData?: CompanyComplianceData;

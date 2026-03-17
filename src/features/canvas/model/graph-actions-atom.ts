@@ -281,15 +281,19 @@ export interface AddZonePayload {
   parentId?: string | null;
 }
 
+/** Default zone dimensions — Countries: 200×400, Regimes: 100×200 */
+export const COUNTRY_DEFAULT_SIZE = { w: 200, h: 400 };
+export const REGIME_DEFAULT_SIZE = { w: 100, h: 200 };
+
 const ZONE_DEFAULTS: Record<string, { w: number; h: number }> = {
-  KZ: { w: 600, h: 500 },
-  UAE: { w: 600, h: 500 },
-  HK: { w: 500, h: 400 },
-  CY: { w: 500, h: 400 },
-  SG: { w: 500, h: 400 },
-  UK: { w: 500, h: 400 },
-  US: { w: 500, h: 400 },
-  BVI: { w: 400, h: 350 },
+  KZ: { w: 200, h: 400 },
+  UAE: { w: 200, h: 400 },
+  HK: { w: 200, h: 400 },
+  CY: { w: 200, h: 400 },
+  SG: { w: 200, h: 400 },
+  UK: { w: 200, h: 400 },
+  US: { w: 200, h: 400 },
+  BVI: { w: 200, h: 400 },
 };
 
 export const addZoneAtom = atom(
@@ -405,6 +409,44 @@ export const deleteZoneAtom = atom(
     if (sel?.type === 'zone' && sel.id === zoneId) {
       set(selectionAtom, null);
     }
+  },
+);
+
+// ─── Flag Entity Error (spatial validation) ──────────────────────────────
+
+export const flagZoneErrorAtom = atom(
+  null,
+  (_get, set, payload: { id: string; hasError: boolean }) => {
+    set(zonesAtom, (prev) =>
+      prev.map((z) => (z.id === payload.id ? { ...z, hasError: payload.hasError } : z)),
+    );
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        zones: prev.zones.map((z) =>
+          z.id === payload.id ? { ...z, hasError: payload.hasError } : z,
+        ),
+      };
+    });
+  },
+);
+
+export const flagNodeErrorAtom = atom(
+  null,
+  (_get, set, payload: { id: string; hasError: boolean }) => {
+    set(nodesAtom, (prev) =>
+      prev.map((n) => (n.id === payload.id ? { ...n, hasError: payload.hasError } : n)),
+    );
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        nodes: prev.nodes.map((n) =>
+          n.id === payload.id ? { ...n, hasError: payload.hasError } : n,
+        ),
+      };
+    });
   },
 );
 

@@ -36,9 +36,9 @@ import { useKeyboardShortcuts } from '@features/canvas/ui/useKeyboardShortcuts';
 import { CanvasControls } from '@features/canvas/ui/CanvasControls';
 import { Minimap } from '@features/canvas/ui/Minimap';
 import { AuditLogPanel } from '@features/audit-log/ui/AuditLogPanel';
-import { FlowSidebar } from '@features/canvas/ui/FlowSidebar';
+import { FlowModal } from '@features/canvas/ui/FlowModal';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
-import { EditorSidebar } from '@features/entity-editor/ui/EditorSidebar';
+import { EditorModal } from '@features/entity-editor/ui/EditorModal';
 import { draftConnectionAtom } from '@features/canvas/model/draft-connection-atom';
 import { viewportAtom } from '@features/canvas/model/viewport-atom';
 import { contextMenuAtom } from '@features/canvas/model/context-menu-atom';
@@ -47,6 +47,7 @@ import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
 import { addNodeAtom, addZoneAtom, NODE_WIDTH, NODE_HEIGHT } from '@features/canvas/model/graph-actions-atom';
 import { spawnCoordinatesAtom } from '@features/canvas/model/spawn-coordinates-atom';
+import { notificationAtom } from '@features/canvas/model/notification-atom';
 import { MasterDataModal } from '@features/project-management/ui/MasterDataModal';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { ProjectHeader } from '@features/project-management';
@@ -54,6 +55,48 @@ import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
 import type { JurisdictionCode, CurrencyCode, Zone } from '@shared/types';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
+
+// ─── Default sizes for contextual spawning ──────────────────────────────────
+const COUNTRY_DEFAULT_W = 200;
+const COUNTRY_DEFAULT_H = 400;
+const REGIME_DEFAULT_W = 100;
+const REGIME_DEFAULT_H = 200;
+
+// ─── Notification Toast ──────────────────────────────────────────────────────
+
+function NotificationToast() {
+  const notification = useAtomValue(notificationAtom);
+  if (!notification) return null;
+
+  const bgColor = notification.type === 'error' ? '#fef2f2' : notification.type === 'warning' ? '#fffbeb' : '#eff6ff';
+  const borderColor = notification.type === 'error' ? '#fecaca' : notification.type === 'warning' ? '#fde68a' : '#bfdbfe';
+  const textColor = notification.type === 'error' ? '#dc2626' : notification.type === 'warning' ? '#d97706' : '#2563eb';
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: '24px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 10000,
+        background: bgColor,
+        border: `1px solid ${borderColor}`,
+        borderRadius: '8px',
+        padding: '12px 20px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+        fontSize: '13px',
+        fontWeight: 500,
+        color: textColor,
+        maxWidth: '500px',
+        textAlign: 'center',
+        pointerEvents: 'none',
+      }}
+    >
+      {notification.message}
+    </div>
+  );
+}
 
 // ─── Grid pattern renderer (cached) ─────────────────────────────────────────
 
@@ -205,7 +248,7 @@ export function CanvasBoard() {
     };
   }, []);
 
-  // ─── Stage double-click → context menu ────────────────────────────────
+  // ─── Stage double-click → contextual spawning via MasterDataModal ────
   const handleStageDblClick = useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
       const stage = stageRef.current;
@@ -217,19 +260,60 @@ export function CanvasBoard() {
 
       const pos = stage.getPointerPosition();
       if (!pos) return;
+
+      // Determine what was double-clicked using e.target
+      const target = e.target;
+      const isStage = target === stage;
+
+      // Get canvas coordinates via the clicked target's transform
       const transform = stage.getAbsoluteTransform().copy().invert();
       const canvasPos = transform.point(pos);
-
-      const canvasX = Math.round(canvasPos.x - NODE_WIDTH / 2);
-      const canvasY = Math.round(canvasPos.y - NODE_HEIGHT / 2);
 
       const screen = getScreenPointerPosition();
       if (!screen) return;
 
+      if (isStage) {
+        // Double-click on empty stage → spawn Country (200×400)
+        const spawnX = Math.round(canvasPos.x - COUNTRY_DEFAULT_W / 2);
+        const spawnY = Math.round(canvasPos.y - COUNTRY_DEFAULT_H / 2);
+        setSpawnCoordinates({ x: spawnX, y: spawnY });
+        setMasterDataModal({ open: true, initialTab: 'countries' });
+        return;
+      }
+
+      // Walk up the Konva tree to find a zone group
       const ctx = detectClickContext(canvasPos.x, canvasPos.y, screen.screenX, screen.screenY);
+
+      if (ctx.kind === 'country') {
+        // Double-click on a Country → spawn Regime (100×200) centered at pointer
+        // Convert pointer to local coordinates of the country zone
+        const parentZone = ctx.zone;
+        const localX = Math.round(canvasPos.x - parentZone.x - REGIME_DEFAULT_W / 2);
+        const localY = Math.round(canvasPos.y - parentZone.y - REGIME_DEFAULT_H / 2);
+        setSpawnCoordinates({
+          x: localX,
+          y: localY,
+          parentZone,
+        });
+        setMasterDataModal({ open: true, initialTab: 'regimes' });
+        return;
+      }
+
+      if (ctx.kind === 'regime') {
+        // Double-click on a Regime → spawn Node (Company/Individual) centered at pointer
+        const nodeX = Math.round(canvasPos.x - NODE_WIDTH / 2);
+        const nodeY = Math.round(canvasPos.y - NODE_HEIGHT / 2);
+        // Open context menu for node type choice
+        setContextMenu({ ...ctx, canvasX: nodeX, canvasY: nodeY });
+        return;
+      }
+
+      // Fallback: open context menu
+      const canvasX = Math.round(canvasPos.x - NODE_WIDTH / 2);
+      const canvasY = Math.round(canvasPos.y - NODE_HEIGHT / 2);
       setContextMenu({ ...ctx, canvasX, canvasY });
     },
-    [detectClickContext, setContextMenu, getScreenPointerPosition],
+    [detectClickContext, setContextMenu, getScreenPointerPosition, setSpawnCoordinates, setMasterDataModal],
   );
 
   // ─── Stage click → deselect ────────────────────────────────────────────
@@ -285,10 +369,10 @@ export function CanvasBoard() {
 
   const handleAddCountryZone = useCallback(() => {
     if (!contextMenu) return;
-    // Store spawn coordinates and open MasterDataModal (Countries tab)
+    // Store spawn coordinates centered at pointer with new default sizes (200×400)
     setSpawnCoordinates({
-      x: contextMenu.canvasX - 200,
-      y: contextMenu.canvasY - 100,
+      x: contextMenu.canvasX - COUNTRY_DEFAULT_W / 2,
+      y: contextMenu.canvasY - COUNTRY_DEFAULT_H / 2,
     });
     setMasterDataModal({ open: true, initialTab: 'countries' });
     setContextMenu(null);
@@ -297,10 +381,10 @@ export function CanvasBoard() {
   const handleAddRegimeZone = useCallback(() => {
     if (!contextMenu || contextMenu.kind !== 'country') return;
     const parentZone = contextMenu.zone;
-    // Store spawn coordinates with parent zone and open MasterDataModal (Regimes tab)
+    // Store spawn coordinates centered at pointer with new default sizes (100×200)
     setSpawnCoordinates({
-      x: contextMenu.canvasX - 100,
-      y: contextMenu.canvasY - 50,
+      x: contextMenu.canvasX - REGIME_DEFAULT_W / 2,
+      y: contextMenu.canvasY - REGIME_DEFAULT_H / 2,
       parentZone,
     });
     setMasterDataModal({ open: true, initialTab: 'regimes' });
@@ -344,10 +428,10 @@ export function CanvasBoard() {
           code: `${regimeCountryId}_${regimeId}`,
           name: regimeName || regimeId,
           currency: COUNTRY_CURRENCY[regimeCountryId] || 'USD',
-          x: parentZone ? parentZone.x + 30 : Math.round(x - 150),
-          y: parentZone ? parentZone.y + 60 : Math.round(y - 100),
-          w: 320,
-          h: 250,
+          x: parentZone ? Math.round(x - parentZone.x - REGIME_DEFAULT_W / 2) : Math.round(x - REGIME_DEFAULT_W / 2),
+          y: parentZone ? Math.round(y - parentZone.y - REGIME_DEFAULT_H / 2) : Math.round(y - REGIME_DEFAULT_H / 2),
+          w: REGIME_DEFAULT_W,
+          h: REGIME_DEFAULT_H,
           parentId: parentZone?.id ?? null,
         });
         return;
@@ -363,10 +447,10 @@ export function CanvasBoard() {
         code: `${countryId}_${Date.now().toString(36).toUpperCase()}`,
         name: countryName || countryId,
         currency: COUNTRY_CURRENCY[countryId] || 'USD',
-        x: Math.round(x - 300),
-        y: Math.round(y - 200),
-        w: 600,
-        h: 400,
+        x: Math.round(x - COUNTRY_DEFAULT_W / 2),
+        y: Math.round(y - COUNTRY_DEFAULT_H / 2),
+        w: COUNTRY_DEFAULT_W,
+        h: COUNTRY_DEFAULT_H,
         parentId: null,
       });
     },
@@ -688,8 +772,9 @@ export function CanvasBoard() {
         <CanvasControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={resetViewport} />
         <Minimap onNavigate={panTo} viewportRef={containerRef} />
         <AuditLogPanel />
-        <FlowSidebar />
-        <EditorSidebar />
+        <FlowModal />
+        <EditorModal />
+        <NotificationToast />
 
         {/* MasterDataModal — opened from context menu for strict zone creation */}
         {masterDataModal.open && (

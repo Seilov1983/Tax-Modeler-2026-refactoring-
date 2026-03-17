@@ -19,9 +19,11 @@
 import { memo, useRef, useCallback, useMemo, useEffect, useState } from 'react';
 import { Group, Rect, Text, Line, Transformer } from 'react-konva';
 import { useSpring, animated } from '@react-spring/konva';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
-import { moveZoneAtom, deleteZoneAtom, resizeZoneAtom } from '../model/graph-actions-atom';
+import { moveZoneAtom, deleteZoneAtom, resizeZoneAtom, flagZoneErrorAtom } from '../model/graph-actions-atom';
+import { showNotificationAtom } from '../model/notification-atom';
+import { zonesAtom } from '@entities/zone';
 import { calculateZoneHeaderLayout } from '../utils/canvas-layout';
 import type { Zone } from '@shared/types';
 import type Konva from 'konva';
@@ -51,6 +53,9 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   const moveZone = useSetAtom(moveZoneAtom);
   const deleteZone = useSetAtom(deleteZoneAtom);
   const resizeZone = useSetAtom(resizeZoneAtom);
+  const flagZoneError = useSetAtom(flagZoneErrorAtom);
+  const showNotification = useSetAtom(showNotificationAtom);
+  const allZones = useAtomValue(zonesAtom);
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
 
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
@@ -84,6 +89,30 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     }
   }, [isSelected]);
 
+  // ─── Spatial validation: check if regime is inside its parent country ──
+  const validateSpatialBounds = useCallback(
+    (childX: number, childY: number, childW: number, childH: number) => {
+      if (!zone.parentId) return; // Only regimes (with parentId) need validation
+      const parentZone = allZones.find((z) => z.id === zone.parentId);
+      if (!parentZone) return;
+
+      const outOfBounds =
+        childX < 0 ||
+        childY < 0 ||
+        (childX + childW) > parentZone.w ||
+        (childY + childH) > parentZone.h;
+
+      flagZoneError({ id: zone.id, hasError: outOfBounds });
+      if (outOfBounds) {
+        showNotification({
+          message: 'Invalid placement: Object must reside within its designated parent zone',
+          type: 'error',
+        });
+      }
+    },
+    [zone.parentId, zone.id, allZones, flagZoneError, showNotification],
+  );
+
   // ─── Drag handlers ──────────────────────────────────────────────────────
   const handleDragStart = useCallback((e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
@@ -100,13 +129,12 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
       e.cancelBubble = true;
       if (!hasDragged.current) return;
       const node = e.target;
-      moveZone({
-        id: zone.id,
-        x: Math.round(node.x()),
-        y: Math.round(node.y()),
-      });
+      const newX = Math.round(node.x());
+      const newY = Math.round(node.y());
+      moveZone({ id: zone.id, x: newX, y: newY });
+      validateSpatialBounds(newX, newY, zone.w, zone.h);
     },
-    [zone.id, moveZone],
+    [zone.id, zone.w, zone.h, moveZone, validateSpatialBounds],
   );
 
   // ─── Click to select ──────────────────────────────────────────────────────
@@ -150,7 +178,27 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     node.height(newH);
 
     resizeZone({ id: zone.id, w: newW, h: newH });
-  }, [zone.id, resizeZone]);
+
+    // Validate this zone's position within parent (if it's a regime)
+    validateSpatialBounds(zone.x, zone.y, newW, newH);
+
+    // Check if children are now out of bounds after resize (for countries)
+    const childZones = allZones.filter((z) => z.parentId === zone.id);
+    for (const child of childZones) {
+      const childOutOfBounds =
+        child.x < 0 ||
+        child.y < 0 ||
+        (child.x + child.w) > newW ||
+        (child.y + child.h) > newH;
+      flagZoneError({ id: child.id, hasError: childOutOfBounds });
+      if (childOutOfBounds) {
+        showNotification({
+          message: 'Invalid placement: Object must reside within its designated parent zone',
+          type: 'error',
+        });
+      }
+    }
+  }, [zone.id, zone.x, zone.y, resizeZone, validateSpatialBounds, allZones, flagZoneError, showNotification]);
 
   const badgeText = `${zone.jurisdiction} \u00b7 ${zone.currency}`;
 
@@ -178,14 +226,14 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         cornerRadius={12}
       />
 
-      {/* Zone border (dashed) */}
+      {/* Zone border (dashed) — red if hasError */}
       <Rect
         name="zone-border"
         width={zone.w}
         height={zone.h}
-        stroke={isSelected ? '#3b82f6' : borderColor}
-        strokeWidth={2}
-        dash={[8, 4]}
+        stroke={zone.hasError ? '#dc2626' : isSelected ? '#3b82f6' : borderColor}
+        strokeWidth={zone.hasError ? 3 : 2}
+        dash={zone.hasError ? undefined : [8, 4]}
         cornerRadius={12}
         listening={false}
       />
