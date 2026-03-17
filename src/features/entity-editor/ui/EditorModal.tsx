@@ -242,6 +242,9 @@ export function EditorModal() {
   // Flow editing is handled by FlowModal
   if (selection.type === 'flow') return null;
 
+  // Zone selection only shows the Transformer for visual resizing — no modal
+  if (selection.type === 'zone') return null;
+
   const isMultiNode = selection.type === 'node' && selection.ids.length > 1;
 
   let entity: NodeDTO | FlowDTO | OwnershipEdge | Zone | undefined;
