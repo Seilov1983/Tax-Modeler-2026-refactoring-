@@ -601,12 +601,7 @@ export function CanvasBoard() {
                 {(childZonesByParent.get(zone.id) || []).map((childZone) => (
                   <CanvasZone
                     key={childZone.id}
-                    zone={{
-                      ...childZone,
-                      // Convert to local coordinates relative to parent
-                      x: childZone.x - zone.x,
-                      y: childZone.y - zone.y,
-                    }}
+                    zone={childZone}
                   />
                 ))}
               </CanvasZone>
