@@ -375,6 +375,21 @@ export function CanvasBoard() {
       const x = localPos.x;
       const y = localPos.y;
 
+      // Entity node drops (Company / Person)
+      const companyType = e.dataTransfer.getData('application/tax-node-company');
+      const personType = e.dataTransfer.getData('application/tax-node-person');
+      if (companyType || personType) {
+        const type = companyType ? 'company' : 'person';
+        const name = type === 'company' ? 'New Company' : 'New Person';
+        addNode({
+          type,
+          name,
+          x: Math.round(x - NODE_WIDTH / 2),
+          y: Math.round(y - NODE_HEIGHT / 2),
+        });
+        return;
+      }
+
       // Regime drop
       const regimeId = e.dataTransfer.getData('application/tax-regime-id');
       const regimeName = e.dataTransfer.getData('application/tax-regime-name');
