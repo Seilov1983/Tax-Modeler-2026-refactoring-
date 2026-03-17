@@ -328,6 +328,10 @@ export const addZoneAtom = atom(
 export const moveZoneAtom = atom(
   null,
   (get, set, payload: { id: string; x: number; y: number }) => {
+    console.log(`[💾 JOTAI COMMIT] Moving Zone ${payload.id}`, {
+      payloadX: payload.x,
+      payloadY: payload.y,
+    });
     set(commitHistoryAtom);
 
     const zones = get(zonesAtom);

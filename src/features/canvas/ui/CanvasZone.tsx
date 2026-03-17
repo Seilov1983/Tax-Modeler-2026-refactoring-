@@ -65,6 +65,13 @@ const HEADER_HEIGHT = 36;
 const RESIZE_HANDLE_SIZE = 18;
 
 export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZoneProps) {
+  // 🔄 Render-phase log: track what React props Konva receives each render
+  console.log(`[🔄 RENDER] Zone ${zone.name}`, {
+    propX: zone.x,
+    propY: zone.y,
+    parentId: zone.parentId,
+  });
+
   const [selection, setSelection] = useAtom(selectionAtom);
   const moveZone = useSetAtom(moveZoneAtom);
   const deleteZone = useSetAtom(deleteZoneAtom);
@@ -92,13 +99,22 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   // No dragBoundFunc — free dragging to avoid conflicts with canvas pan/zoom.
   const handleDragStart = useCallback((e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
+    console.log(`[🖐️ DRAG START] Zone ${zone.name}`, {
+      konvaX: e.target.x(),
+      konvaY: e.target.y(),
+      pointerAbs: e.target.getStage()?.getPointerPosition(),
+    });
     hasDragged.current = false;
-  }, []);
+  }, [zone.name]);
 
   const handleDragMove = useCallback((e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
+    console.log(`[🚚 DRAG MOVE] Zone ${zone.name}`, {
+      konvaX: e.target.x(),
+      konvaY: e.target.y(),
+    });
     hasDragged.current = true;
-  }, []);
+  }, [zone.name]);
 
   const handleDragEnd = useCallback(
     (e: KonvaEventObject<DragEvent>) => {
@@ -107,13 +123,17 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
       // node.x() / node.y() are already relative to the parent Country group —
       // no stage-scale or absolute-position math needed for nested zones.
       const node = e.target;
+      console.log(`[🛑 DRAG END] Zone ${zone.name}`, {
+        finalKonvaX: node.x(),
+        finalKonvaY: node.y(),
+      });
       moveZone({
         id: zone.id,
         x: Math.round(node.x()),
         y: Math.round(node.y()),
       });
     },
-    [zone.id, moveZone],
+    [zone.id, zone.name, moveZone],
   );
 
   // ─── Click to select ─────────────────────────────────────────────────────
