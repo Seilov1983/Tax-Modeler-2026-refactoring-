@@ -45,6 +45,8 @@ import type { ContextMenuTarget } from '@features/canvas/model/context-menu-atom
 import { buildBezierPath } from '@features/canvas/ui/CanvasFlow';
 import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
 import { addNodeAtom, addZoneAtom, NODE_WIDTH, NODE_HEIGHT } from '@features/canvas/model/graph-actions-atom';
+import { spawnCoordinatesAtom } from '@features/canvas/model/spawn-coordinates-atom';
+import { MasterDataModal } from '@features/project-management/ui/MasterDataModal';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { ProjectHeader } from '@features/project-management';
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
@@ -96,6 +98,13 @@ export function CanvasBoard() {
 
   // ─── Context menu state (Jotai atom — rendered as DOM overlay) ──────
   const [contextMenu, setContextMenu] = useAtom(contextMenuAtom);
+  const setSpawnCoordinates = useSetAtom(spawnCoordinatesAtom);
+
+  // ─── MasterDataModal state (opened from context menu for strict zone creation)
+  const [masterDataModal, setMasterDataModal] = useState<{
+    open: boolean;
+    initialTab: 'countries' | 'regimes';
+  }>({ open: false, initialTab: 'countries' });
 
   // ─── Konva Stage ref ──────────────────────────────────────────────────
   const stageRef = useRef<Konva.Stage>(null);
@@ -275,36 +284,27 @@ export function CanvasBoard() {
 
   const handleAddCountryZone = useCallback(() => {
     if (!contextMenu) return;
-    addZone({
-      jurisdiction: 'KZ' as JurisdictionCode,
-      code: `KZ_${Date.now().toString(36).toUpperCase()}`,
-      name: 'New Country',
-      currency: 'KZT' as CurrencyCode,
+    // Store spawn coordinates and open MasterDataModal (Countries tab)
+    setSpawnCoordinates({
       x: contextMenu.canvasX - 200,
       y: contextMenu.canvasY - 100,
-      w: 600,
-      h: 400,
-      parentId: null,
     });
+    setMasterDataModal({ open: true, initialTab: 'countries' });
     setContextMenu(null);
-  }, [contextMenu, addZone, setContextMenu]);
+  }, [contextMenu, setContextMenu, setSpawnCoordinates]);
 
   const handleAddRegimeZone = useCallback(() => {
     if (!contextMenu || contextMenu.kind !== 'country') return;
     const parentZone = contextMenu.zone;
-    addZone({
-      jurisdiction: parentZone.jurisdiction,
-      code: `${parentZone.jurisdiction}_REG_${Date.now().toString(36).toUpperCase()}`,
-      name: 'New Regime',
-      currency: parentZone.currency,
+    // Store spawn coordinates with parent zone and open MasterDataModal (Regimes tab)
+    setSpawnCoordinates({
       x: contextMenu.canvasX - 100,
       y: contextMenu.canvasY - 50,
-      w: 320,
-      h: 250,
-      parentId: parentZone.id,
+      parentZone,
     });
+    setMasterDataModal({ open: true, initialTab: 'regimes' });
     setContextMenu(null);
-  }, [contextMenu, addZone, setContextMenu]);
+  }, [contextMenu, setContextMenu, setSpawnCoordinates]);
 
   // ─── Drag & Drop from MasterDataModal ─────────────────────────────────
 
@@ -604,7 +604,7 @@ export function CanvasBoard() {
           </Layer>
 
           {/* Layer 4: Arrows (flows, ownership, draft connection, lasso) */}
-          <Layer listening={false}>
+          <Layer>
             {/* Flow arrows */}
             {flows.map((flow) => (
               <CanvasFlow key={flow.id} flow={flow} nodes={nodes} />
@@ -666,6 +666,17 @@ export function CanvasBoard() {
         <Minimap onNavigate={panTo} viewportRef={containerRef} />
         <AuditLogPanel />
         <EditorSidebar />
+
+        {/* MasterDataModal — opened from context menu for strict zone creation */}
+        {masterDataModal.open && (
+          <MasterDataModal
+            onClose={() => {
+              setMasterDataModal({ open: false, initialTab: 'countries' });
+              setSpawnCoordinates(null);
+            }}
+            initialTab={masterDataModal.initialTab}
+          />
+        )}
 
         {/* Context menu — DOM overlay with position: absolute + high z-index.
             Uses screen-space coordinates from getPointerPosition() via Jotai atom.
