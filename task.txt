@@ -1,0 +1,30 @@
+Task: Fix the incomplete UI implementations from the previous session (Konva Transformer, Settings Modal, and Master Data Sidebar).
+
+Context: You successfully fixed the canvas math, but you failed to implement the correct UI styles. You built Master Data as a centered modal instead of a Left Sidebar, ignored the specific Apple HIG design tokens, and skipped the Settings Modal entirely. Read `CLAUDE.md` for global styling rules.
+
+Objective 1: Fix the Konva <Transformer> (CanvasZone.tsx)
+- The transformer STILL shows the default sharp blue squares. This is unacceptable.
+- You MUST update the `<Transformer>` props to: `borderStroke="rgba(150, 150, 150, 0.4)"`, `anchorStroke="rgba(150, 150, 150, 0.4)"`, `anchorFill="#ffffff"`, `anchorSize={12}`, and critically `anchorCornerRadius={6}` to make them round squircles.
+
+Objective 2: Implement the Missing Settings Modal
+- Create `src/features/settings/model/settings-atom.ts` using Jotai's `atomWithStorage` (theme, canvasSnapToGrid, baseCurrency, etc.).
+- Create `SettingsModal.tsx` using Liquid Glass aesthetics and React Spring for mounting.
+- Add a Gear icon trigger to the `ProjectHeader`.
+
+Objective 3: Rebuild Master Data as a Proper Left Sidebar with Rich UX
+- File: Rewrite `MasterDataSidebar.tsx`. It MUST be a fixed left panel (e.g., `fixed left-0 top-0 h-full w-80`), NOT a centered modal!
+- Search: Add a sticky Spotlight-style fuzzy search at the top (magnifying glass, frosted bg) that filters by name or rates (e.g., "0%").
+- Hierarchy & Typography (CRITICAL):
+  - Level 1 (Countries): Large San Francisco Pro Semibold. MUST include the Country Flag Emoji on the left and a pale Base Currency badge (e.g., KZT, AED) on the right.
+  - Level 2 (Regimes): Indented, Regular font. MUST use colored micro-badges (Pills) for rates: Green for "CIT 0%", Blue for "VAT", Shield icon for "Substance Required".
+  - Null handling: If a data point is null, render an elegant empty space or infinity symbol `∞`, never "No data".
+- Interactions:
+  - Use `@react-spring/web` for a smooth accordion drop-down when clicking a Country.
+  - Add a "Strategy Copilot" glass tooltip on Long Hover (~800ms) for complex regimes.
+- Advanced Drag-and-Drop:
+  - On row hover, show a 6-dot gripper (`⋮⋮`) and set `cursor: grab`.
+  - On `dragStart`, use `e.dataTransfer.setDragImage()` with a custom semi-transparent glass card clone.
+  - Canvas Guard-Rails: Soft glow on the matching Country zone on `dragOver`, red stroke if hovering over an invalid Country.
+
+Final Verification:
+Run your build or type-check command (e.g., `npx turbo run build` or `npx tsc --noEmit`) to ensure you haven't broken any types or the flat rendering canvas math. Do not report success until the Transformer is grey/round and the Master Data is a fixed left sidebar with flags and pills!
