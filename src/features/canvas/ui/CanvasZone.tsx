@@ -6,20 +6,19 @@
  * Supports:
  * - Click on header to select the zone (opens EditorSidebar)
  * - Draggable <Group> for 60 FPS repositioning via Konva's built-in drag
- * - Resize handle (bottom-right corner)
+ * - Konva <Transformer> for manual resizing when selected (rotation disabled)
+ * - Scale-to-Width pattern: onTransformEnd extracts scaleX/Y, multiplies by
+ *   current width/height, dispatches new dimensions, resets scale to 1
  * - Visual highlight when selected (blue border + header)
- * - Child zones and nodes are rendered inside parent <Group> — Konva handles
- *   hierarchical movement automatically with no additional cascade calculations.
+ * - Child zones and nodes are rendered inside parent <Group>
  *
  * Uses useRef for transient drag state (no React re-renders during drag).
  * Coordinates committed to Jotai only in onDragEnd (Commit phase).
- *
- * Layout: Uses calculateZoneHeaderLayout for explicit coordinate math
- * (replaces CSS flexbox / padding that Canvas does not support).
  */
 
-import { memo, useRef, useCallback, useMemo } from 'react';
-import { Group, Rect, Text, Line } from 'react-konva';
+import { memo, useRef, useCallback, useMemo, useEffect, useState } from 'react';
+import { Group, Rect, Text, Line, Transformer } from 'react-konva';
+import { useSpring, animated } from '@react-spring/konva';
 import { useAtom, useSetAtom } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { moveZoneAtom, deleteZoneAtom, resizeZoneAtom } from '../model/graph-actions-atom';
@@ -30,39 +29,22 @@ import type { KonvaEventObject } from 'konva/lib/Node';
 
 interface CanvasZoneProps {
   zone: Zone;
-  /** Child elements (sub-zones + nodes) rendered inside this Group */
   children?: React.ReactNode;
 }
 
-/** Map jurisdiction codes to subtle background colors */
 const ZONE_COLORS: Record<string, string> = {
-  KZ: '#fef3c7',
-  UAE: '#dbeafe',
-  HK: '#fce7f3',
-  CY: '#d1fae5',
-  SG: '#ede9fe',
-  UK: '#fee2e2',
-  US: '#e0e7ff',
-  BVI: '#ccfbf1',
-  CAY: '#fef9c3',
-  SEY: '#f0fdfa',
+  KZ: '#fef3c7', UAE: '#dbeafe', HK: '#fce7f3', CY: '#d1fae5',
+  SG: '#ede9fe', UK: '#fee2e2', US: '#e0e7ff', BVI: '#ccfbf1',
+  CAY: '#fef9c3', SEY: '#f0fdfa',
 };
 
 const ZONE_BORDER_COLORS: Record<string, string> = {
-  KZ: '#f59e0b',
-  UAE: '#3b82f6',
-  HK: '#ec4899',
-  CY: '#10b981',
-  SG: '#8b5cf6',
-  UK: '#ef4444',
-  US: '#6366f1',
-  BVI: '#14b8a6',
-  CAY: '#eab308',
-  SEY: '#2dd4bf',
+  KZ: '#f59e0b', UAE: '#3b82f6', HK: '#ec4899', CY: '#10b981',
+  SG: '#8b5cf6', UK: '#ef4444', US: '#6366f1', BVI: '#14b8a6',
+  CAY: '#eab308', SEY: '#2dd4bf',
 };
 
 const HEADER_HEIGHT = 36;
-const RESIZE_HANDLE_SIZE = 18;
 
 export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZoneProps) {
   const [selection, setSelection] = useAtom(selectionAtom);
@@ -74,22 +56,35 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
   const borderColor = ZONE_BORDER_COLORS[zone.jurisdiction] || '#94a3b8';
 
-  // ─── Layout math (replaces CSS flexbox) ─────────────────────────────────
   const headerLayout = useMemo(
     () => calculateZoneHeaderLayout({ width: zone.w, padding: 16 }),
     [zone.w],
   );
 
-  // Ref for transient drag — avoid re-renders during drag
+  // Refs
   const groupRef = useRef<Konva.Group>(null);
+  const bgRectRef = useRef<Konva.Rect>(null);
+  const transformerRef = useRef<Konva.Transformer>(null);
   const hasDragged = useRef(false);
 
-  // Resize refs
-  const resizeStartRef = useRef<{ w: number; h: number; startX: number; startY: number } | null>(null);
-  const liveSizeRef = useRef({ w: zone.w, h: zone.h });
+  // ─── Entrance animation — subtle scale-in
+  const [hasAnimated] = useState(() => ({ value: false }));
+  const entranceSpring = useSpring({
+    from: hasAnimated.value ? { scaleX: 1, scaleY: 1, opacity: 1 } : { scaleX: 0.9, scaleY: 0.9, opacity: 0 },
+    to: { scaleX: 1, scaleY: 1, opacity: 1 },
+    config: { tension: 250, friction: 22 },
+    onRest: () => { hasAnimated.value = true; },
+  });
+
+  // ─── Attach Transformer to the background rect when selected ──────────
+  useEffect(() => {
+    if (isSelected && transformerRef.current && bgRectRef.current) {
+      transformerRef.current.nodes([bgRectRef.current]);
+      transformerRef.current.getLayer()?.batchDraw();
+    }
+  }, [isSelected]);
 
   // ─── Drag handlers ──────────────────────────────────────────────────────
-  // No dragBoundFunc — free dragging to avoid conflicts with canvas pan/zoom.
   const handleDragStart = useCallback((e: KonvaEventObject<DragEvent>) => {
     e.cancelBubble = true;
     hasDragged.current = false;
@@ -104,8 +99,6 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     (e: KonvaEventObject<DragEvent>) => {
       e.cancelBubble = true;
       if (!hasDragged.current) return;
-      // node.x() / node.y() are already relative to the parent Country group —
-      // no stage-scale or absolute-position math needed for nested zones.
       const node = e.target;
       moveZone({
         id: zone.id,
@@ -116,7 +109,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     [zone.id, moveZone],
   );
 
-  // ─── Click to select ─────────────────────────────────────────────────────
+  // ─── Click to select ──────────────────────────────────────────────────────
   const handleHeaderClick = useCallback(
     (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
       e.cancelBubble = true;
@@ -127,7 +120,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     [zone.id, setSelection],
   );
 
-  // ─── Delete zone ─────────────────────────────────────────────────────────
+  // ─── Delete zone ──────────────────────────────────────────────────────────
   const handleDeleteClick = useCallback(
     (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
       e.cancelBubble = true;
@@ -137,74 +130,28 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     [zone.id, deleteZone, setSelection],
   );
 
-  // ─── Resize handle ───────────────────────────────────────────────────────
-  const handleResizeDragStart = useCallback(
-    (e: KonvaEventObject<DragEvent>) => {
-      e.cancelBubble = true;
-      const node = e.target;
-      resizeStartRef.current = {
-        w: zone.w,
-        h: zone.h,
-        startX: node.x(),
-        startY: node.y(),
-      };
-      liveSizeRef.current = { w: zone.w, h: zone.h };
-    },
-    [zone.w, zone.h],
-  );
+  // ─── Transform end: Scale-to-Width pattern ─────────────────────────────
+  // Extract scaleX/Y, multiply by current width/height, dispatch new dimensions,
+  // immediately reset Konva node scale to 1 to prevent UI/text distortion.
+  const handleTransformEnd = useCallback(() => {
+    const node = bgRectRef.current;
+    if (!node) return;
 
-  const handleResizeDragMove = useCallback(
-    (e: KonvaEventObject<DragEvent>) => {
-      e.cancelBubble = true;
-      if (!resizeStartRef.current) return;
+    const scaleX = node.scaleX();
+    const scaleY = node.scaleY();
 
-      const node = e.target;
-      const dx = node.x() - resizeStartRef.current.startX;
-      const dy = node.y() - resizeStartRef.current.startY;
+    const newW = Math.max(200, Math.round(node.width() * scaleX));
+    const newH = Math.max(150, Math.round(node.height() * scaleY));
 
-      liveSizeRef.current.w = Math.max(200, resizeStartRef.current.w + dx);
-      liveSizeRef.current.h = Math.max(150, resizeStartRef.current.h + dy);
+    // Reset scale to 1 immediately to prevent text/UI distortion
+    node.scaleX(1);
+    node.scaleY(1);
+    node.width(newW);
+    node.height(newH);
 
-      // Update the zone rect visually during drag
-      const parent = node.getParent();
-      if (parent) {
-        const zoneRect = parent.findOne('.zone-bg') as Konva.Rect | undefined;
-        if (zoneRect) {
-          zoneRect.width(liveSizeRef.current.w);
-          zoneRect.height(liveSizeRef.current.h);
-        }
-        const borderRect = parent.findOne('.zone-border') as Konva.Rect | undefined;
-        if (borderRect) {
-          borderRect.width(liveSizeRef.current.w);
-          borderRect.height(liveSizeRef.current.h);
-        }
-        parent.getLayer()?.batchDraw();
-      }
-    },
-    [],
-  );
+    resizeZone({ id: zone.id, w: newW, h: newH });
+  }, [zone.id, resizeZone]);
 
-  const handleResizeDragEnd = useCallback(
-    (e: KonvaEventObject<DragEvent>) => {
-      e.cancelBubble = true;
-      // Reset handle position to bottom-right
-      const node = e.target;
-      node.position({
-        x: liveSizeRef.current.w - RESIZE_HANDLE_SIZE,
-        y: liveSizeRef.current.h - RESIZE_HANDLE_SIZE,
-      });
-
-      resizeZone({
-        id: zone.id,
-        w: Math.round(liveSizeRef.current.w),
-        h: Math.round(liveSizeRef.current.h),
-      });
-      resizeStartRef.current = null;
-    },
-    [zone.id, resizeZone],
-  );
-
-  // Badge text
   const badgeText = `${zone.jurisdiction} \u00b7 ${zone.currency}`;
 
   return (
@@ -216,9 +163,13 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
+      scaleX={entranceSpring.scaleX.get()}
+      scaleY={entranceSpring.scaleY.get()}
+      opacity={entranceSpring.opacity.get()}
     >
       {/* Zone background fill */}
       <Rect
+        ref={bgRectRef}
         name="zone-bg"
         width={zone.w}
         height={zone.h}
@@ -252,7 +203,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         onTap={handleHeaderClick}
       />
 
-      {/* Zone name text — positioned via layout math, truncated with ellipsis */}
+      {/* Zone name text */}
       <Text
         x={headerLayout.title.x}
         y={headerLayout.title.y - 6}
@@ -267,7 +218,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         listening={false}
       />
 
-      {/* Delete button — real Unicode "✕" instead of HTML entity */}
+      {/* Delete button */}
       <Group
         x={headerLayout.closeIcon.x}
         y={headerLayout.closeIcon.y - 6}
@@ -290,7 +241,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         />
       </Group>
 
-      {/* Jurisdiction badge (positioned via layout math) */}
+      {/* Jurisdiction badge */}
       <Group x={headerLayout.badge.x} y={headerLayout.badge.y - 4} listening={false}>
         <Rect
           width={headerLayout.badge.width}
@@ -313,32 +264,33 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         />
       </Group>
 
-      {/* Resize handle (bottom-right) */}
-      <Group
-        x={zone.w - RESIZE_HANDLE_SIZE}
-        y={zone.h - RESIZE_HANDLE_SIZE}
-        draggable
-        onDragStart={handleResizeDragStart}
-        onDragMove={handleResizeDragMove}
-        onDragEnd={handleResizeDragEnd}
-      >
-        <Rect width={RESIZE_HANDLE_SIZE} height={RESIZE_HANDLE_SIZE} fill="transparent" />
-        <Line
-          points={[RESIZE_HANDLE_SIZE - 1, 1, 1, RESIZE_HANDLE_SIZE - 1]}
-          stroke={borderColor}
-          strokeWidth={1.5}
-          opacity={0.4}
+      {/* Konva Transformer — only when selected, rotation disabled */}
+      {isSelected && (
+        <Transformer
+          ref={transformerRef}
+          rotateEnabled={false}
+          enabledAnchors={[
+            'top-left', 'top-right', 'bottom-left', 'bottom-right',
+            'middle-left', 'middle-right', 'top-center', 'bottom-center',
+          ]}
+          boundBoxFunc={(oldBox, newBox) => {
+            // Enforce minimum dimensions
+            if (newBox.width < 200 || newBox.height < 150) {
+              return oldBox;
+            }
+            return newBox;
+          }}
+          onTransformEnd={handleTransformEnd}
+          borderStroke="#3b82f6"
+          borderStrokeWidth={2}
+          anchorFill="#ffffff"
+          anchorStroke="#3b82f6"
+          anchorSize={8}
+          anchorCornerRadius={2}
         />
-        <Line
-          points={[RESIZE_HANDLE_SIZE - 1, 5, 5, RESIZE_HANDLE_SIZE - 1]}
-          stroke={borderColor}
-          strokeWidth={1.5}
-          opacity={0.4}
-        />
-      </Group>
+      )}
 
-      {/* Children (sub-zones and nodes) rendered inside this Group —
-          Konva handles hierarchical movement automatically */}
+      {/* Children (sub-zones and nodes) */}
       {children}
     </Group>
   );

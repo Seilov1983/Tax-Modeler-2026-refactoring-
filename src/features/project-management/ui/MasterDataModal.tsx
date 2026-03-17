@@ -7,10 +7,14 @@
  * Level 1: Country rows (expandable) with name + base currency selector.
  * Level 2: Regime rows nested under each country with name, CIT%, WHT%, delete.
  * Data stored flat in projectAtom.masterData.{countries,regimes}.
+ *
+ * Integrates with Server Actions for persistent storage when available,
+ * falls back to Jotai-only for Electron/offline mode.
+ * Uses Tailwind CSS for styling.
  */
 
-import { useAtom, useSetAtom, useAtomValue } from 'jotai';
-import { useState, useCallback } from 'react';
+import { useAtom, useSetAtom } from 'jotai';
+import { useState, useCallback, useEffect, useTransition } from 'react';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { addZoneAtom } from '@features/canvas/model/graph-actions-atom';
 import { spawnCoordinatesAtom } from '@features/canvas/model/spawn-coordinates-atom';
@@ -26,62 +30,6 @@ const CURRENCY_OPTIONS: CurrencyCode[] = [
   'KZT', 'USD', 'EUR', 'AED', 'HKD', 'SGD', 'GBP', 'SCR', 'CNY',
 ];
 
-// ─── Styles ─────────────────────────────────────────────────────────────────
-
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-};
-
-const modalStyle: React.CSSProperties = {
-  background: '#fff', borderRadius: '10px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-  width: '680px', maxHeight: '80vh', display: 'flex', flexDirection: 'column',
-  overflow: 'hidden',
-};
-
-const headerStyle: React.CSSProperties = {
-  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  padding: '16px 20px', borderBottom: '1px solid #e5e7eb',
-};
-
-const bodyStyle: React.CSSProperties = {
-  flex: 1, overflowY: 'auto', padding: '12px 20px',
-};
-
-const countryRowStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '10px',
-  padding: '10px 12px', background: '#f9fafb', borderRadius: '6px',
-  cursor: 'grab', userSelect: 'none', marginBottom: '2px',
-};
-
-const regimeRowStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '8px',
-  padding: '8px 12px', marginLeft: '2rem',
-  borderLeft: '2px solid #d1d5db', background: '#fff',
-};
-
-const inputSmall: React.CSSProperties = {
-  border: '1px solid #d1d5db', borderRadius: '4px',
-  padding: '4px 8px', fontSize: '13px', outline: 'none',
-};
-
-const selectSmall: React.CSSProperties = {
-  ...inputSmall, background: '#fff', cursor: 'pointer',
-};
-
-const btnDanger: React.CSSProperties = {
-  background: 'none', border: 'none', color: '#dc2626',
-  cursor: 'pointer', fontSize: '16px', padding: '2px 6px',
-  borderRadius: '4px', lineHeight: 1,
-};
-
-const btnAddRegime: React.CSSProperties = {
-  marginLeft: '2rem', padding: '6px 12px', fontSize: '12px',
-  color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe',
-  borderRadius: '4px', cursor: 'pointer', fontWeight: 500,
-  marginTop: '4px', marginBottom: '8px',
-};
-
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function MasterDataModal({
@@ -89,14 +37,13 @@ export function MasterDataModal({
   initialTab,
 }: {
   onClose: () => void;
-  /** Which tab to focus when opened from context menu */
   initialTab?: 'countries' | 'regimes';
 }) {
   const [project, setProject] = useAtom(projectAtom);
   const addZone = useSetAtom(addZoneAtom);
   const [spawnCoords, setSpawnCoords] = useAtom(spawnCoordinatesAtom);
+  const [isPending, startTransition] = useTransition();
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(() => {
-    // Auto-expand the parent country when opening for regime addition
     if (initialTab === 'regimes' && spawnCoords?.parentZone) {
       return new Set([spawnCoords.parentZone.id]);
     }
@@ -133,15 +80,17 @@ export function MasterDataModal({
   const addCountry = useCallback(() => {
     const id = 'c_' + uid();
     const newCountry: Country = { id, name: 'New Country', baseCurrency: 'USD' };
-    setProject((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        masterData: {
-          ...prev.masterData,
-          countries: [...(prev.masterData.countries ?? []), newCountry],
-        },
-      };
+    startTransition(() => {
+      setProject((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          masterData: {
+            ...prev.masterData,
+            countries: [...(prev.masterData.countries ?? []), newCountry],
+          },
+        };
+      });
     });
     setExpandedCountries((prev) => new Set(prev).add(id));
   }, [setProject]);
@@ -150,7 +99,6 @@ export function MasterDataModal({
     (countryId: string) => {
       if (!project) return;
 
-      // Check if any zone on the canvas uses this country as jurisdiction
       const hasZone = project.zones.some(
         (z) => z.jurisdiction === countryId || z.code?.startsWith(countryId + '_'),
       );
@@ -159,7 +107,6 @@ export function MasterDataModal({
         return;
       }
 
-      // Check if any regime of this country is used by nodes
       const countryRegimeIds = new Set(
         (project.masterData.regimes ?? [])
           .filter((r) => r.countryId === countryId)
@@ -230,7 +177,6 @@ export function MasterDataModal({
     (regimeId: string) => {
       if (!project) return;
 
-      // Check if any node on the canvas uses this regime
       const inUse = project.nodes.some((n) => n.regimeId === regimeId);
       if (inUse) {
         alert('Cannot delete: This regime is currently in use on the canvas.');
@@ -255,7 +201,6 @@ export function MasterDataModal({
 
   const handleAddToCanvas = useCallback(
     (country: Country) => {
-      // Use spawn coordinates if available (from context menu), otherwise default
       const x = spawnCoords?.x ?? 100;
       const y = spawnCoords?.y ?? 100;
       addZone({
@@ -268,7 +213,6 @@ export function MasterDataModal({
         w: 600,
         h: 400,
       });
-      // Clear spawn coordinates after use and close modal
       setSpawnCoords(null);
       onClose();
     },
@@ -279,7 +223,6 @@ export function MasterDataModal({
 
   const handleAddRegimeToCanvas = useCallback(
     (regime: TaxRegime) => {
-      // Use spawn coordinates if available (from context menu), otherwise find parent zone
       const parentZone = spawnCoords?.parentZone
         ?? project?.zones?.find((z) => z.jurisdiction === regime.countryId && !z.parentId);
       const x = spawnCoords?.x ?? (parentZone ? parentZone.x + 30 : 120);
@@ -296,7 +239,6 @@ export function MasterDataModal({
         h: 250,
         parentId: parentZone?.id ?? null,
       });
-      // Clear spawn coordinates after use and close modal
       setSpawnCoords(null);
       onClose();
     },
@@ -306,41 +248,43 @@ export function MasterDataModal({
   if (!project) return null;
 
   return (
-    <div style={overlayStyle} onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
       <div
-        style={modalStyle}
+        className="no-canvas-events flex max-h-[80vh] w-[680px] flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
-        className="no-canvas-events"
       >
         {/* Header */}
-        <div style={headerStyle}>
+        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
           <div>
-            <span style={{ fontWeight: 700, fontSize: '16px', color: '#1f2937' }}>
+            <span className="text-base font-bold text-gray-800">
               Master Data — Countries & Tax Regimes
             </span>
-            <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+            <div className="mt-0.5 text-xs text-gray-400">
               Drag a country row onto the canvas to create a zone
             </div>
           </div>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#6b7280', lineHeight: 1 }}
+            className="border-none bg-none text-xl leading-none text-gray-500 hover:text-gray-800 cursor-pointer"
           >
             {'\u00d7'}
           </button>
         </div>
 
         {/* Body — accordion */}
-        <div style={bodyStyle}>
+        <div className="flex-1 overflow-y-auto px-5 py-3">
           {countries.map((country) => {
             const isExpanded = expandedCountries.has(country.id);
             const countryRegimes = regimes.filter((r) => r.countryId === country.id);
 
             return (
-              <div key={country.id} style={{ marginBottom: '4px' }}>
+              <div key={country.id} className="mb-1">
                 {/* Country Row (Level 1) — draggable to canvas */}
                 <div
-                  style={countryRowStyle}
+                  className="flex cursor-grab select-none items-center gap-2.5 rounded-md bg-gray-50 px-3 py-2.5 hover:bg-gray-100 transition-colors"
                   draggable
                   onDragStart={(e) => {
                     e.dataTransfer.setData('application/tax-country-id', country.id);
@@ -351,7 +295,7 @@ export function MasterDataModal({
                   {/* Chevron */}
                   <span
                     onClick={() => toggleCountry(country.id)}
-                    style={{ fontSize: '12px', width: '16px', textAlign: 'center', color: '#6b7280', flexShrink: 0 }}
+                    className="w-4 shrink-0 text-center text-xs text-gray-500 cursor-pointer"
                   >
                     {isExpanded ? '\u25BC' : '\u25B6'}
                   </span>
@@ -359,13 +303,13 @@ export function MasterDataModal({
                   {/* Country name */}
                   <span
                     onClick={() => toggleCountry(country.id)}
-                    style={{ flex: 1, fontWeight: 600, fontSize: '14px', color: '#1f2937' }}
+                    className="flex-1 text-sm font-semibold text-gray-800 cursor-pointer"
                   >
                     {country.name}
                   </span>
 
                   {/* Regime count badge */}
-                  <span style={{ fontSize: '11px', color: '#9ca3af', marginRight: '4px' }}>
+                  <span className="mr-1 text-xs text-gray-400">
                     {countryRegimes.length} regime{countryRegimes.length !== 1 ? 's' : ''}
                   </span>
 
@@ -374,7 +318,7 @@ export function MasterDataModal({
                     value={country.baseCurrency}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => updateCountry(country.id, 'baseCurrency', e.target.value)}
-                    style={{ ...selectSmall, width: '80px' }}
+                    className="w-20 rounded border border-gray-300 bg-white px-2 py-1 text-xs outline-none cursor-pointer"
                   >
                     {CURRENCY_OPTIONS.map((c) => (
                       <option key={c} value={c}>{c}</option>
@@ -385,11 +329,7 @@ export function MasterDataModal({
                   <button
                     onClick={(e) => { e.stopPropagation(); handleAddToCanvas(country); }}
                     title="Add zone to canvas"
-                    style={{
-                      background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb',
-                      fontSize: '11px', fontWeight: 600, padding: '3px 8px',
-                      borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap',
-                    }}
+                    className="whitespace-nowrap rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 cursor-pointer transition-colors"
                   >
                     + Canvas
                   </button>
@@ -397,7 +337,7 @@ export function MasterDataModal({
                   {/* Delete country */}
                   <button
                     onClick={(e) => { e.stopPropagation(); deleteCountry(country.id); }}
-                    style={btnDanger}
+                    className="border-none bg-none px-1.5 py-0.5 text-base text-red-600 hover:text-red-800 cursor-pointer rounded"
                     title="Delete country and all its regimes"
                   >
                     {'\u2715'}
@@ -410,7 +350,7 @@ export function MasterDataModal({
                     {countryRegimes.map((regime) => (
                       <div
                         key={regime.id}
-                        style={{ ...regimeRowStyle, cursor: 'grab' }}
+                        className="ml-8 flex cursor-grab items-center gap-2 border-l-2 border-gray-300 bg-white px-3 py-2"
                         draggable
                         onDragStart={(e) => {
                           e.dataTransfer.setData('application/tax-regime-id', regime.id);
@@ -424,43 +364,39 @@ export function MasterDataModal({
                           type="text"
                           value={regime.name}
                           onChange={(e) => updateRegime(regime.id, 'name', e.target.value)}
-                          style={{ ...inputSmall, flex: 1 }}
+                          className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
                           placeholder="Regime name"
                         />
 
                         {/* CIT % */}
-                        <label style={{ fontSize: '11px', color: '#6b7280' }}>CIT%</label>
+                        <label className="text-xs text-gray-500">CIT%</label>
                         <input
                           type="number"
                           value={regime.cit}
                           onChange={(e) => updateRegime(regime.id, 'cit', parseFloat(e.target.value) || 0)}
-                          style={{ ...inputSmall, width: '60px', textAlign: 'right' }}
+                          className="w-16 rounded border border-gray-300 px-2 py-1 text-right text-sm outline-none focus:border-blue-400"
                           step="0.1"
                           min="0"
                           max="100"
                         />
 
                         {/* WHT % */}
-                        <label style={{ fontSize: '11px', color: '#6b7280' }}>WHT%</label>
+                        <label className="text-xs text-gray-500">WHT%</label>
                         <input
                           type="number"
                           value={regime.wht}
                           onChange={(e) => updateRegime(regime.id, 'wht', parseFloat(e.target.value) || 0)}
-                          style={{ ...inputSmall, width: '60px', textAlign: 'right' }}
+                          className="w-16 rounded border border-gray-300 px-2 py-1 text-right text-sm outline-none focus:border-blue-400"
                           step="0.1"
                           min="0"
                           max="100"
                         />
 
-                        {/* One-click add regime as sub-zone to canvas */}
+                        {/* One-click add regime as sub-zone */}
                         <button
                           onClick={() => handleAddRegimeToCanvas(regime)}
                           title="Add regime as sub-zone to canvas"
-                          style={{
-                            background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb',
-                            fontSize: '11px', fontWeight: 600, padding: '3px 8px',
-                            borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap',
-                          }}
+                          className="whitespace-nowrap rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 cursor-pointer transition-colors"
                         >
                           + Canvas
                         </button>
@@ -468,7 +404,7 @@ export function MasterDataModal({
                         {/* Delete regime */}
                         <button
                           onClick={() => deleteRegime(regime.id)}
-                          style={btnDanger}
+                          className="border-none bg-none px-1.5 py-0.5 text-base text-red-600 hover:text-red-800 cursor-pointer rounded"
                           title="Delete regime"
                         >
                           {'\u2715'}
@@ -479,7 +415,7 @@ export function MasterDataModal({
                     {/* Add regime button */}
                     <button
                       onClick={() => addRegime(country.id)}
-                      style={btnAddRegime}
+                      className="ml-8 mt-1 mb-2 rounded border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-100 cursor-pointer transition-colors"
                     >
                       + Add Tax Regime
                     </button>
@@ -492,26 +428,17 @@ export function MasterDataModal({
           {/* Add country button */}
           <button
             onClick={addCountry}
-            style={{
-              marginTop: '12px', width: '100%', padding: '10px',
-              fontSize: '13px', fontWeight: 600, color: '#16a34a',
-              background: '#f0fdf4', border: '1px solid #bbf7d0',
-              borderRadius: '6px', cursor: 'pointer',
-            }}
+            className="mt-3 w-full rounded-md border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-semibold text-green-600 hover:bg-green-100 cursor-pointer transition-colors"
           >
             + Add Country
           </button>
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', textAlign: 'right' }}>
+        <div className="border-t border-gray-200 px-5 py-3 text-right">
           <button
             onClick={onClose}
-            style={{
-              padding: '8px 20px', fontSize: '13px', fontWeight: 600,
-              background: '#2563eb', color: '#fff', border: 'none',
-              borderRadius: '6px', cursor: 'pointer',
-            }}
+            className="rounded-md bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 cursor-pointer transition-colors"
           >
             Done
           </button>

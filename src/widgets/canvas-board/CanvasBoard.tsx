@@ -12,12 +12,11 @@
  * - Context-aware creation: strict hierarchy Country > Regime > Node
  * - Hierarchical zone nesting via parentId + Konva <Group>
  *
- * Layer architecture (from bottom to top):
+ * Strict 4-layer architecture (from bottom to top):
  *   Layer 1 (static):    Grid background (cached for perf)
- *   Layer 2 (zones):     Country zones, sub-zones with nested children
- *   Layer 3 (nodes):     Companies, Persons, TXA nodes
- *   Layer 4 (arrows):    Flows, ownership lines (static — re-renders on data change only)
- *   Layer 5 (transient): Draft connection line, lasso selection (60 FPS via useRef + batchDraw)
+ *   Layer 2 (committed):  Zones (hierarchical) + Nodes (isolated re-renders via splitAtom)
+ *   Layer 3 (committed):  Flows + Ownership lines (static — re-renders on data change only)
+ *   Layer 4 (transient): Draft connection line, lasso, Transformer (60 FPS via useRef + batchDraw)
  *
  * Context menu: rendered as HTML/CSS DOM overlay (not inside Konva) to avoid
  * clipping and zoom scaling. Coordinates stored in Jotai contextMenuAtom.
@@ -37,6 +36,7 @@ import { useKeyboardShortcuts } from '@features/canvas/ui/useKeyboardShortcuts';
 import { CanvasControls } from '@features/canvas/ui/CanvasControls';
 import { Minimap } from '@features/canvas/ui/Minimap';
 import { AuditLogPanel } from '@features/audit-log/ui/AuditLogPanel';
+import { FlowSidebar } from '@features/canvas/ui/FlowSidebar';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { EditorSidebar } from '@features/entity-editor/ui/EditorSidebar';
 import { draftConnectionAtom } from '@features/canvas/model/draft-connection-atom';
@@ -593,11 +593,13 @@ export function CanvasBoard() {
             <GridBackground width={8000} height={6000} />
           </Layer>
 
-          {/* Layer 2: Zones (hierarchical — parent Group contains children) */}
+          {/* Layer 2: Committed Zones + Nodes —
+              Zones rendered first (below), nodes on top.
+              Hierarchical zone nesting via Konva <Group>. */}
           <Layer>
+            {/* Zones (hierarchical — parent Group contains children) */}
             {topLevelZones.map((zone) => (
               <CanvasZone key={zone.id} zone={zone}>
-                {/* Render child sub-zones inside parent Group */}
                 {(childZonesByParent.get(zone.id) || []).map((childZone) => (
                   <CanvasZone
                     key={childZone.id}
@@ -613,30 +615,28 @@ export function CanvasBoard() {
               .map((zone) => (
                 <CanvasZone key={zone.id} zone={zone} />
               ))}
-          </Layer>
 
-          {/* Layer 3: Nodes (each with its own atom for isolated re-renders) */}
-          <Layer>
+            {/* Nodes (each with its own atom for isolated re-renders) */}
             {nodeAtoms.map((nodeAtom) => (
               <CanvasNode key={`${nodeAtom}`} nodeAtom={nodeAtom} />
             ))}
           </Layer>
 
-          {/* Layer 4: Arrows (flows, ownership — static, re-renders only on data change) */}
+          {/* Layer 3: Committed Flows + Ownership —
+              Static layer, re-renders only on data change.
+              Includes hitStrokeWidth={20} on flows for easy selection. */}
           <Layer>
-            {/* Flow arrows */}
             {flows.map((flow) => (
               <CanvasFlow key={flow.id} flow={flow} nodes={nodes} />
             ))}
 
-            {/* Ownership lines */}
             {ownership.map((edge) => (
               <CanvasOwnership key={edge.id} edge={edge} nodes={nodes} />
             ))}
           </Layer>
 
-          {/* Layer 5: Transient overlay (draft connection + lasso) —
-              Isolated from static arrows to avoid repainting 100+ connections
+          {/* Layer 4: Transient UI (draft connection, lasso, Transformer) —
+              Isolated from committed content to avoid repainting 100+ connections
               during 60 FPS pointer move. Only this layer is batchDraw'd. */}
           <Layer>
             {/* Draft connection line — rendered via ref, no React state during pointer move */}
@@ -688,6 +688,7 @@ export function CanvasBoard() {
         <CanvasControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={resetViewport} />
         <Minimap onNavigate={panTo} viewportRef={containerRef} />
         <AuditLogPanel />
+        <FlowSidebar />
         <EditorSidebar />
 
         {/* MasterDataModal — opened from context menu for strict zone creation */}

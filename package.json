@@ -34,6 +34,12 @@
     ]
   },
   "dependencies": {
+    "@auth/prisma-adapter": "^2.11.1",
+    "@hookform/resolvers": "^5.2.2",
+    "@prisma/client": "^7.5.0",
+    "@react-spring/konva": "^10.0.3",
+    "@t3-oss/env-nextjs": "^0.13.10",
+    "@tailwindcss/postcss": "^4.2.1",
     "dagre": "^0.8.5",
     "electron-serve": "^3.0.1",
     "html-to-image": "^1.11.13",
@@ -42,10 +48,16 @@
     "jotai-family": "^1.0.1",
     "konva": "^10.2.1",
     "next": "^15.2.0",
+    "next-auth": "^5.0.0-beta.30",
+    "postcss": "^8.5.8",
+    "prisma": "^7.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-hook-form": "^7.71.2",
     "react-konva": "^19.2.3",
-    "react-spring": "^10.0.3"
+    "react-spring": "^10.0.3",
+    "tailwindcss": "^4.2.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
