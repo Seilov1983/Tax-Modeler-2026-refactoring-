@@ -355,25 +355,62 @@ export const moveZoneAtom = atom(
     set(commitHistoryAtom);
 
     const zones = get(zonesAtom);
+    const nodes = get(nodesAtom);
     const movedZone = zones.find((z) => z.id === payload.id);
     if (!movedZone) return;
 
-    if (payload.x === movedZone.x && payload.y === movedZone.y) return;
+    const dx = payload.x - movedZone.x;
+    const dy = payload.y - movedZone.y;
+    if (dx === 0 && dy === 0) return;
 
-    // Konva nested <Group> coordinates are already relative to the parent.
-    // Directly assign payload.x / payload.y — no delta or parent subtraction needed.
-    // Child zones and nodes move automatically via Konva's group hierarchy.
+    // Collect child zone ids: explicit parentId OR spatially contained (center inside parent)
+    const childZoneIds = new Set(
+      zones
+        .filter((z) => {
+          if (z.id === payload.id) return false;
+          if (z.parentId === payload.id) return true;
+          // Spatial containment: zone center inside moved zone and smaller area
+          const cx = z.x + z.w / 2;
+          const cy = z.y + z.h / 2;
+          return zoneArea(z) < zoneArea(movedZone) && pointInZone(cx, cy, movedZone);
+        })
+        .map((z) => z.id),
+    );
+
+    // Update zones: move the target zone + cascade to child zones
     const updateZone = (z: Zone) => {
-      if (z.id !== payload.id) return z;
-      return { ...z, x: payload.x, y: payload.y };
+      if (z.id === payload.id) {
+        return { ...z, x: payload.x, y: payload.y };
+      }
+      if (childZoneIds.has(z.id)) {
+        return { ...z, x: z.x + dx, y: z.y + dy };
+      }
+      return z;
+    };
+
+    // Cascade to nodes: move nodes whose center is inside the moved zone
+    // or inside any of its child zones
+    const updateNode = (n: NodeDTO) => {
+      const { cx, cy } = nodeCenter(n);
+      const insideParent = pointInZone(cx, cy, movedZone);
+      if (!insideParent) {
+        // Also check if inside any child zone
+        const insideChild = zones.some(
+          (z) => childZoneIds.has(z.id) && pointInZone(cx, cy, z),
+        );
+        if (!insideChild) return n;
+      }
+      return { ...n, x: n.x + dx, y: n.y + dy };
     };
 
     set(zonesAtom, (prev) => prev.map(updateZone));
+    set(nodesAtom, (prev) => prev.map(updateNode));
     set(projectAtom, (prev) => {
       if (!prev) return prev;
       return {
         ...prev,
         zones: prev.zones.map(updateZone),
+        nodes: prev.nodes.map(updateNode),
       };
     });
   },

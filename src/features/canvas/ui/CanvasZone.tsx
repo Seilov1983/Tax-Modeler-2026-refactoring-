@@ -96,11 +96,12 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
       const parentZone = allZones.find((z) => z.id === zone.parentId);
       if (!parentZone) return;
 
+      // All coordinates are absolute — check child rect is inside parent rect
       const outOfBounds =
-        childX < 0 ||
-        childY < 0 ||
-        (childX + childW) > parentZone.w ||
-        (childY + childH) > parentZone.h;
+        childX < parentZone.x ||
+        childY < parentZone.y ||
+        (childX + childW) > (parentZone.x + parentZone.w) ||
+        (childY + childH) > (parentZone.y + parentZone.h);
 
       flagZoneError({ id: zone.id, hasError: outOfBounds });
       if (outOfBounds) {

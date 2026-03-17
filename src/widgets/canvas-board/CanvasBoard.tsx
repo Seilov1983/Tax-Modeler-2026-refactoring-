@@ -687,21 +687,15 @@ export function CanvasBoard() {
               Zones rendered first (below), nodes on top.
               Hierarchical zone nesting via Konva <Group>. */}
           <Layer>
-            {/* Zones (hierarchical — parent Group contains children) */}
+            {/* Zones rendered flat — all coordinates are absolute.
+                moveZoneAtom cascades dx/dy to child zones, so no Konva
+                group nesting needed (avoids double-offset). z-index
+                ordering: countries first (larger), then regimes (smaller). */}
             {topLevelZones.map((zone) => (
-              <CanvasZone key={zone.id} zone={zone}>
-                {(childZonesByParent.get(zone.id) || []).map((childZone) => (
-                  <CanvasZone
-                    key={childZone.id}
-                    zone={childZone}
-                  />
-                ))}
-              </CanvasZone>
+              <CanvasZone key={zone.id} zone={zone} />
             ))}
-
-            {/* Orphan zones (parentId set but parent doesn't exist) */}
             {zones
-              .filter((z) => z.parentId && !zones.some((p) => p.id === z.parentId))
+              .filter((z) => z.parentId)
               .map((zone) => (
                 <CanvasZone key={zone.id} zone={zone} />
               ))}
