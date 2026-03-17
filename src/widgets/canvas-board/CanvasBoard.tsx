@@ -409,12 +409,18 @@ export function CanvasBoard() {
       e.preventDefault();
       e.stopPropagation();
 
-      const state = viewportStateRef.current;
-      const container = containerRef.current;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const x = (e.clientX - rect.left - state.panX) / state.scale;
-      const y = (e.clientY - rect.top - state.panY) / state.scale;
+      const stage = stageRef.current;
+      if (!stage) return;
+
+      // Sync HTML5 drag pointer into Konva so getPointerPosition() works
+      stage.setPointersPositions(e);
+      const ptr = stage.getPointerPosition();
+      if (!ptr) return;
+
+      // Map screen-relative pointer into canvas-local coordinates via matrix inversion
+      const localPos = stage.getAbsoluteTransform().copy().invert().point(ptr);
+      const x = localPos.x;
+      const y = localPos.y;
 
       // Regime drop
       const regimeId = e.dataTransfer.getData('application/tax-regime-id');
@@ -454,7 +460,7 @@ export function CanvasBoard() {
         parentId: null,
       });
     },
-    [viewportStateRef, addZone, zones],
+    [addZone, zones],
   );
 
   // ─── Stage pointer up → clear draft if dropped on empty space ────────
