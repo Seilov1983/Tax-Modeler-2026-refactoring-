@@ -372,6 +372,17 @@ export function CanvasBoard() {
     [viewportStateRef, addZone, zones],
   );
 
+  // ─── Stage pointer up → clear draft if dropped on empty space ────────
+  const handleStagePointerUp = useCallback(
+    (e: KonvaEventObject<PointerEvent>) => {
+      // Only clear draft when pointer lands on empty stage (not on a node)
+      if (draft && e.target === e.target.getStage()) {
+        setDraft(null);
+      }
+    },
+    [draft, setDraft],
+  );
+
   // ─── Lasso selection ──────────────────────────────────────────────────
   const lassoStartRef = useRef<{ x: number; y: number } | null>(null);
   const [lassoRect, setLassoRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -548,6 +559,7 @@ export function CanvasBoard() {
           onClick={handleStageClick}
           onDblClick={handleStageDblClick}
           onContextMenu={handleContextMenu}
+          onPointerUp={handleStagePointerUp}
           onMouseDown={handleStageMouseDown}
           onMouseMove={handleStageMouseMove}
           onMouseUp={handleStageMouseUp}
