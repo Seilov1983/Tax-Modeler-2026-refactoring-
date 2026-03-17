@@ -14,13 +14,8 @@ import { createPortal } from 'react-dom';
 import { useAtom, useSetAtom } from 'jotai';
 import { useSpring, animated, config } from '@react-spring/web';
 import { settingsAtom, settingsOpenAtom } from '../model/settings-atom';
-import type { ThemeMode } from '../model/settings-atom';
-
-const THEME_OPTIONS: { value: ThemeMode; label: string }[] = [
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'system', label: 'System' },
-];
+import type { ThemeMode, Language } from '../model/settings-atom';
+import { t } from '@shared/lib/i18n';
 
 const CURRENCY_OPTIONS = [
   { code: 'USD', label: 'USD ($)' },
@@ -55,6 +50,15 @@ export function SettingsModal() {
   const handleSnapToggle = useCallback(() => {
     setSettings((prev) => ({ ...prev, canvasSnapToGrid: !prev.canvasSnapToGrid }));
   }, [setSettings]);
+
+  const handleLanguageChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      setSettings((prev) => ({ ...prev, language: e.target.value as Language }));
+    },
+    [setSettings],
+  );
+
+  const lang = settings.language || 'en';
 
   // ─── Spring animations ──────────────────────────────────────────────────
   const backdropSpring = useSpring({
@@ -118,7 +122,7 @@ export function SettingsModal() {
           }}
         >
           <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.02em' }}>
-            Settings
+            {t('settings', lang)}
           </h2>
           <button
             onClick={handleClose}
@@ -147,21 +151,34 @@ export function SettingsModal() {
 
           {/* Theme */}
           <div>
-            <label style={labelStyle}>Appearance</label>
+            <label style={labelStyle}>{t('appearance', lang)}</label>
             <select
               value={settings.theme}
               onChange={handleThemeChange}
               style={selectStyle}
             >
-              {THEME_OPTIONS.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
+              <option value="light">{t('light', lang)}</option>
+              <option value="dark">{t('dark', lang)}</option>
+              <option value="system">{t('system', lang)}</option>
+            </select>
+          </div>
+
+          {/* Language */}
+          <div>
+            <label style={labelStyle}>{t('language', lang)}</label>
+            <select
+              value={lang}
+              onChange={handleLanguageChange}
+              style={selectStyle}
+            >
+              <option value="en">English</option>
+              <option value="ru">{'\u0420\u0443\u0441\u0441\u043a\u0438\u0439'}</option>
             </select>
           </div>
 
           {/* Base Currency */}
           <div>
-            <label style={labelStyle}>Base Currency</label>
+            <label style={labelStyle}>{t('baseCurrency', lang)}</label>
             <select
               value={settings.baseCurrency}
               onChange={handleCurrencyChange}
@@ -182,9 +199,9 @@ export function SettingsModal() {
             }}
           >
             <div>
-              <label style={{ ...labelStyle, marginBottom: '2px' }}>Snap to Grid</label>
+              <label style={{ ...labelStyle, marginBottom: '2px' }}>{t('snapToGrid', lang)}</label>
               <p style={{ margin: 0, fontSize: '12px', color: '#86868b' }}>
-                Align canvas elements to a 24px grid
+                {t('snapToGridDesc', lang)}
               </p>
             </div>
             <ToggleSwitch

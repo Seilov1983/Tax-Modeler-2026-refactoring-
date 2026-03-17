@@ -23,12 +23,12 @@ import { Group, Rect, Text, Line, Transformer } from 'react-konva';
 import { useSpring, animated } from '@react-spring/konva';
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
-import { isSidebarOpenAtom, sidebarContextAtom } from '@features/master-data-sidebar';
 import { moveZoneAtom, deleteZoneAtom, resizeZoneAtom, flagZoneErrorAtom } from '../model/graph-actions-atom';
 import { showNotificationAtom } from '../model/notification-atom';
 import { dragOverFeedbackAtom } from '../model/drag-over-feedback-atom';
+import { contextMenuAtom } from '../model/context-menu-atom';
 import { zonesAtom } from '@entities/zone';
-import { pointInZone } from '@shared/lib/engine/engine-core';
+import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
 import { calculateZoneHeaderLayout } from '../utils/canvas-layout';
 import type { Zone } from '@shared/types';
 import type Konva from 'konva';
@@ -61,9 +61,8 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   const flagZoneError = useSetAtom(flagZoneErrorAtom);
   const showNotification = useSetAtom(showNotificationAtom);
   const [dragOverFeedback, setDragOverFeedback] = useAtom(dragOverFeedbackAtom);
+  const setContextMenu = useSetAtom(contextMenuAtom);
   const allZones = useAtomValue(zonesAtom);
-  const setIsSidebarOpen = useSetAtom(isSidebarOpenAtom);
-  const setSidebarContext = useSetAtom(sidebarContextAtom);
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
 
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
@@ -127,10 +126,11 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     [zone.parentId, zone.id, allZones, flagZoneError, showNotification],
   );
 
-  // ─── Double-click handler — cancel drag + open sidebar pre-expanded ─────
+  // ─── Double-click handler — cancel drag + open Add Node menu ────────────
   const handleDblClick = useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
       e.cancelBubble = true;
+      e.evt.stopPropagation();
 
       // Programmatically stop any in-flight drag that the first click triggered
       isDblClickGuard.current = true;
@@ -142,14 +142,42 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         group.getLayer()?.batchDraw();
       }
 
-      // Open sidebar pre-expanded to this zone's jurisdiction
-      setSidebarContext(zone.jurisdiction);
-      setIsSidebarOpen(true);
+      // Determine zone kind: country if it has children, else regime
+      const isCountry = allZones.some((z) => z.parentId === zone.id);
+      const kind = isCountry ? 'country' : 'regime';
+
+      // Get screen coordinates for the DOM overlay menu
+      const stage = group?.getStage();
+      const screenX = e.evt.clientX;
+      const screenY = e.evt.clientY;
+
+      // Get canvas coordinates via matrix inversion
+      let canvasX = zone.x + zone.w / 2;
+      let canvasY = zone.y + zone.h / 2;
+      if (stage) {
+        const pos = stage.getPointerPosition();
+        if (pos) {
+          const transform = stage.getAbsoluteTransform().copy().invert();
+          const cp = transform.point(pos);
+          canvasX = Math.round(cp.x);
+          canvasY = Math.round(cp.y);
+        }
+      }
+
+      // Open the Liquid Glass Add Node menu at pointer coordinates
+      setContextMenu({
+        kind: kind as 'country' | 'regime',
+        screenX,
+        screenY,
+        canvasX,
+        canvasY,
+        zone,
+      });
 
       // Release the guard after the event cycle completes
       setTimeout(() => { isDblClickGuard.current = false; }, 0);
     },
-    [zone.x, zone.y, zone.jurisdiction, setSidebarContext, setIsSidebarOpen],
+    [zone, allZones, setContextMenu],
   );
 
   // ─── Drag handlers ──────────────────────────────────────────────────────
@@ -232,15 +260,13 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   // Select zone on pointer-down anywhere on its body (not just the header).
   // cancelBubble prevents the Stage from catching this event and clearing
   // the selection in handleStageClick.
-  // Also opens the sidebar pre-expanded to this zone's jurisdiction.
+  // Single-click selects only — does NOT open the sidebar (per Click Matrix).
   const handleZonePointerDown = useCallback(
     (e: KonvaEventObject<PointerEvent>) => {
       e.cancelBubble = true;
       setSelection({ type: 'zone', id: zone.id });
-      setSidebarContext(zone.jurisdiction);
-      setIsSidebarOpen(true);
     },
-    [zone.id, zone.jurisdiction, setSelection, setSidebarContext, setIsSidebarOpen],
+    [zone.id, setSelection],
   );
 
   // ─── Delete zone ──────────────────────────────────────────────────────────

@@ -246,59 +246,23 @@ export function CanvasBoard() {
     };
   }, []);
 
-  // ─── Stage double-click → open sidebar (or node menu on regime) ────────
+  // ─── Stage double-click → open sidebar (empty canvas only) ─────────────
+  // Zone double-clicks are handled by CanvasZone.onDblClick with cancelBubble.
   const handleStageDblClick = useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
       const stage = stageRef.current;
       if (!stage) return;
 
-      const evt = e.evt;
-      evt.stopPropagation();
-      evt.preventDefault();
+      e.evt.stopPropagation();
+      e.evt.preventDefault();
 
-      const pos = stage.getPointerPosition();
-      if (!pos) return;
+      // Only trigger on empty canvas (Stage itself)
+      if (e.target !== stage) return;
 
-      // Determine what was double-clicked using e.target
-      const target = e.target;
-      const isStage = target === stage;
-
-      // Get canvas coordinates via the clicked target's transform
-      const transform = stage.getAbsoluteTransform().copy().invert();
-      const canvasPos = transform.point(pos);
-
-      const screen = getScreenPointerPosition();
-      if (!screen) return;
-
-      if (isStage) {
-        // Double-click on empty stage → open the MasterData sidebar
-        setIsSidebarOpen(true);
-        return;
-      }
-
-      // Walk up the Konva tree to find a zone group
-      const ctx = detectClickContext(canvasPos.x, canvasPos.y, screen.screenX, screen.screenY);
-
-      if (ctx.kind === 'country') {
-        // Double-click on a Country zone → open sidebar pre-expanded to that country
-        setSidebarContext(ctx.zone.jurisdiction);
-        setIsSidebarOpen(true);
-        return;
-      }
-
-      if (ctx.kind === 'regime') {
-        // Double-click on a Regime → spawn Node (Company/Individual) centered at pointer
-        const nodeX = Math.round(canvasPos.x - NODE_WIDTH / 2);
-        const nodeY = Math.round(canvasPos.y - NODE_HEIGHT / 2);
-        // Open context menu for node type choice
-        setContextMenu({ ...ctx, canvasX: nodeX, canvasY: nodeY });
-        return;
-      }
-
-      // Fallback: open sidebar
+      // Double-click on empty stage → open the MasterData sidebar
       setIsSidebarOpen(true);
     },
-    [detectClickContext, setContextMenu, getScreenPointerPosition, setIsSidebarOpen, setSidebarContext],
+    [setIsSidebarOpen],
   );
 
   // ─── Stage click → deselect + close sidebar ─────────────────────────────
