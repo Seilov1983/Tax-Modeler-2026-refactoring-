@@ -138,13 +138,24 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     [zone.id, moveZone],
   );
 
-  // ─── Click to select ──────────────────────────────────────────────────────
+  // ─── Click / pointer-down to select ─────────────────────────────────────────
   const handleHeaderClick = useCallback(
     (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
       e.cancelBubble = true;
       if (!hasDragged.current) {
         setSelection({ type: 'zone', id: zone.id });
       }
+    },
+    [zone.id, setSelection],
+  );
+
+  // Select zone on pointer-down anywhere on its body (not just the header).
+  // cancelBubble prevents the Stage from catching this event and clearing
+  // the selection in handleStageClick.
+  const handleZonePointerDown = useCallback(
+    (e: KonvaEventObject<PointerEvent>) => {
+      e.cancelBubble = true;
+      setSelection({ type: 'zone', id: zone.id });
     },
     [zone.id, setSelection],
   );
@@ -198,7 +209,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
       scaleY={entranceSpring.scaleY.get()}
       opacity={entranceSpring.opacity.get()}
     >
-      {/* Zone background fill */}
+      {/* Zone background fill — onPointerDown selects zone + stops bubble to Stage */}
       <Rect
         ref={bgRectRef}
         name="zone-bg"
@@ -207,6 +218,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         fill={bgColor}
         opacity={isSelected ? 0.4 : 0.25}
         cornerRadius={12}
+        onPointerDown={handleZonePointerDown}
       />
 
       {/* Zone border (dashed) — red if hasError */}
