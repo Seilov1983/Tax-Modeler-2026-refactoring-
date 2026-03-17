@@ -85,8 +85,24 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         return;
       }
       hasDragged.current = false;
+
+      // Store original positions on all selected siblings for accurate bulk drag
+      const sel = selectionRef.current;
+      if (sel?.type === 'node' && sel.ids.length > 1 && sel.ids.includes(node.id)) {
+        const stage = e.target.getStage();
+        if (stage) {
+          for (const id of sel.ids) {
+            if (id === node.id) continue;
+            const sibling = stage.findOne(`#node-${id}`) as Konva.Group | undefined;
+            if (sibling) {
+              sibling.setAttr('data-orig-x', sibling.x());
+              sibling.setAttr('data-orig-y', sibling.y());
+            }
+          }
+        }
+      }
     },
-    [isTxa],
+    [isTxa, node.id],
   );
 
   const handleDragMove = useCallback(
@@ -134,7 +150,11 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
           if (id === node.id) return { id, x, y };
           const sibling = stage?.findOne(`#node-${id}`) as Konva.Group | undefined;
           if (sibling) {
-            return { id, x: Math.round(sibling.x()), y: Math.round(sibling.y()) };
+            const pos = { id, x: Math.round(sibling.x()), y: Math.round(sibling.y()) };
+            // Clean up transient attrs
+            sibling.setAttr('data-orig-x', undefined);
+            sibling.setAttr('data-orig-y', undefined);
+            return pos;
           }
           return { id, x: node.x + dx, y: node.y + dy };
         });
