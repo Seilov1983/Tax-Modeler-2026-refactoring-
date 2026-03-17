@@ -245,7 +245,7 @@ export function MasterDataSidebar() {
 
   // ─── Slide animation ─────────────────────────────────────────────────
   const sidebarSpring = useSpring({
-    transform: isOpen ? 'translateX(0px)' : 'translateX(-320px)',
+    transform: isOpen ? 'translateX(0px)' : 'translateX(-420px)',
     opacity: isOpen ? 1 : 0,
     config: config.stiff,
   });
@@ -260,7 +260,7 @@ export function MasterDataSidebar() {
         left: 0,
         top: 0,
         height: '100%',
-        width: '320px',
+        width: '420px',
         zIndex: 40,
         background: 'rgba(255, 255, 255, 0.70)',
         backdropFilter: 'blur(12px) saturate(180%)',

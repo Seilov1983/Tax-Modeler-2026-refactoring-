@@ -83,6 +83,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   const bgRectRef = useRef<Konva.Rect>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
   const hasDragged = useRef(false);
+  const isDblClickGuard = useRef(false);
 
   // ─── Entrance animation — subtle scale-in
   const [hasAnimated] = useState(() => ({ value: false }));
@@ -126,8 +127,38 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     [zone.parentId, zone.id, allZones, flagZoneError, showNotification],
   );
 
+  // ─── Double-click handler — cancel drag + open sidebar pre-expanded ─────
+  const handleDblClick = useCallback(
+    (e: KonvaEventObject<MouseEvent>) => {
+      e.cancelBubble = true;
+
+      // Programmatically stop any in-flight drag that the first click triggered
+      isDblClickGuard.current = true;
+      const group = groupRef.current;
+      if (group) {
+        group.stopDrag();
+        // Reset position to committed zone coords (undo any partial drag offset)
+        group.position({ x: zone.x, y: zone.y });
+        group.getLayer()?.batchDraw();
+      }
+
+      // Open sidebar pre-expanded to this zone's jurisdiction
+      setSidebarContext(zone.jurisdiction);
+      setIsSidebarOpen(true);
+
+      // Release the guard after the event cycle completes
+      setTimeout(() => { isDblClickGuard.current = false; }, 0);
+    },
+    [zone.x, zone.y, zone.jurisdiction, setSidebarContext, setIsSidebarOpen],
+  );
+
   // ─── Drag handlers ──────────────────────────────────────────────────────
   const handleDragStart = useCallback((e: KonvaEventObject<DragEvent>) => {
+    // If a double-click was just detected, cancel the drag immediately
+    if (isDblClickGuard.current) {
+      e.target.stopDrag();
+      return;
+    }
     e.cancelBubble = true;
     hasDragged.current = false;
   }, []);
@@ -291,6 +322,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
       x={zone.x}
       y={zone.y}
       draggable
+      onDblClick={handleDblClick}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
