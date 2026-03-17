@@ -24,10 +24,10 @@ import { useSpring, animated } from '@react-spring/konva';
 import type { PrimitiveAtom } from 'jotai';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import type { NodeDTO } from '@shared/types';
+import type { NodeDTO, Zone } from '@shared/types';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { draftConnectionAtom, commitDraftConnectionAtom } from '../model/draft-connection-atom';
-import { moveNodesAtom, flagNodeErrorAtom } from '../model/graph-actions-atom';
+import { moveNodesAtom, reparentNodeAtom, flagNodeErrorAtom } from '../model/graph-actions-atom';
 import { showNotificationAtom } from '../model/notification-atom';
 import { zonesAtom } from '@entities/zone';
 import { calculateNodeCardLayout } from '../utils/canvas-layout';
@@ -63,6 +63,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const setDraft = useSetAtom(draftConnectionAtom);
   const commitDraft = useSetAtom(commitDraftConnectionAtom);
   const moveNodes = useSetAtom(moveNodesAtom);
+  const reparentNode = useSetAtom(reparentNodeAtom);
   const flagNodeError = useSetAtom(flagNodeErrorAtom);
   const showNotification = useSetAtom(showNotificationAtom);
   const allZones = useAtomValue(zonesAtom);
@@ -146,28 +147,88 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
     [node.id, node.x, node.y],
   );
 
-  // ─── Spatial validation: check if node is inside its parent regime zone ──
-  const validateNodeBounds = useCallback(
-    (nodeX: number, nodeY: number, nodeW: number, nodeH: number, nodeId: string, zoneId: string | null) => {
-      if (!zoneId) return;
-      const parentZone = allZones.find((z) => z.id === zoneId);
-      if (!parentZone) return;
+  // ─── Spatial validation: global hit-test across ALL regimes ──────────────
+  // A node can be moved to ANY regime (cross-zone transfer / change of tax residency).
+  // It is only an error if the node is outside ALL regimes.
+  const validateAndReparentNode = useCallback(
+    (nodeX: number, nodeY: number, nodeW: number, nodeH: number, nodeId: string) => {
+      // Regimes are zones with a parentId (children of countries).
+      const regimes = allZones.filter((z) => z.parentId);
 
-      const outOfBounds =
-        nodeX < 0 ||
-        nodeY < 0 ||
-        (nodeX + nodeW) > parentZone.w ||
-        (nodeY + nodeH) > parentZone.h;
+      // Find the regime that fully contains this node's bounding box.
+      // Node coordinates are relative to the parent group in Konva,
+      // so we need to compute absolute positions by walking up the zone hierarchy.
+      const getAbsoluteBounds = (zone: Zone) => {
+        let ax = zone.x;
+        let ay = zone.y;
+        // Walk up: if this zone has a parent, add the parent's offset
+        if (zone.parentId) {
+          const parent = allZones.find((z) => z.id === zone.parentId);
+          if (parent) {
+            ax += parent.x;
+            ay += parent.y;
+          }
+        }
+        return { x: ax, y: ay, w: zone.w, h: zone.h };
+      };
 
-      flagNodeError({ id: nodeId, hasError: outOfBounds });
-      if (outOfBounds) {
+      // The node's absolute position: node coords are relative to its current parent zone group
+      const currentParent = allZones.find((z) => z.id === node.zoneId);
+      let absNodeX = nodeX;
+      let absNodeY = nodeY;
+      if (currentParent) {
+        absNodeX += currentParent.x;
+        absNodeY += currentParent.y;
+        // If the current parent has its own parent (regime inside country), add that too
+        if (currentParent.parentId) {
+          const grandParent = allZones.find((z) => z.id === currentParent.parentId);
+          if (grandParent) {
+            absNodeX += grandParent.x;
+            absNodeY += grandParent.y;
+          }
+        }
+      }
+
+      // Check if node's absolute bounding box is fully contained within any regime
+      let containingRegime: Zone | null = null;
+      for (const regime of regimes) {
+        const rb = getAbsoluteBounds(regime);
+        const fullyContained =
+          absNodeX >= rb.x &&
+          absNodeY >= rb.y &&
+          (absNodeX + nodeW) <= (rb.x + rb.w) &&
+          (absNodeY + nodeH) <= (rb.y + rb.h);
+        if (fullyContained) {
+          // Prefer the smallest containing regime (most specific)
+          if (!containingRegime) {
+            containingRegime = regime;
+          } else {
+            const currentArea = containingRegime.w * containingRegime.h;
+            const candidateArea = regime.w * regime.h;
+            if (candidateArea < currentArea) {
+              containingRegime = regime;
+            }
+          }
+        }
+      }
+
+      if (containingRegime) {
+        // Node is inside a valid regime — clear any error
+        flagNodeError({ id: nodeId, hasError: false });
+        // If the regime is different from the current one, re-parent the node
+        if (containingRegime.id !== node.zoneId) {
+          reparentNode({ id: nodeId, newParentId: containingRegime.id });
+        }
+      } else {
+        // Node is outside ALL regimes — flag error
+        flagNodeError({ id: nodeId, hasError: true });
         showNotification({
-          message: 'Invalid placement: Object must reside within its designated parent zone',
+          message: 'Invalid placement: Companies and Persons must reside within a valid Tax Regime.',
           type: 'error',
         });
       }
     },
-    [allZones, flagNodeError, showNotification],
+    [allZones, node.zoneId, flagNodeError, reparentNode, showNotification],
   );
 
   const handleDragEnd = useCallback(
@@ -202,10 +263,10 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         moveNodes([{ id: node.id, x, y }]);
       }
 
-      // Spatial validation after move
-      validateNodeBounds(x, y, node.w, node.h, node.id, node.zoneId);
+      // Spatial validation: global hit-test across all regimes (cross-zone transfers allowed)
+      validateAndReparentNode(x, y, node.w, node.h, node.id);
     },
-    [node.id, node.x, node.y, node.w, node.h, node.zoneId, moveNodes, validateNodeBounds],
+    [node.id, node.x, node.y, node.w, node.h, moveNodes, validateAndReparentNode],
   );
 
   // ─── Click to select ──────────────────────────────────────────────────

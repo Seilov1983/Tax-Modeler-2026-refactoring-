@@ -242,6 +242,26 @@ export const moveNodesAtom = atom(
   },
 );
 
+// ─── Reparent Node — change tax residency (cross-zone transfer) ──────────
+
+export const reparentNodeAtom = atom(
+  null,
+  (get, set, payload: { id: string; newParentId: string }) => {
+    set(commitHistoryAtom);
+
+    const updateNode = (n: NodeDTO) => {
+      if (n.id !== payload.id) return n;
+      return { ...n, zoneId: payload.newParentId, regimeId: payload.newParentId, hasError: false };
+    };
+
+    set(nodesAtom, (prev) => prev.map(updateNode));
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return { ...prev, nodes: prev.nodes.map(updateNode) };
+    });
+  },
+);
+
 // ─── Delete Nodes (batch) — cascading delete for multiple nodes ─────────
 
 export const deleteNodesAtom = atom(
