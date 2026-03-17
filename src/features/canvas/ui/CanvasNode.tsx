@@ -7,8 +7,8 @@
  * - Uses Konva <Group> with draggable for built-in drag-and-drop
  * - Transient drag: useRef for intermediate state, no React re-renders during drag
  * - On drop (onDragEnd): final position committed to Jotai atom
- * - dragBoundFunc can be added to constrain child elements within parent zone
  * - Connection ports (flow + ownership) rendered as Konva <Circle>
+ * - No dragBoundFunc — free dragging to avoid conflicts with canvas pan/zoom
  *
  * For node types: Konva <Rect>, <Text>, <Circle> replace the DOM elements.
  * Events use KonvaEventObject for proper typing.
@@ -17,17 +17,16 @@
  * (Canvas has no CSS padding — offsets are computed manually).
  */
 
-import { useAtomValue, useSetAtom, useStore } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useRef, useCallback, memo, useMemo } from 'react';
 import { Group, Rect, Text, Circle } from 'react-konva';
 import type { PrimitiveAtom } from 'jotai';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
-import type { NodeDTO, Zone } from '@shared/types';
+import type { NodeDTO } from '@shared/types';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { draftConnectionAtom, commitDraftConnectionAtom } from '../model/draft-connection-atom';
 import { moveNodesAtom } from '../model/graph-actions-atom';
-import { zonesAtom } from '@entities/zone';
 import { calculateNodeCardLayout } from '../utils/canvas-layout';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -61,7 +60,6 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const setDraft = useSetAtom(draftConnectionAtom);
   const commitDraft = useSetAtom(commitDraftConnectionAtom);
   const moveNodes = useSetAtom(moveNodesAtom);
-  const store = useStore();
 
   const groupRef = useRef<Konva.Group>(null);
   const hasDragged = useRef(false);
@@ -79,43 +77,6 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
     [node.w, node.h],
   );
 
-  // ─── Drag constraints ──────────────────────────────────────────────────
-  // Clamp node position within its parent zone bounds.
-  // Uses store.get() to read zones without subscribing to avoid re-renders.
-  const parentBoundsRef = useRef<{ minX: number; maxX: number; minY: number; maxY: number } | null>(null);
-
-  const computeParentBounds = useCallback(() => {
-    if (!node.zoneId) {
-      parentBoundsRef.current = null;
-      return;
-    }
-    const zones = store.get(zonesAtom);
-    const parentZone = zones.find((z: Zone) => z.id === node.zoneId);
-    if (!parentZone) {
-      parentBoundsRef.current = null;
-      return;
-    }
-    const headerMargin = 40;
-    parentBoundsRef.current = {
-      minX: parentZone.x,
-      maxX: parentZone.x + parentZone.w - node.w,
-      minY: parentZone.y + headerMargin,
-      maxY: parentZone.y + parentZone.h - node.h,
-    };
-  }, [node.zoneId, node.w, node.h, store]);
-
-  const handleDragBound = useCallback(
-    (pos: { x: number; y: number }) => {
-      const bounds = parentBoundsRef.current;
-      if (!bounds) return pos;
-      return {
-        x: Math.max(bounds.minX, Math.min(bounds.maxX, pos.x)),
-        y: Math.max(bounds.minY, Math.min(bounds.maxY, pos.y)),
-      };
-    },
-    [],
-  );
-
   // ─── Drag handlers ────────────────────────────────────────────────────
   const handleDragStart = useCallback(
     (e: KonvaEventObject<DragEvent>) => {
@@ -124,9 +85,8 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         return;
       }
       hasDragged.current = false;
-      computeParentBounds();
     },
-    [isTxa, computeParentBounds],
+    [isTxa],
   );
 
   const handleDragMove = useCallback(
@@ -253,7 +213,6 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       x={node.x}
       y={node.y}
       draggable={!isTxa}
-      dragBoundFunc={handleDragBound}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
