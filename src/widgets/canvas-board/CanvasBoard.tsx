@@ -418,13 +418,14 @@ export function CanvasBoard() {
 
       if (regimeId && regimeCountryId) {
         const parentZone = zones.find((z) => z.jurisdiction === regimeCountryId && !z.parentId);
+        // All zone coordinates are ABSOLUTE (flat rendering) — never subtract parent offset
         addZone({
           jurisdiction: regimeCountryId as JurisdictionCode,
           code: `${regimeCountryId}_${regimeId}`,
           name: regimeName || regimeId,
           currency: COUNTRY_CURRENCY[regimeCountryId] || 'USD',
-          x: parentZone ? Math.round(x - parentZone.x - REGIME_DEFAULT_W / 2) : Math.round(x - REGIME_DEFAULT_W / 2),
-          y: parentZone ? Math.round(y - parentZone.y - REGIME_DEFAULT_H / 2) : Math.round(y - REGIME_DEFAULT_H / 2),
+          x: Math.round(x - REGIME_DEFAULT_W / 2),
+          y: Math.round(y - REGIME_DEFAULT_H / 2),
           w: REGIME_DEFAULT_W,
           h: REGIME_DEFAULT_H,
           parentId: parentZone?.id ?? null,
@@ -672,13 +673,17 @@ export function CanvasBoard() {
           <Layer>
             {/* Zones rendered flat — all coordinates are absolute.
                 moveZoneAtom cascades dx/dy to child zones, so no Konva
-                group nesting needed (avoids double-offset). z-index
-                ordering: countries first (larger), then regimes (smaller). */}
-            {topLevelZones.map((zone) => (
-              <CanvasZone key={zone.id} zone={zone} />
-            ))}
+                group nesting needed (avoids double-offset).
+                Strict z-index ordering: Countries (z=10) → Regimes (z=20) → Nodes (z=30). */}
+            {topLevelZones
+              .slice()
+              .sort((a, b) => (a.zIndex ?? 10) - (b.zIndex ?? 10))
+              .map((zone) => (
+                <CanvasZone key={zone.id} zone={zone} />
+              ))}
             {zones
               .filter((z) => z.parentId)
+              .sort((a, b) => (a.zIndex ?? 20) - (b.zIndex ?? 20))
               .map((zone) => (
                 <CanvasZone key={zone.id} zone={zone} />
               ))}

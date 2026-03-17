@@ -322,7 +322,9 @@ export const addZoneAtom = atom(
     set(commitHistoryAtom);
 
     const defaults = ZONE_DEFAULTS[payload.jurisdiction] || { w: 500, h: 400 };
-    const existingZones = get(zonesAtom);
+
+    // Z-index layering: Countries z=10, Regimes z=20 (Nodes z=30 at render layer)
+    const isRegime = !!payload.parentId;
 
     const newZone: Zone = {
       id: 'z_' + uid(),
@@ -334,7 +336,7 @@ export const addZoneAtom = atom(
       y: payload.y,
       w: payload.w ?? defaults.w,
       h: payload.h ?? defaults.h,
-      zIndex: existingZones.length,
+      zIndex: isRegime ? 20 : 10,
       parentId: payload.parentId ?? null,
     };
 
