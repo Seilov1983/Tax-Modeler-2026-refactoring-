@@ -19,6 +19,7 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useSpring, animated, config } from '@react-spring/web';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { settingsAtom } from '@features/settings';
+import { zonesAtom } from '@entities/zone';
 import { isSidebarOpenAtom, sidebarContextAtom } from '../model/atoms';
 import { masterDataAtom } from '../model/atoms';
 import { t } from '@shared/lib/i18n';
@@ -107,6 +108,18 @@ export function MasterDataSidebar() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingRegime, setEditingRegime] = useState<TaxRegime | null>(null);
   const ghostRef = useRef<HTMLElement | null>(null);
+
+  // Read canvas zones for duplicate detection
+  const canvasZones = useAtomValue(zonesAtom);
+  const onCanvasJurisdictions = useMemo(
+    () => new Set(canvasZones.map((z) => z.jurisdiction)),
+    [canvasZones],
+  );
+  // More specific: track regime codes already on canvas
+  const onCanvasRegimeCodes = useMemo(
+    () => new Set(canvasZones.filter((z) => z.parentId).map((z) => z.code)),
+    [canvasZones],
+  );
 
   // Read from masterDataAtom (persisted) with fallback to project
   const storedMasterData = useAtomValue(masterDataAtom);
@@ -223,6 +236,30 @@ export function MasterDataSidebar() {
   );
 
   const handleRegimeDragEnd = useCallback(
+    (e: React.DragEvent) => {
+      (e.target as HTMLElement).style.cursor = '';
+      cleanupGhost();
+    },
+    [cleanupGhost],
+  );
+
+  // ─── Entity drag handlers ──────────────────────────────────────────
+  const handleEntityDragStart = useCallback(
+    (e: React.DragEvent, type: 'company' | 'person') => {
+      e.dataTransfer.setData(`application/tax-node-${type}`, type);
+      e.dataTransfer.effectAllowed = 'copy';
+      (e.target as HTMLElement).style.cursor = 'grabbing';
+
+      cleanupGhost();
+      const label = type === 'company' ? '\u{1F3E2} Company' : '\u{1F464} Person';
+      const ghost = createGhostElement(label, 'Drag to canvas');
+      ghostRef.current = ghost;
+      e.dataTransfer.setDragImage(ghost, 60, 24);
+    },
+    [cleanupGhost],
+  );
+
+  const handleEntityDragEnd = useCallback(
     (e: React.DragEvent) => {
       (e.target as HTMLElement).style.cursor = '';
       cleanupGhost();
@@ -362,6 +399,60 @@ export function MasterDataSidebar() {
         </div>
       </div>
 
+      {/* ─── Entities Section (sticky) ─────────────────────────── */}
+      <div style={{
+        padding: '8px 12px',
+        borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+        flexShrink: 0,
+      }}>
+        <div style={{
+          fontSize: '11px',
+          fontWeight: 600,
+          color: '#86868b',
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          padding: '4px 12px 8px',
+        }}>
+          {t('entities', lang)}
+        </div>
+        {(['company', 'person'] as const).map((type) => {
+          const icon = type === 'company' ? '\u{1F3E2}' : '\u{1F464}';
+          const label = type === 'company' ? 'Company' : 'Person';
+          return (
+            <div
+              key={type}
+              draggable
+              onDragStart={(e) => handleEntityDragStart(e, type)}
+              onDragEnd={handleEntityDragEnd}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                borderRadius: '10px',
+                cursor: 'grab',
+                userSelect: 'none',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.04)'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+            >
+              <span style={{ fontSize: '16px', lineHeight: 1, flexShrink: 0 }}>{icon}</span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: '#1d1d1f', flex: 1 }}>{label}</span>
+              <span style={{
+                fontSize: '10px',
+                color: '#c7c7cc',
+                letterSpacing: '1px',
+                width: '12px',
+                flexShrink: 0,
+              }}>
+                {'\u22ee\u22ee'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
       {/* ─── Scrollable list ───────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 16px' }}>
         {filteredData.length === 0 && (
@@ -384,6 +475,8 @@ export function MasterDataSidebar() {
             onRegimeDragEnd={handleRegimeDragEnd}
             isEditMode={isEditMode}
             onEditRegime={setEditingRegime}
+            isOnCanvas={onCanvasJurisdictions.has(country.id)}
+            onCanvasRegimeCodes={onCanvasRegimeCodes}
           />
         ))}
       </div>
@@ -458,6 +551,8 @@ interface CountryRowProps {
   onRegimeDragEnd: (e: React.DragEvent) => void;
   isEditMode: boolean;
   onEditRegime: (regime: TaxRegime) => void;
+  isOnCanvas: boolean;
+  onCanvasRegimeCodes: Set<string>;
 }
 
 function CountryRow({
@@ -472,6 +567,8 @@ function CountryRow({
   onRegimeDragEnd,
   isEditMode,
   onEditRegime,
+  isOnCanvas,
+  onCanvasRegimeCodes,
 }: CountryRowProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -493,8 +590,8 @@ function CountryRow({
     <div style={{ marginBottom: '2px' }}>
       {/* Country header */}
       <div
-        draggable={!isEditMode}
-        onDragStart={(e) => !isEditMode && onCountryDragStart(e, country)}
+        draggable={!isEditMode && !isOnCanvas}
+        onDragStart={(e) => !isEditMode && !isOnCanvas && onCountryDragStart(e, country)}
         onDragEnd={onCountryDragEnd}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
@@ -506,24 +603,37 @@ function CountryRow({
           padding: '10px 12px',
           borderRadius: '14px',
           background: isHovered ? 'rgba(0, 0, 0, 0.04)' : 'transparent',
-          cursor: isEditMode ? 'pointer' : 'grab',
+          cursor: isOnCanvas ? 'default' : isEditMode ? 'pointer' : 'grab',
           userSelect: 'none',
           transition: 'background 0.15s',
+          opacity: isOnCanvas ? 0.5 : 1,
         }}
       >
-        {/* Gripper — hidden in edit mode */}
+        {/* Gripper or checkmark */}
         {!isEditMode && (
-          <span style={{
-            fontSize: '10px',
-            color: '#c7c7cc',
-            letterSpacing: '1px',
-            width: '12px',
-            flexShrink: 0,
-            opacity: isHovered ? 1 : 0,
-            transition: 'opacity 0.15s',
-          }}>
-            {'\u22ee\u22ee'}
-          </span>
+          isOnCanvas ? (
+            <span style={{
+              fontSize: '12px',
+              width: '12px',
+              flexShrink: 0,
+              textAlign: 'center',
+              lineHeight: 1,
+            }}>
+              {'\u2705'}
+            </span>
+          ) : (
+            <span style={{
+              fontSize: '10px',
+              color: '#c7c7cc',
+              letterSpacing: '1px',
+              width: '12px',
+              flexShrink: 0,
+              opacity: isHovered ? 1 : 0,
+              transition: 'opacity 0.15s',
+            }}>
+              {'\u22ee\u22ee'}
+            </span>
+          )
         )}
 
         {/* Chevron */}
@@ -587,17 +697,23 @@ function CountryRow({
         paddingLeft: '20px',
       }}>
         <div style={{ paddingTop: '4px', paddingBottom: '4px' }}>
-          {regimes.map((regime) => (
-            <RegimeRow
-              key={regime.id}
-              regime={regime}
-              countryName={country.name}
-              onDragStart={onRegimeDragStart}
-              onDragEnd={onRegimeDragEnd}
-              isEditMode={isEditMode}
-              onEditRegime={onEditRegime}
-            />
-          ))}
+          {regimes.map((regime) => {
+            // Check if this specific regime is already on canvas
+            const regimeOnCanvas = onCanvasRegimeCodes.has(regime.id) ||
+              onCanvasRegimeCodes.has(`${regime.countryId}_${regime.id}`);
+            return (
+              <RegimeRow
+                key={regime.id}
+                regime={regime}
+                countryName={country.name}
+                onDragStart={onRegimeDragStart}
+                onDragEnd={onRegimeDragEnd}
+                isEditMode={isEditMode}
+                onEditRegime={onEditRegime}
+                isOnCanvas={regimeOnCanvas}
+              />
+            );
+          })}
         </div>
       </animated.div>
     </div>
@@ -613,9 +729,10 @@ interface RegimeRowProps {
   onDragEnd: (e: React.DragEvent) => void;
   isEditMode: boolean;
   onEditRegime: (regime: TaxRegime) => void;
+  isOnCanvas: boolean;
 }
 
-function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, onEditRegime }: RegimeRowProps) {
+function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, onEditRegime, isOnCanvas }: RegimeRowProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [tooltip, setTooltip] = useState<{ x: number; y: number } | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -660,8 +777,8 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, on
     <>
       <div
         ref={rowRef}
-        draggable={!isEditMode}
-        onDragStart={(e) => !isEditMode && onDragStart(e, regime, countryName)}
+        draggable={!isEditMode && !isOnCanvas}
+        onDragStart={(e) => !isEditMode && !isOnCanvas && onDragStart(e, regime, countryName)}
         onDragEnd={onDragEnd}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -674,24 +791,37 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, on
           borderRadius: '10px',
           borderLeft: '2px solid rgba(0, 0, 0, 0.06)',
           background: isHovered ? 'rgba(0, 0, 0, 0.03)' : 'transparent',
-          cursor: isEditMode ? 'pointer' : 'grab',
+          cursor: isOnCanvas ? 'default' : isEditMode ? 'pointer' : 'grab',
           userSelect: 'none',
           transition: 'background 0.15s',
+          opacity: isOnCanvas ? 0.5 : 1,
         }}
       >
-        {/* Gripper — hidden in edit mode */}
+        {/* Gripper, checkmark, or edit icon */}
         {!isEditMode && (
-          <span style={{
-            fontSize: '9px',
-            color: '#c7c7cc',
-            letterSpacing: '1px',
-            width: '10px',
-            flexShrink: 0,
-            opacity: isHovered ? 1 : 0,
-            transition: 'opacity 0.15s',
-          }}>
-            {'\u22ee\u22ee'}
-          </span>
+          isOnCanvas ? (
+            <span style={{
+              fontSize: '11px',
+              width: '10px',
+              flexShrink: 0,
+              textAlign: 'center',
+              lineHeight: 1,
+            }}>
+              {'\u2705'}
+            </span>
+          ) : (
+            <span style={{
+              fontSize: '9px',
+              color: '#c7c7cc',
+              letterSpacing: '1px',
+              width: '10px',
+              flexShrink: 0,
+              opacity: isHovered ? 1 : 0,
+              transition: 'opacity 0.15s',
+            }}>
+              {'\u22ee\u22ee'}
+            </span>
+          )
         )}
 
         {/* Edit icon — visible in edit mode */}

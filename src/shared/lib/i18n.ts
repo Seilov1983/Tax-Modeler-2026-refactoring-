@@ -25,6 +25,9 @@ const dictionary = {
   editMasterData: { en: 'Edit Master Data', ru: '\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435' },
   closeSidebar: { en: 'Close sidebar (Esc)', ru: '\u0417\u0430\u043a\u0440\u044b\u0442\u044c (Esc)' },
 
+  // Entities
+  entities: { en: 'Entities', ru: '\u041e\u0431\u044a\u0435\u043a\u0442\u044b' },
+
   // Context Menu
   company: { en: 'Company', ru: '\u041a\u043e\u043c\u043f\u0430\u043d\u0438\u044f' },
   person: { en: 'Person', ru: '\u0424\u0438\u0437\u043b\u0438\u0446\u043e' },
