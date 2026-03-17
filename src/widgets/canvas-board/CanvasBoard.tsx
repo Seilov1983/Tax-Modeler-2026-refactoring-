@@ -48,7 +48,6 @@ import { buildVerticalBezierPath } from '@features/canvas/ui/CanvasOwnership';
 import { addNodeAtom, addZoneAtom, NODE_WIDTH, NODE_HEIGHT } from '@features/canvas/model/graph-actions-atom';
 import { spawnCoordinatesAtom } from '@features/canvas/model/spawn-coordinates-atom';
 import { notificationAtom } from '@features/canvas/model/notification-atom';
-import { MasterDataModal } from '@features/project-management/ui/MasterDataModal';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { ProjectHeader } from '@features/project-management';
 import { isSidebarOpenAtom, sidebarContextAtom } from '@features/master-data-sidebar';
@@ -149,12 +148,6 @@ export function CanvasBoard() {
   const setIsSidebarOpen = useSetAtom(isSidebarOpenAtom);
   const setSidebarContext = useSetAtom(sidebarContextAtom);
 
-  // ─── MasterDataModal state (opened from context menu for strict zone creation)
-  const [masterDataModal, setMasterDataModal] = useState<{
-    open: boolean;
-    initialTab: 'countries' | 'regimes';
-  }>({ open: false, initialTab: 'countries' });
-
   // ─── Konva Stage ref ──────────────────────────────────────────────────
   const stageRef = useRef<Konva.Stage>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -253,7 +246,7 @@ export function CanvasBoard() {
     };
   }, []);
 
-  // ─── Stage double-click → contextual spawning via MasterDataModal ────
+  // ─── Stage double-click → open sidebar (or node menu on regime) ────────
   const handleStageDblClick = useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
       const stage = stageRef.current;
@@ -278,11 +271,8 @@ export function CanvasBoard() {
       if (!screen) return;
 
       if (isStage) {
-        // Double-click on empty stage → spawn Country (200×400)
-        const spawnX = Math.round(canvasPos.x - COUNTRY_DEFAULT_W / 2);
-        const spawnY = Math.round(canvasPos.y - COUNTRY_DEFAULT_H / 2);
-        setSpawnCoordinates({ x: spawnX, y: spawnY });
-        setMasterDataModal({ open: true, initialTab: 'countries' });
+        // Double-click on empty stage → open the MasterData sidebar
+        setIsSidebarOpen(true);
         return;
       }
 
@@ -290,17 +280,9 @@ export function CanvasBoard() {
       const ctx = detectClickContext(canvasPos.x, canvasPos.y, screen.screenX, screen.screenY);
 
       if (ctx.kind === 'country') {
-        // Double-click on a Country → spawn Regime (100×200) centered at pointer
-        // Convert pointer to local coordinates of the country zone
-        const parentZone = ctx.zone;
-        const localX = Math.round(canvasPos.x - parentZone.x - REGIME_DEFAULT_W / 2);
-        const localY = Math.round(canvasPos.y - parentZone.y - REGIME_DEFAULT_H / 2);
-        setSpawnCoordinates({
-          x: localX,
-          y: localY,
-          parentZone,
-        });
-        setMasterDataModal({ open: true, initialTab: 'regimes' });
+        // Double-click on a Country zone → open sidebar pre-expanded to that country
+        setSidebarContext(ctx.zone.jurisdiction);
+        setIsSidebarOpen(true);
         return;
       }
 
@@ -313,22 +295,20 @@ export function CanvasBoard() {
         return;
       }
 
-      // Fallback: open context menu
-      const canvasX = Math.round(canvasPos.x - NODE_WIDTH / 2);
-      const canvasY = Math.round(canvasPos.y - NODE_HEIGHT / 2);
-      setContextMenu({ ...ctx, canvasX, canvasY });
+      // Fallback: open sidebar
+      setIsSidebarOpen(true);
     },
-    [detectClickContext, setContextMenu, getScreenPointerPosition, setSpawnCoordinates, setMasterDataModal],
+    [detectClickContext, setContextMenu, getScreenPointerPosition, setIsSidebarOpen, setSidebarContext],
   );
 
-  // ─── Stage click → deselect + open sidebar ─────────────────────────────
+  // ─── Stage click → deselect + close sidebar ─────────────────────────────
   const handleStageClick = useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
       // Only trigger on direct Stage clicks (empty area)
       if (e.target === e.target.getStage()) {
         setSelection(null);
         setContextMenu(null);
-        setIsSidebarOpen(true);
+        setIsSidebarOpen(false);
       }
     },
     [setSelection, setContextMenu, setIsSidebarOpen],
@@ -380,9 +360,10 @@ export function CanvasBoard() {
       x: contextMenu.canvasX - COUNTRY_DEFAULT_W / 2,
       y: contextMenu.canvasY - COUNTRY_DEFAULT_H / 2,
     });
-    setMasterDataModal({ open: true, initialTab: 'countries' });
+    // Open the sidebar for country selection
+    setIsSidebarOpen(true);
     setContextMenu(null);
-  }, [contextMenu, setContextMenu, setSpawnCoordinates]);
+  }, [contextMenu, setContextMenu, setSpawnCoordinates, setIsSidebarOpen]);
 
   const handleAddRegimeZone = useCallback(() => {
     if (!contextMenu || contextMenu.kind !== 'country') return;
@@ -393,11 +374,13 @@ export function CanvasBoard() {
       y: contextMenu.canvasY - REGIME_DEFAULT_H / 2,
       parentZone,
     });
-    setMasterDataModal({ open: true, initialTab: 'regimes' });
+    // Open the sidebar pre-expanded to that country
+    setSidebarContext(parentZone.jurisdiction);
+    setIsSidebarOpen(true);
     setContextMenu(null);
-  }, [contextMenu, setContextMenu, setSpawnCoordinates]);
+  }, [contextMenu, setContextMenu, setSpawnCoordinates, setSidebarContext, setIsSidebarOpen]);
 
-  // ─── Drag & Drop from MasterDataModal ─────────────────────────────────
+  // ─── Drag & Drop from MasterDataSidebar ────────────────────────────────
 
   const COUNTRY_CURRENCY: Record<string, CurrencyCode> = {
     KZ: 'KZT', UAE: 'AED', HK: 'HKD', CY: 'EUR', SG: 'SGD',
@@ -775,17 +758,6 @@ export function CanvasBoard() {
         <FlowModal />
         <EditorModal />
         <NotificationToast />
-
-        {/* MasterDataModal — opened from context menu for strict zone creation */}
-        {masterDataModal.open && (
-          <MasterDataModal
-            onClose={() => {
-              setMasterDataModal({ open: false, initialTab: 'countries' });
-              setSpawnCoordinates(null);
-            }}
-            initialTab={masterDataModal.initialTab}
-          />
-        )}
 
         {/* Add Node Menu — Apple Liquid Glass floating popover.
             Rendered as DOM overlay OUTSIDE Konva to avoid canvas clipping.
