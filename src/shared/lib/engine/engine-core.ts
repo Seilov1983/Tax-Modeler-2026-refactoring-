@@ -7,6 +7,7 @@ import { uid, deepMerge } from './utils';
 import type {
   Project, Zone, NodeDTO, NodeType, JurisdictionCode, CurrencyCode,
   MasterData, OwnershipEdge, Country, TaxRegime,
+  FlowDTO, CITConfig, WHTRates,
 } from '@shared/types';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -298,4 +299,232 @@ export function bootstrapNormalizeZones(p: Project): void {
   p.nodes.forEach((n) => {
     if (n.type !== 'txa') n.zoneId = detectZoneId(p, n);
   });
+}
+
+// ─── Computation Graph ───────────────────────────────────────────────────────
+
+/**
+ * The fully-resolved effective tax rates for a single node, after applying
+ * the full Country → Regime → ZoneOverride inheritance chain.
+ */
+export interface EffectiveTaxRates {
+  /** Fully resolved CIT configuration (mode + all rate fields). */
+  cit: CITConfig;
+  /**
+   * A single scalar CIT rate for quick numeric comparisons.
+   * Derived from the CIT mode:
+   *   flat/qfzp → rate/qualifyingRate
+   *   threshold/twoTier/smallProfits → mainRate
+   *   brackets → top bracket rate
+   */
+  citRateEffective: number;
+  wht: WHTRates;
+  vatRate: number;
+}
+
+/** A node paired with its fully-inherited effective tax rates. */
+export interface ComputationNode {
+  node: NodeDTO;
+  effectiveTax: EffectiveTaxRates;
+}
+
+/** A zone and its position in the logical hierarchy, with resolved children and nodes. */
+export interface ComputationZone {
+  zone: Zone;
+  /** Resolved child ComputationZones (regime zones whose parentId = this zone's id). */
+  children: ComputationZone[];
+  /** Computation nodes whose zoneId = this zone's id. */
+  nodes: ComputationNode[];
+}
+
+/** Directed adjacency lists for financial flows. All lookups are O(1). */
+export interface FlowAdjacency {
+  /** nodeId → outgoing FlowDTOs originating at that node. */
+  outFlows: Map<string, FlowDTO[]>;
+  /** nodeId → incoming FlowDTOs terminating at that node. */
+  inFlows: Map<string, FlowDTO[]>;
+}
+
+/** Directed adjacency lists for ownership edges. All lookups are O(1). */
+export interface OwnershipAdjacency {
+  /** nodeId → OwnershipEdges going out from that node (owner → owned). */
+  outEdges: Map<string, OwnershipEdge[]>;
+  /** nodeId → OwnershipEdges coming in to that node (owned ← owner). */
+  inEdges: Map<string, OwnershipEdge[]>;
+}
+
+/**
+ * The pre-processed computation graph returned by buildComputationGraph.
+ * Feeds directly into the tax calculator without any further O(n) scans.
+ */
+export interface ComputationGraph {
+  /** Root zones — zones that have no parentId (typically Country-level zones). */
+  rootZones: ComputationZone[];
+  /** All ComputationNodes indexed by node.id for O(1) lookup. */
+  nodeMap: Map<string, ComputationNode>;
+  /** Flat ordered list of all ComputationNodes (same order as project.nodes). */
+  nodes: ComputationNode[];
+  /** Directed adjacency lists for financial flows. */
+  flows: FlowAdjacency;
+  /** Directed adjacency lists for ownership edges. */
+  ownership: OwnershipAdjacency;
+}
+
+// ─── Internal helper ─────────────────────────────────────────────────────────
+
+/**
+ * Collapses a CITConfig into a single representative scalar rate.
+ * Used to give the tax calculator a quick numeric handle without re-implementing
+ * all CIT modes in every downstream consumer.
+ */
+function citScalar(cit: CITConfig): number {
+  switch (cit.mode) {
+    case 'flat':        return Number(cit.rate ?? 0);
+    case 'qfzp':        return Number(cit.qualifyingRate ?? 0);
+    case 'threshold':   return Number(cit.mainRate ?? 0);
+    case 'twoTier':     return Number(cit.mainRate ?? 0);
+    case 'smallProfits':return Number(cit.mainRate ?? 0);
+    case 'brackets': {
+      const last = cit.brackets?.[cit.brackets.length - 1];
+      return last ? Number(last.rate ?? 0) : 0;
+    }
+    default:            return 0;
+  }
+}
+
+// ─── buildComputationGraph ────────────────────────────────────────────────────
+
+/**
+ * Transforms a flat Project snapshot into a pre-processed ComputationGraph
+ * ready for the tax calculator.
+ *
+ * Three things happen here:
+ *
+ * 1. **Zone tree construction** — flat `project.zones` (linked via `parentId`)
+ *    is converted into a proper hierarchy of ComputationZone objects.
+ *
+ * 2. **Tax inheritance resolution** — for every node, the effective CIT/WHT/VAT
+ *    rates are resolved by walking the zone ancestry chain (Country → Regime)
+ *    and layering overrides on top of master-data defaults:
+ *      masterData[jurisdiction] → countryZone.tax → regimeZone.tax
+ *
+ * 3. **Directed adjacency lists** — project.flows and project.ownership are
+ *    converted into Map-based adjacency lists, making it O(1) for any
+ *    downstream calculator to enumerate a node's incoming/outgoing edges.
+ *
+ * This function is pure and side-effect free. It does not mutate the Project.
+ */
+export function buildComputationGraph(project: Project): ComputationGraph {
+  // ── 1. Index all zones by id ──────────────────────────────────────────────
+  const zoneById = new Map<string, Zone>();
+  for (const z of project.zones) {
+    zoneById.set(z.id, z);
+  }
+
+  // ── 2. Tax-rate resolver (walks parentId chain, Country→Regime→…) ─────────
+  function resolveEffectiveTax(zoneId: string | null | undefined): EffectiveTaxRates {
+    // Collect ancestor chain from root (country) down to the node's zone.
+    // We prepend so index 0 = outermost ancestor (country), last = immediate zone.
+    const chain: Zone[] = [];
+    let cursor: Zone | undefined = zoneId ? zoneById.get(zoneId) : undefined;
+    while (cursor) {
+      chain.unshift(cursor);
+      cursor = cursor.parentId ? zoneById.get(cursor.parentId) : undefined;
+    }
+
+    // The jurisdiction is on every zone in the chain (they must share it).
+    // Use the deepest zone's jurisdiction; fall back to the first in chain.
+    const jurisdiction = chain.length > 0
+      ? (chain[chain.length - 1].jurisdiction ?? chain[0].jurisdiction)
+      : null;
+
+    // Layer 0: master-data defaults for the jurisdiction.
+    const md = jurisdiction
+      ? ((project.masterData?.[jurisdiction] ?? {}) as Record<string, unknown>)
+      : ({} as Record<string, unknown>);
+
+    let cit: CITConfig = md.cit
+      ? deepMerge(md.cit as CITConfig, {} as Partial<CITConfig>)
+      : ({ mode: 'flat', rate: Number((md.citRateStandard as number) ?? 0) } as CITConfig);
+
+    let wht: WHTRates = deepMerge(
+      (md.wht as WHTRates) ?? { dividends: 0, interest: 0, royalties: 0, services: 0 },
+      {} as Partial<WHTRates>,
+    );
+
+    let vatRate = Number((md.vatRateStandard as number) ?? 0);
+
+    // Layers 1…N: progressively apply zone.tax overrides from country → regime.
+    for (const zone of chain) {
+      const tax = zone.tax;
+      if (!tax) continue;
+      if (tax.cit)                  cit     = deepMerge(cit, tax.cit as Partial<CITConfig>);
+      if (tax.wht)                  wht     = deepMerge(wht, tax.wht as Partial<WHTRates>);
+      if (tax.vatRate !== undefined) vatRate = tax.vatRate;
+    }
+
+    return { cit, citRateEffective: citScalar(cit), wht, vatRate };
+  }
+
+  // ── 3. Build zone hierarchy ───────────────────────────────────────────────
+  const compZoneMap = new Map<string, ComputationZone>();
+  for (const zone of project.zones) {
+    compZoneMap.set(zone.id, { zone, children: [], nodes: [] });
+  }
+
+  const rootZones: ComputationZone[] = [];
+  for (const zone of project.zones) {
+    const cz = compZoneMap.get(zone.id)!;
+    if (zone.parentId && compZoneMap.has(zone.parentId)) {
+      compZoneMap.get(zone.parentId)!.children.push(cz);
+    } else {
+      rootZones.push(cz);
+    }
+  }
+
+  // ── 4. Build ComputationNodes and attach them to their zones ──────────────
+  const nodeMap = new Map<string, ComputationNode>();
+  const nodes: ComputationNode[] = [];
+
+  for (const node of project.nodes) {
+    const effectiveTax = resolveEffectiveTax(node.zoneId);
+    const cn: ComputationNode = { node, effectiveTax };
+    nodeMap.set(node.id, cn);
+    nodes.push(cn);
+    if (node.zoneId) {
+      compZoneMap.get(node.zoneId)?.nodes.push(cn);
+    }
+  }
+
+  // ── 5. Build flow adjacency lists ─────────────────────────────────────────
+  const outFlows = new Map<string, FlowDTO[]>();
+  const inFlows  = new Map<string, FlowDTO[]>();
+
+  for (const flow of project.flows) {
+    if (!outFlows.has(flow.fromId)) outFlows.set(flow.fromId, []);
+    outFlows.get(flow.fromId)!.push(flow);
+
+    if (!inFlows.has(flow.toId)) inFlows.set(flow.toId, []);
+    inFlows.get(flow.toId)!.push(flow);
+  }
+
+  // ── 6. Build ownership adjacency lists ───────────────────────────────────
+  const outEdges = new Map<string, OwnershipEdge[]>();
+  const inEdges  = new Map<string, OwnershipEdge[]>();
+
+  for (const edge of project.ownership) {
+    if (!outEdges.has(edge.fromId)) outEdges.set(edge.fromId, []);
+    outEdges.get(edge.fromId)!.push(edge);
+
+    if (!inEdges.has(edge.toId)) inEdges.set(edge.toId, []);
+    inEdges.get(edge.toId)!.push(edge);
+  }
+
+  return {
+    rootZones,
+    nodeMap,
+    nodes,
+    flows:     { outFlows, inFlows },
+    ownership: { outEdges, inEdges },
+  };
 }
