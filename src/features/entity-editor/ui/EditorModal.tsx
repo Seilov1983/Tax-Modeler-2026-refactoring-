@@ -4,15 +4,14 @@
  * EditorModal — floating dialog for editing Node/Flow/Ownership/Zone properties.
  * Replaces EditorSidebar with a centered modal (Universal Modals paradigm).
  *
- * Single-clicking a Flow, Node, Ownership, or Zone opens this modal.
- * Uses local draft state to avoid Jotai re-renders during editing.
+ * Now uses shadcn/ui Dialog, Input, Badge, Label, Select primitives.
+ * Spring animations replaced with Radix Dialog + Tailwind animate utilities.
  *
- * Liquid Glass design: frosted glass, spring mount animation.
+ * Jotai state management and i18n remain intact.
  */
 
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { useRef, useCallback, useState, useEffect } from 'react';
-import { useSpring, animated, config } from '@react-spring/web';
 import { selectionAtom, nodeEditingAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { nodesAtom } from '@entities/node';
@@ -20,6 +19,24 @@ import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom, deleteZoneAtom } 
 import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
 import { useTranslation, localizedName, t } from '@shared/lib/i18n';
 import type { NodeDTO, FlowDTO, OwnershipEdge, FlowType, Zone } from '@shared/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const FLOW_TYPE_OPTIONS: FlowType[] = [
   'Dividends', 'Royalties', 'Interest', 'Services', 'Salary', 'Goods', 'Equipment',
@@ -27,36 +44,21 @@ const FLOW_TYPE_OPTIONS: FlowType[] = [
 
 const CURRENCY_OPTIONS = ['KZT', 'USD', 'EUR', 'AED', 'HKD', 'SGD', 'GBP', 'SCR', 'CNY'] as const;
 
-// ─── Shared styles (Liquid Glass) ────────────────────────────────────────────
-
-const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: '11px', color: '#86868b',
-  fontWeight: 500, letterSpacing: '0.02em', marginBottom: '6px',
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', border: '1px solid rgba(0,0,0,0.08)', borderRadius: '12px',
-  padding: '8px 12px', fontSize: '13px', outline: 'none',
-  background: 'rgba(255,255,255,0.8)', transition: 'border-color 0.2s, box-shadow 0.2s',
-};
-
-const selectStyle: React.CSSProperties = { ...inputStyle, background: 'rgba(255,255,255,0.8)' };
-
-// ─── Formatted numeric input ────────────────────────────────────────────────
+// ─── Formatted numeric input (preserves existing behaviour) ─────────────────
 
 const numFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 10 });
 
 function NumericInput({
   value,
   onChange,
-  style,
+  className,
   step,
   min,
   max,
 }: {
   value: number;
   onChange: (v: number) => void;
-  style?: React.CSSProperties;
+  className?: string;
   step?: string;
   min?: number;
   max?: number;
@@ -82,8 +84,8 @@ function NumericInput({
   }
 
   return (
-    <input
-      style={style ?? inputStyle}
+    <Input
+      className={className}
       type="text"
       inputMode="decimal"
       value={display}
@@ -120,35 +122,30 @@ function NodeEditor({
   return (
     <>
       <Field label={t('name', nodeLang)}>
-        <input style={inputStyle} type="text" value={node.name} onChange={(e) => onChange('name', e.target.value)} />
+        <Input type="text" value={node.name} onChange={(e) => onChange('name', e.target.value)} />
       </Field>
       {/* Spatial location — read-only badge (zone assignment is automatic via drag) */}
       <Field label={t('locatedIn', nodeLang)}>
-        <div style={{
-          padding: '8px 12px', borderRadius: '12px', fontSize: '13px',
-          background: zone ? 'rgba(0,122,255,0.06)' : 'rgba(255,59,48,0.06)',
-          color: zone ? '#007aff' : '#ff3b30', fontWeight: 500,
-          border: `1px solid ${zone ? 'rgba(0,122,255,0.12)' : 'rgba(255,59,48,0.12)'}`,
-        }}>
+        <Badge variant={zone ? 'default' : 'destructive'} className="w-full justify-start px-3 py-2 text-[13px] font-medium">
           {zone
             ? `${localizedName(zone.name, nodeLang)} (${zone.jurisdiction} \u00b7 ${zone.currency})`
             : t('noZone', nodeLang)}
-        </div>
+        </Badge>
       </Field>
       <Field label={t('annualIncome', nodeLang)}>
-        <NumericInput style={inputStyle} value={node.annualIncome} onChange={(v) => onChange('annualIncome', v)} />
+        <NumericInput value={node.annualIncome} onChange={(v) => onChange('annualIncome', v)} />
       </Field>
       {node.type === 'company' && (
         <Field label={t('etrManual', nodeLang)}>
-          <NumericInput style={inputStyle} value={node.etr} onChange={(v) => onChange('etr', v)} step="0.01" min={0} max={1} />
+          <NumericInput value={node.etr} onChange={(v) => onChange('etr', v)} step="0.01" min={0} max={1} />
         </Field>
       )}
       {node.type === 'person' && node.citizenship && (
         <Field label={t('citizenship', nodeLang)}>
-          <input style={inputStyle} type="text" value={node.citizenship.join(', ')} onChange={(e) => onChange('citizenship', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))} />
+          <Input type="text" value={node.citizenship.join(', ')} onChange={(e) => onChange('citizenship', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))} />
         </Field>
       )}
-      <div style={{ marginTop: '16px', padding: '10px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '12px', fontSize: '11px', color: '#86868b' }}>
+      <div className="mt-4 rounded-xl bg-black/[0.03] dark:bg-white/5 p-3 text-[11px] text-gray-400 dark:text-gray-500">
         ID: {node.id}<br />Type: {node.type}<br />Frozen: {node.frozen ? 'Yes' : 'No'}
         {node.computedEtr != null && <><br />Computed ETR: {(node.computedEtr * 100).toFixed(2)}%</>}
         {node.computedCitKZT != null && <><br />Computed CIT (KZT): {node.computedCitKZT.toLocaleString('ru-RU')}</>}
@@ -161,25 +158,36 @@ function FlowEditor({ flow, onChange }: { flow: FlowDTO; onChange: (field: strin
   return (
     <>
       <Field label="Flow Type">
-        <select style={selectStyle} value={flow.flowType} onChange={(e) => onChange('flowType', e.target.value)}>
-          {FLOW_TYPE_OPTIONS.map((ft) => <option key={ft} value={ft}>{ft}</option>)}
-        </select>
+        <Select value={flow.flowType} onValueChange={(v) => onChange('flowType', v)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {FLOW_TYPE_OPTIONS.map((ft) => <SelectItem key={ft} value={ft}>{ft}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </Field>
-      <Field label="Gross Amount"><NumericInput style={inputStyle} value={flow.grossAmount} onChange={(v) => onChange('grossAmount', v)} /></Field>
+      <Field label="Gross Amount"><NumericInput value={flow.grossAmount} onChange={(v) => onChange('grossAmount', v)} /></Field>
       <Field label="Currency">
-        <select style={selectStyle} value={flow.currency} onChange={(e) => onChange('currency', e.target.value)}>
-          {CURRENCY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        <Select value={flow.currency} onValueChange={(v) => onChange('currency', v)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {CURRENCY_OPTIONS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </Field>
-      <Field label="WHT Rate"><NumericInput style={inputStyle} value={flow.whtRate} onChange={(v) => onChange('whtRate', v)} step="0.01" min={0} max={1} /></Field>
+      <Field label="WHT Rate"><NumericInput value={flow.whtRate} onChange={(v) => onChange('whtRate', v)} step="0.01" min={0} max={1} /></Field>
       <Field label="Payment Method">
-        <select style={selectStyle} value={flow.paymentMethod} onChange={(e) => onChange('paymentMethod', e.target.value)}>
-          <option value="bank">Bank</option><option value="cash">Cash</option><option value="crypto">Crypto</option>
-        </select>
+        <Select value={flow.paymentMethod} onValueChange={(v) => onChange('paymentMethod', v)}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="bank">Bank</SelectItem>
+            <SelectItem value="cash">Cash</SelectItem>
+            <SelectItem value="crypto">Crypto</SelectItem>
+          </SelectContent>
+        </Select>
       </Field>
-      <div style={{ marginTop: '16px', padding: '10px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '12px', fontSize: '11px', color: '#86868b' }}>
+      <div className="mt-4 rounded-xl bg-black/[0.03] dark:bg-white/5 p-3 text-[11px] text-gray-400 dark:text-gray-500">
         ID: {flow.id}<br />From: {flow.fromId} → To: {flow.toId}<br />Status: {flow.status}
-        {flow.compliance?.exceeded && <><br /><span style={{ color: '#ff3b30', fontWeight: 500 }}>Violation: {flow.compliance.violationType}</span></>}
+        {flow.compliance?.exceeded && <><br /><span className="font-medium text-red-500">Violation: {flow.compliance.violationType}</span></>}
       </div>
     </>
   );
@@ -188,9 +196,9 @@ function FlowEditor({ flow, onChange }: { flow: FlowDTO; onChange: (field: strin
 function OwnershipEditor({ edge, onChange }: { edge: OwnershipEdge; onChange: (field: string, value: unknown) => void }) {
   return (
     <>
-      <Field label="Ownership (%)"><NumericInput style={inputStyle} value={edge.percent} onChange={(v) => onChange('percent', v)} min={0} max={100} step="0.01" /></Field>
-      <Field label="Manual Adjustment"><NumericInput style={inputStyle} value={edge.manualAdjustment} onChange={(v) => onChange('manualAdjustment', v)} step="0.01" /></Field>
-      <div style={{ marginTop: '16px', padding: '10px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '12px', fontSize: '11px', color: '#86868b' }}>
+      <Field label="Ownership (%)"><NumericInput value={edge.percent} onChange={(v) => onChange('percent', v)} min={0} max={100} step="0.01" /></Field>
+      <Field label="Manual Adjustment"><NumericInput value={edge.manualAdjustment} onChange={(v) => onChange('manualAdjustment', v)} step="0.01" /></Field>
+      <div className="mt-4 rounded-xl bg-black/[0.03] dark:bg-white/5 p-3 text-[11px] text-gray-400 dark:text-gray-500">
         ID: {edge.id}<br />Parent: {edge.fromId}<br />Subsidiary: {edge.toId}
       </div>
     </>
@@ -200,16 +208,16 @@ function OwnershipEditor({ edge, onChange }: { edge: OwnershipEdge; onChange: (f
 function ZoneEditor({ zone, onChange }: { zone: Zone; onChange: (field: string, value: unknown) => void }) {
   return (
     <>
-      <Field label="Name"><input style={inputStyle} type="text" value={zone.name || ''} onChange={(e) => onChange('name', e.target.value)} /></Field>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-        <Field label="Width"><NumericInput style={inputStyle} value={zone.w || 0} onChange={(v) => onChange('w', v || 200)} /></Field>
-        <Field label="Height"><NumericInput style={inputStyle} value={zone.h || 0} onChange={(v) => onChange('h', v || 400)} /></Field>
+      <Field label="Name"><Input type="text" value={zone.name || ''} onChange={(e) => onChange('name', e.target.value)} /></Field>
+      <div className="grid grid-cols-2 gap-2.5">
+        <Field label="Width"><NumericInput value={zone.w || 0} onChange={(v) => onChange('w', v || 200)} /></Field>
+        <Field label="Height"><NumericInput value={zone.h || 0} onChange={(v) => onChange('h', v || 400)} /></Field>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-        <Field label="X"><NumericInput style={inputStyle} value={zone.x || 0} onChange={(v) => onChange('x', v)} /></Field>
-        <Field label="Y"><NumericInput style={inputStyle} value={zone.y || 0} onChange={(v) => onChange('y', v)} /></Field>
+      <div className="grid grid-cols-2 gap-2.5">
+        <Field label="X"><NumericInput value={zone.x || 0} onChange={(v) => onChange('x', v)} /></Field>
+        <Field label="Y"><NumericInput value={zone.y || 0} onChange={(v) => onChange('y', v)} /></Field>
       </div>
-      <div style={{ marginTop: '16px', padding: '10px 12px', background: 'rgba(0,0,0,0.03)', borderRadius: '12px', fontSize: '11px', color: '#86868b' }}>
+      <div className="mt-4 rounded-xl bg-black/[0.03] dark:bg-white/5 p-3 text-[11px] text-gray-400 dark:text-gray-500">
         ID: {zone.id}<br />Jurisdiction: {zone.jurisdiction}<br />Currency: {zone.currency}
       </div>
     </>
@@ -218,8 +226,8 @@ function ZoneEditor({ zone, onChange }: { zone: Zone; onChange: (field: string, 
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: '14px' }}>
-      <label style={labelStyle}>{label}</label>
+    <div className="mb-3.5">
+      <Label>{label}</Label>
       {children}
     </div>
   );
@@ -245,19 +253,6 @@ export function EditorModal() {
 
   const [draft, setDraft] = useState<Record<string, unknown> | null>(null);
   const draftInitRef = useRef<string | null>(null);
-
-  // Spring animation for modal entrance
-  const springStyles = useSpring({
-    from: { opacity: 0, transform: 'scale(0.95) translateY(8px)' },
-    to: { opacity: 1, transform: 'scale(1) translateY(0px)' },
-    config: config.stiff,
-  });
-
-  const backdropSpring = useSpring({
-    from: { opacity: 0 },
-    to: { opacity: 1 },
-    config: { tension: 300, friction: 30 },
-  });
 
   if (!selection || !project) return null;
 
@@ -332,7 +327,7 @@ export function EditorModal() {
     draftInitRef.current = null;
   };
 
-  const handleCancel = () => {
+  const handleClose = () => {
     setSelection(null);
     setNodeEditing(false);
     setDraft(null);
@@ -352,43 +347,25 @@ export function EditorModal() {
     ? `${selection.ids.length} ${tr('nodesSelected')}`
     : tr(ENTITY_LABEL_KEYS[selection.type] as Parameters<typeof tr>[0]) ?? selection.type;
 
+  const isOpen = true;
+
   return (
-    <animated.div
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/20 backdrop-blur-sm"
-      style={backdropSpring}
-      onClick={handleCancel}
-    >
-      <animated.div
-        className="no-canvas-events flex max-h-[80vh] w-[440px] flex-col overflow-hidden rounded-3xl bg-white/72 shadow-2xl backdrop-blur-[40px] backdrop-saturate-[180%] border border-white/25"
-        style={springStyles}
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
+      <DialogContent
+        className="no-canvas-events"
         onPointerDown={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '20px 24px 16px',
-        }}>
-          <span style={{ fontWeight: 600, fontSize: '18px', letterSpacing: '-0.02em', color: '#1d1d1f' }}>{label}</span>
-          <button onClick={handleCancel} style={{
-            background: 'rgba(0,0,0,0.05)', border: 'none', fontSize: '14px', cursor: 'pointer',
-            color: '#86868b', width: '28px', height: '28px', borderRadius: '50%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.1)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
-          >
-            {'\u00d7'}
-          </button>
-        </div>
+        <DialogHeader>
+          <DialogTitle>{label}</DialogTitle>
+        </DialogHeader>
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 16px' }}>
+        <div className="flex-1 overflow-y-auto px-6 pb-4">
           {isMultiNode ? (
-            <div style={{ padding: '14px 16px', background: 'rgba(0,122,255,0.06)', borderRadius: '16px', fontSize: '13px', color: '#007aff' }}>
+            <div className="rounded-2xl bg-blue-500/6 p-3.5 text-[13px] text-blue-600 dark:text-blue-400">
               <strong>{selection.ids.length} nodes</strong> selected.
               <br /><br />
-              Drag any selected node to move all. Press <kbd style={{ padding: '2px 6px', background: 'rgba(0,122,255,0.1)', borderRadius: '6px', fontSize: '11px', fontFamily: 'inherit' }}>Delete</kbd> to remove all.
+              Drag any selected node to move all. Press <kbd className="rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[11px]">Delete</kbd> to remove all.
             </div>
           ) : currentDraft ? (
             <>
@@ -400,34 +377,19 @@ export function EditorModal() {
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '16px 24px', borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: '8px' }}>
-          <button onClick={handleDelete} data-testid="btn-delete-entity" style={{
-            flex: '0 0 auto', padding: '10px 16px', background: 'rgba(255,59,48,0.08)', color: '#ff3b30',
-            fontWeight: 600, fontSize: '13px', border: 'none', borderRadius: '12px', cursor: 'pointer',
-            transition: 'background 0.15s',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,59,48,0.15)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,59,48,0.08)')}
-          >{tr('delete')}</button>
-          <div style={{ flex: 1 }} />
-          <button onClick={handleCancel} style={{
-            padding: '10px 16px', background: 'rgba(0,0,0,0.05)', color: '#1d1d1f', fontWeight: 500,
-            fontSize: '13px', border: 'none', borderRadius: '12px', cursor: 'pointer',
-            transition: 'background 0.15s',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.1)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
-          >{tr('cancel')}</button>
-          <button onClick={handleSave} data-testid="btn-save-entity" style={{
-            padding: '10px 16px', background: '#007aff', color: '#fff', fontWeight: 600,
-            fontSize: '13px', border: 'none', borderRadius: '12px', cursor: 'pointer',
-            transition: 'background 0.15s, transform 0.1s',
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = '#0071e3')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = '#007aff')}
-          >{tr('save')}</button>
-        </div>
-      </animated.div>
-    </animated.div>
+        <DialogFooter>
+          <Button variant="destructive" onClick={handleDelete} data-testid="btn-delete-entity">
+            {tr('delete')}
+          </Button>
+          <div className="flex-1" />
+          <Button variant="secondary" onClick={handleClose}>
+            {tr('cancel')}
+          </Button>
+          <Button onClick={handleSave} data-testid="btn-save-entity">
+            {tr('save')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

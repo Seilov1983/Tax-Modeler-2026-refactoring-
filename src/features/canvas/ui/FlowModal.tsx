@@ -3,24 +3,41 @@
 /**
  * FlowModal — Apple Liquid Glass dialog for editing Flow properties.
  *
- * Uses React Hook Form for local draft state, preventing
- * Jotai re-renders on every keystroke. Only commits to Jotai on Save.
+ * Now uses shadcn/ui Dialog, Input, Select, Label, Button, Badge primitives.
+ * Spring animations replaced with Radix Dialog + Tailwind animate utilities.
  *
- * Liquid Glass design: frosted glass backdrop, spring mount animation.
+ * React Hook Form for local draft state remains intact.
+ * All Jotai state mutations and useTranslation hook preserved.
  * Full dark mode support via Tailwind `dark:` variants.
- * All text strings use the i18n `useTranslation` hook.
  */
 
 import { useAtom, useSetAtom } from 'jotai';
 import { useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
-import { useSpring, animated, config } from '@react-spring/web';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { deleteFlowAtom } from '@features/canvas/model/graph-actions-atom';
 import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
 import { useTranslation } from '@shared/lib/i18n';
 import type { FlowType, CurrencyCode } from '@shared/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const FLOW_TYPES: FlowType[] = [
   'Dividends', 'Royalties', 'Interest', 'Services', 'Salary', 'Goods', 'Equipment',
@@ -38,9 +55,6 @@ interface FlowFormData {
   paymentMethod: 'bank' | 'cash' | 'crypto';
   dealTag: string;
 }
-
-const inputClasses =
-  'w-full rounded-xl border border-black/8 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 transition-all';
 
 export function FlowModal() {
   const [selection, setSelection] = useAtom(selectionAtom);
@@ -82,19 +96,6 @@ export function FlowModal() {
     }
   }, [flow?.id, reset]);
 
-  // Spring animation for modal entrance
-  const springStyles = useSpring({
-    from: { opacity: 0, transform: 'scale(0.95) translateY(8px)' },
-    to: { opacity: 1, transform: 'scale(1) translateY(0px)' },
-    config: config.stiff,
-  });
-
-  const backdropSpring = useSpring({
-    from: { opacity: 0 },
-    to: { opacity: 1 },
-    config: { tension: 300, friction: 30 },
-  });
-
   const onSubmit = useCallback(
     (data: FlowFormData) => {
       if (!flow || !selection || selection.type !== 'flow') return;
@@ -118,7 +119,7 @@ export function FlowModal() {
     deleteFlow(flow.id);
   }, [flow, deleteFlow]);
 
-  const handleCancel = useCallback(() => {
+  const handleClose = useCallback(() => {
     setSelection(null);
   }, [setSelection]);
 
@@ -127,39 +128,28 @@ export function FlowModal() {
   const fromNode = project?.nodes.find((n) => n.id === flow.fromId);
   const toNode = project?.nodes.find((n) => n.id === flow.toId);
 
+  const isOpen = true;
+  const inputClasses =
+    'w-full rounded-xl border border-black/8 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 transition-all';
+
   return (
-    <animated.div
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/20 backdrop-blur-sm"
-      style={backdropSpring}
-      onClick={handleCancel}
-    >
-      <animated.div
-        className="no-canvas-events flex max-h-[80vh] w-[440px] flex-col overflow-hidden rounded-3xl bg-white/72 dark:bg-black/50 shadow-2xl backdrop-blur-[40px] backdrop-saturate-[180%] border border-white/25 dark:border-white/10"
-        style={springStyles}
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
+      <DialogContent
+        className="no-canvas-events"
         onPointerDown={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-black/5 dark:border-white/5">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">{t('editFlow')}</h2>
-            <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
-              {fromNode?.name ?? flow.fromId} &rarr; {toNode?.name ?? flow.toId}
-            </p>
-          </div>
-          <button
-            onClick={handleCancel}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/5 dark:bg-white/10 text-sm text-gray-500 dark:text-gray-400 hover:bg-black/10 dark:hover:bg-white/20 cursor-pointer transition-colors"
-          >
-            {'\u00d7'}
-          </button>
-        </div>
+        <DialogHeader>
+          <DialogTitle>{t('editFlow')}</DialogTitle>
+          <DialogDescription>
+            {fromNode?.name ?? flow.fromId} &rarr; {toNode?.name ?? flow.toId}
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-1 flex-col overflow-y-auto">
-          <div className="flex-1 space-y-4 px-6 py-5">
+          <div className="flex-1 space-y-4 px-6 py-4">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wide">{t('flowType')}</label>
+              <Label>{t('flowType')}</Label>
               <select {...register('flowType')} className={inputClasses}>
                 {FLOW_TYPES.map((ft) => <option key={ft} value={ft}>{ft}</option>)}
               </select>
@@ -167,26 +157,26 @@ export function FlowModal() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wide">{t('grossAmount')}</label>
-              <input type="number" step="0.01" min="0" {...register('grossAmount')} className={inputClasses} />
+              <Label>{t('grossAmount')}</Label>
+              <Input type="number" step="0.01" min="0" {...register('grossAmount')} />
               {errors.grossAmount && <p className="mt-1 text-xs text-red-500">{errors.grossAmount.message}</p>}
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wide">{t('currency')}</label>
+              <Label>{t('currency')}</Label>
               <select {...register('currency')} className={inputClasses}>
                 {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wide">{t('whtRate')}</label>
-              <input type="number" step="0.01" min="0" max="1" {...register('whtRate')} className={inputClasses} />
+              <Label>{t('whtRate')}</Label>
+              <Input type="number" step="0.01" min="0" max="1" {...register('whtRate')} />
               {errors.whtRate && <p className="mt-1 text-xs text-red-500">{errors.whtRate.message}</p>}
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wide">{t('paymentMethod')}</label>
+              <Label>{t('paymentMethod')}</Label>
               <select {...register('paymentMethod')} className={inputClasses}>
                 <option value="bank">{t('bank')}</option>
                 <option value="cash">{t('cash')}</option>
@@ -195,8 +185,8 @@ export function FlowModal() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-gray-500 dark:text-gray-400 tracking-wide">{t('dealTag')}</label>
-              <input type="text" {...register('dealTag')} placeholder={t('optionalTag')} className={inputClasses} />
+              <Label>{t('dealTag')}</Label>
+              <Input type="text" {...register('dealTag')} placeholder={t('optionalTag')} />
             </div>
 
             <div className="rounded-2xl bg-black/[0.03] dark:bg-white/5 p-3 text-xs text-gray-400 dark:text-gray-500">
@@ -209,20 +199,20 @@ export function FlowModal() {
           </div>
 
           {/* Footer */}
-          <div className="flex gap-2 border-t border-black/5 dark:border-white/5 px-6 py-4">
-            <button type="button" onClick={handleDelete} className="rounded-xl bg-red-500/8 dark:bg-red-500/15 px-4 py-2.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/15 dark:hover:bg-red-500/25 cursor-pointer transition-colors">
+          <DialogFooter>
+            <Button type="button" variant="destructive" onClick={handleDelete}>
               {t('delete')}
-            </button>
+            </Button>
             <div className="flex-1" />
-            <button type="button" onClick={handleCancel} className="rounded-xl bg-black/5 dark:bg-white/10 px-4 py-2.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-black/10 dark:hover:bg-white/20 cursor-pointer transition-colors">
+            <Button type="button" variant="secondary" onClick={handleClose}>
               {t('cancel')}
-            </button>
-            <button type="submit" disabled={!isDirty} className="rounded-xl bg-blue-500 px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-40 cursor-pointer transition-all active:scale-[0.97]">
+            </Button>
+            <Button type="submit" disabled={!isDirty}>
               {t('save')}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </animated.div>
-    </animated.div>
+      </DialogContent>
+    </Dialog>
   );
 }
