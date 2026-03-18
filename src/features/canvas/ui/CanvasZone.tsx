@@ -294,8 +294,8 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     const scaleY = node.scaleY();
 
     // Calculate absolute dimensions from scale, enforce minimums
-    const newW = Math.max(20, Math.round(node.width() * scaleX));
-    const newH = Math.max(20, Math.round(node.height() * scaleY));
+    const newW = Math.max(100, Math.round(node.width() * scaleX));
+    const newH = Math.max(100, Math.round(node.height() * scaleY));
 
     // CRITICAL: Reset scale to 1 immediately to prevent text/UI distortion
     node.scaleX(1);
@@ -472,8 +472,8 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
             'middle-left', 'middle-right', 'top-center', 'bottom-center',
           ]}
           boundBoxFunc={(oldBox, newBox) => {
-            // Enforce minimum dimensions (low floor — defaults only apply on creation)
-            if (newBox.width < 20 || newBox.height < 20) {
+            // Enforce minimum 100px to prevent resize inversion / unusable zones
+            if (newBox.width < 100 || newBox.height < 100) {
               return oldBox;
             }
             return newBox;

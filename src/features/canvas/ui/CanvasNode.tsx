@@ -25,7 +25,7 @@ import type { PrimitiveAtom } from 'jotai';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { NodeDTO, Zone } from '@shared/types';
-import { selectionAtom } from '@features/entity-editor/model/atoms';
+import { selectionAtom, nodeEditingAtom } from '@features/entity-editor/model/atoms';
 import { draftConnectionAtom, commitDraftConnectionAtom } from '../model/draft-connection-atom';
 import { moveNodesAtom, reparentNodeAtom, flagNodeErrorAtom } from '../model/graph-actions-atom';
 import { showNotificationAtom } from '../model/notification-atom';
@@ -60,6 +60,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const node = useAtomValue(nodeAtom);
   const selection = useAtomValue(selectionAtom);
   const setSelection = useSetAtom(selectionAtom);
+  const setNodeEditing = useSetAtom(nodeEditingAtom);
   const setDraft = useSetAtom(draftConnectionAtom);
   const commitDraft = useSetAtom(commitDraftConnectionAtom);
   const moveNodes = useSetAtom(moveNodesAtom);
@@ -70,6 +71,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
 
   const groupRef = useRef<Konva.Group>(null);
   const hasDragged = useRef(false);
+  const isDblClickGuard = useRef(false);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
 
@@ -96,7 +98,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   // ─── Drag handlers ────────────────────────────────────────────────────
   const handleDragStart = useCallback(
     (e: KonvaEventObject<DragEvent>) => {
-      if (isTxa) {
+      if (isTxa || isDblClickGuard.current) {
         e.target.stopDrag();
         return;
       }
@@ -237,7 +239,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
     [node.id, node.x, node.y, node.w, node.h, moveNodes, validateAndReparentNode],
   );
 
-  // ─── Click to select ──────────────────────────────────────────────────
+  // ─── Click to select (single click only selects — does NOT open editor) ──
   const handleClick = useCallback(
     (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
       if (hasDragged.current) return;
@@ -256,10 +258,40 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
           setSelection({ type: 'node', ids: [node.id] });
         }
       } else {
-        setSelection({ type: 'node', ids: [node.id] });
+        // Single click: only select without opening editor
+        // (editor opens on double-click)
+        const currentSel = selectionRef.current;
+        const alreadySelected = currentSel?.type === 'node' && currentSel.ids.length === 1 && currentSel.ids[0] === node.id;
+        if (!alreadySelected) {
+          setSelection({ type: 'node', ids: [node.id] });
+        }
       }
     },
     [node.id, setSelection],
+  );
+
+  // ─── Double-click to open editor ──────────────────────────────────────
+  const handleDblClick = useCallback(
+    (e: KonvaEventObject<MouseEvent>) => {
+      e.cancelBubble = true;
+      e.evt.stopPropagation();
+
+      // Stop any in-flight drag
+      isDblClickGuard.current = true;
+      const group = groupRef.current;
+      if (group) {
+        group.stopDrag();
+        group.position({ x: node.x, y: node.y });
+        group.getLayer()?.batchDraw();
+      }
+
+      // Select node + open the EditorModal
+      setSelection({ type: 'node', ids: [node.id] });
+      setNodeEditing(true);
+
+      setTimeout(() => { isDblClickGuard.current = false; }, 0);
+    },
+    [node.id, node.x, node.y, setSelection, setNodeEditing],
   );
 
   // ─── Flow port (right edge, blue) ─────────────────────────────────────
@@ -309,6 +341,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       onDragEnd={handleDragEnd}
       onClick={handleClick}
       onTap={handleClick}
+      onDblClick={handleDblClick}
       onPointerUp={handleNodePointerUp}
       scaleX={entranceSpring.scaleX.get()}
       scaleY={entranceSpring.scaleY.get()}

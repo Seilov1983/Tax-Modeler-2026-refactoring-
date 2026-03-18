@@ -1,7 +1,12 @@
 /**
  * Simple i18n dictionary for static UI strings.
  * Supports English and Russian.
+ *
+ * useTranslation() hook reads the current language from settingsAtom.
  */
+
+import { useAtomValue } from 'jotai';
+import { settingsAtom } from '@features/settings/model/settings-atom';
 
 export type Language = 'en' | 'ru';
 
@@ -42,12 +47,60 @@ const dictionary = {
   substanceRequired: { en: 'Substance Required', ru: '\u0422\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u0435 substance' },
   save: { en: 'Save', ru: '\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c' },
   cancel: { en: 'Cancel', ru: '\u041e\u0442\u043c\u0435\u043d\u0430' },
+
+  // EditorModal
+  editNode: { en: 'Edit Node', ru: '\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0443\u0437\u043b\u0430' },
+  editFlow: { en: 'Edit Flow', ru: '\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u043f\u043e\u0442\u043e\u043a\u0430' },
+  editOwnership: { en: 'Edit Ownership', ru: '\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0432\u043b\u0430\u0434\u0435\u043d\u0438\u044f' },
+  editZone: { en: 'Edit Zone', ru: '\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0437\u043e\u043d\u044b' },
+  delete: { en: 'Delete', ru: '\u0423\u0434\u0430\u043b\u0438\u0442\u044c' },
+  zone: { en: 'Zone', ru: '\u0417\u043e\u043d\u0430' },
+  taxRegime: { en: 'Tax Regime', ru: '\u041d\u0430\u043b\u043e\u0433\u043e\u0432\u044b\u0439 \u0440\u0435\u0436\u0438\u043c' },
+  annualIncome: { en: 'Annual Income', ru: '\u0413\u043e\u0434\u043e\u0432\u043e\u0439 \u0434\u043e\u0445\u043e\u0434' },
+  etrManual: { en: 'ETR (manual)', ru: 'ETR (\u0432\u0440\u0443\u0447\u043d\u0443\u044e)' },
+  citizenship: { en: 'Citizenship', ru: '\u0413\u0440\u0430\u0436\u0434\u0430\u043d\u0441\u0442\u0432\u043e' },
+  nodesSelected: { en: 'nodes selected', ru: '\u0443\u0437\u043b\u043e\u0432 \u0432\u044b\u0431\u0440\u0430\u043d\u043e' },
+  width: { en: 'Width', ru: '\u0428\u0438\u0440\u0438\u043d\u0430' },
+  height: { en: 'Height', ru: '\u0412\u044b\u0441\u043e\u0442\u0430' },
+  ownershipPercent: { en: 'Ownership (%)', ru: '\u0414\u043e\u043b\u044f \u0432\u043b\u0430\u0434\u0435\u043d\u0438\u044f (%)' },
+  manualAdjustment: { en: 'Manual Adjustment', ru: '\u0420\u0443\u0447\u043d\u0430\u044f \u043a\u043e\u0440\u0440\u0435\u043a\u0442\u0438\u0440\u043e\u0432\u043a\u0430' },
+  locatedIn: { en: 'Located in', ru: '\u0420\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d \u0432' },
+  noZone: { en: 'No zone (drag node into a regime)', ru: '\u041d\u0435\u0442 \u0437\u043e\u043d\u044b (\u043f\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0432 \u0440\u0435\u0436\u0438\u043c)' },
+
+  // FlowModal
+  flowType: { en: 'Flow Type', ru: '\u0422\u0438\u043f \u043f\u043e\u0442\u043e\u043a\u0430' },
+  grossAmount: { en: 'Gross Amount', ru: '\u0421\u0443\u043c\u043c\u0430 \u0431\u0440\u0443\u0442\u0442\u043e' },
+  currency: { en: 'Currency', ru: '\u0412\u0430\u043b\u044e\u0442\u0430' },
+  whtRate: { en: 'WHT Rate (0-1)', ru: '\u0421\u0442\u0430\u0432\u043a\u0430 WHT (0-1)' },
+  paymentMethod: { en: 'Payment Method', ru: '\u0421\u043f\u043e\u0441\u043e\u0431 \u043e\u043f\u043b\u0430\u0442\u044b' },
+  dealTag: { en: 'Deal Tag', ru: '\u0422\u0435\u0433 \u0441\u0434\u0435\u043b\u043a\u0438' },
+  optionalTag: { en: 'Optional tag', ru: '\u041d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u0439 \u0442\u0435\u0433' },
+  bank: { en: 'Bank', ru: '\u0411\u0430\u043d\u043a' },
+  cash: { en: 'Cash', ru: '\u041d\u0430\u043b\u0438\u0447\u043d\u044b\u0435' },
+  crypto: { en: 'Crypto', ru: '\u041a\u0440\u0438\u043f\u0442\u043e' },
+
+  // Notifications
+  invalidPlacement: { en: 'Invalid placement: Companies and Persons must reside within a valid Tax Regime.', ru: '\u041d\u0435\u0432\u0435\u0440\u043d\u043e\u0435 \u0440\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u0438\u0435: \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0438 \u0438 \u043b\u0438\u0446\u0430 \u0434\u043e\u043b\u0436\u043d\u044b \u043d\u0430\u0445\u043e\u0434\u0438\u0442\u044c\u0441\u044f \u0432 \u043d\u0430\u043b\u043e\u0433\u043e\u0432\u043e\u043c \u0440\u0435\u0436\u0438\u043c\u0435.' },
+  invalidZonePlacement: { en: 'Invalid placement: Object must reside within its designated parent zone', ru: '\u041d\u0435\u0432\u0435\u0440\u043d\u043e\u0435 \u0440\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u0438\u0435: \u043e\u0431\u044a\u0435\u043a\u0442 \u0434\u043e\u043b\u0436\u0435\u043d \u043d\u0430\u0445\u043e\u0434\u0438\u0442\u044c\u0441\u044f \u0432 \u0440\u043e\u0434\u0438\u0442\u0435\u043b\u044c\u0441\u043a\u043e\u0439 \u0437\u043e\u043d\u0435' },
 } as const;
 
 type DictKey = keyof typeof dictionary;
 
 export function t(key: DictKey, lang: Language): string {
   return dictionary[key]?.[lang] ?? dictionary[key]?.en ?? key;
+}
+
+/**
+ * useTranslation — React hook that reads the current language from settingsAtom
+ * and returns a bound `t()` function + the current language.
+ */
+export function useTranslation() {
+  const settings = useAtomValue(settingsAtom);
+  const lang: Language = settings.language || 'en';
+  return {
+    t: (key: DictKey) => t(key, lang),
+    lang,
+  };
 }
 
 // ─── Master Data Localization ─────────────────────────────────────────────────
