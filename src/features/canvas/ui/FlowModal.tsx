@@ -71,6 +71,8 @@ export function FlowModal() {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isDirty },
   } = useForm<FlowFormData>({
     defaultValues: flow ? {
@@ -129,8 +131,6 @@ export function FlowModal() {
   const toNode = project?.nodes.find((n) => n.id === flow.toId);
 
   const isOpen = true;
-  const inputClasses =
-    'w-full rounded-xl border border-black/8 dark:border-white/10 bg-white/80 dark:bg-white/5 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 transition-all';
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
@@ -150,9 +150,17 @@ export function FlowModal() {
           <div className="flex-1 space-y-4 px-6 py-4">
             <div>
               <Label>{t('flowType')}</Label>
-              <select {...register('flowType')} className={inputClasses}>
-                {FLOW_TYPES.map((ft) => <option key={ft} value={ft}>{ft}</option>)}
-              </select>
+              <Select
+                value={watch('flowType')}
+                onValueChange={(v) => setValue('flowType', v as FlowType, { shouldDirty: true })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FLOW_TYPES.map((ft) => <SelectItem key={ft} value={ft}>{ft}</SelectItem>)}
+                </SelectContent>
+              </Select>
               {errors.flowType && <p className="mt-1 text-xs text-red-500">{errors.flowType.message}</p>}
             </div>
 
@@ -164,9 +172,17 @@ export function FlowModal() {
 
             <div>
               <Label>{t('currency')}</Label>
-              <select {...register('currency')} className={inputClasses}>
-                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <Select
+                value={watch('currency')}
+                onValueChange={(v) => setValue('currency', v as CurrencyCode, { shouldDirty: true })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
@@ -177,11 +193,19 @@ export function FlowModal() {
 
             <div>
               <Label>{t('paymentMethod')}</Label>
-              <select {...register('paymentMethod')} className={inputClasses}>
-                <option value="bank">{t('bank')}</option>
-                <option value="cash">{t('cash')}</option>
-                <option value="crypto">{t('crypto')}</option>
-              </select>
+              <Select
+                value={watch('paymentMethod')}
+                onValueChange={(v) => setValue('paymentMethod', v as 'bank' | 'cash' | 'crypto', { shouldDirty: true })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bank">{t('bank')}</SelectItem>
+                  <SelectItem value="cash">{t('cash')}</SelectItem>
+                  <SelectItem value="crypto">{t('crypto')}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>

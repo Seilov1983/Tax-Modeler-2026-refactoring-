@@ -5,6 +5,9 @@
  *
  * Editable fields: name, citRate, vatRate (wht), substanceRequired.
  * Saves directly to masterDataAtom (atomWithStorage → localStorage).
+ *
+ * Presentation layer only — Jotai state mutations are untouched.
+ * Spring animations preserved. Inline styles replaced with Tailwind + shadcn/ui.
  */
 
 import { useState, useCallback } from 'react';
@@ -15,6 +18,10 @@ import { masterDataAtom } from '../model/atoms';
 import { settingsAtom } from '@features/settings';
 import { t } from '@shared/lib/i18n';
 import type { TaxRegime } from '@shared/types';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 
 interface EditRegimeModalProps {
   regime: TaxRegime;
@@ -57,213 +64,94 @@ export function EditRegimeModal({ regime, onClose }: EditRegimeModalProps) {
 
   return createPortal(
     <animated.div
-      style={{
-        ...backdropSpring,
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 10000,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(0, 0, 0, 0.20)',
-        backdropFilter: 'blur(4px)',
-        WebkitBackdropFilter: 'blur(4px)',
-      }}
+      style={backdropSpring}
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/30 backdrop-blur-sm"
       onClick={onClose}
     >
       <animated.div
-        style={{
-          ...modalSpring,
-          width: '380px',
-          maxWidth: 'calc(100vw - 32px)',
-          borderRadius: '24px',
-          background: 'rgba(255, 255, 255, 0.72)',
-          backdropFilter: 'blur(20px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-          border: '1px solid rgba(255, 255, 255, 0.25)',
-          boxShadow: '0 24px 80px rgba(0, 0, 0, 0.12), 0 8px 32px rgba(0, 0, 0, 0.06)',
-          display: 'flex',
-          flexDirection: 'column' as const,
-          fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif",
-        }}
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        style={modalSpring}
+        className="flex w-[380px] max-w-[calc(100vw-32px)] flex-col rounded-3xl border border-white/25 bg-white/72 shadow-lg backdrop-blur-[40px] backdrop-saturate-[180%] dark:border-white/10 dark:bg-black/60"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '20px 24px 16px',
-            borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
-          }}
-        >
-          <h2 style={{ margin: 0, fontSize: '17px', fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.02em' }}>
+        <div className="flex items-center justify-between border-b border-black/5 px-6 py-5 dark:border-white/5">
+          <h2 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-gray-100">
             {t('editRegime', lang)}
           </h2>
           <button
             onClick={onClose}
-            style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '50%',
-              border: 'none',
-              background: 'rgba(0, 0, 0, 0.06)',
-              color: '#86868b',
-              fontSize: '14px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-black/5 text-sm text-gray-500 transition-colors hover:bg-black/10 hover:text-gray-700 dark:bg-white/10 dark:text-gray-400 dark:hover:bg-white/20"
+            aria-label="Close"
           >
-            {'\u2715'}
+            &#215;
           </button>
         </div>
 
         {/* Body */}
-        <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div className="flex flex-col gap-5 px-6 py-5">
           {/* Name */}
-          <div>
-            <label style={labelStyle}>{t('name', lang)}</label>
-            <input
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="regime-name">{t('name', lang)}</Label>
+            <Input
+              id="regime-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              style={inputStyle}
             />
           </div>
 
           {/* CIT Rate */}
-          <div>
-            <label style={labelStyle}>{t('citRate', lang)}</label>
-            <input
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="regime-cit">{t('citRate', lang)}</Label>
+            <Input
+              id="regime-cit"
               type="number"
               value={cit}
               onChange={(e) => setCit(e.target.value)}
               min="0"
               max="100"
               step="0.5"
-              style={inputStyle}
             />
           </div>
 
           {/* VAT / WHT Rate */}
-          <div>
-            <label style={labelStyle}>{t('vatRate', lang)}</label>
-            <input
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="regime-wht">{t('vatRate', lang)}</Label>
+            <Input
+              id="regime-wht"
               type="number"
               value={wht}
               onChange={(e) => setWht(e.target.value)}
               min="0"
               max="100"
               step="0.5"
-              style={inputStyle}
             />
           </div>
 
-          {/* Substance Required — iOS toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <label style={{ ...labelStyle, marginBottom: 0 }}>{t('substanceRequired', lang)}</label>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={substance}
-              onClick={() => setSubstance(!substance)}
-              style={{
-                position: 'relative',
-                width: '44px',
-                height: '24px',
-                borderRadius: '12px',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                flexShrink: 0,
-                background: substance ? '#34c759' : 'rgba(0, 0, 0, 0.12)',
-                transition: 'background 0.2s',
-                boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.06)',
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '2px',
-                  left: substance ? '22px' : '2px',
-                  width: '20px',
-                  height: '20px',
-                  borderRadius: '10px',
-                  background: '#ffffff',
-                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
-                  transition: 'left 0.2s',
-                }}
-              />
-            </button>
+          {/* Substance Required */}
+          <div className="flex items-center justify-between gap-4">
+            <Label htmlFor="regime-substance" className="mb-0 cursor-pointer">
+              {t('substanceRequired', lang)}
+            </Label>
+            <Switch
+              id="regime-substance"
+              checked={substance}
+              onCheckedChange={setSubstance}
+            />
           </div>
         </div>
 
         {/* Footer */}
-        <div style={{
-          display: 'flex',
-          gap: '10px',
-          padding: '0 24px 24px',
-          justifyContent: 'flex-end',
-        }}>
-          <button
-            onClick={onClose}
-            style={{
-              padding: '10px 20px',
-              borderRadius: '12px',
-              border: '1px solid rgba(0, 0, 0, 0.08)',
-              background: 'rgba(255, 255, 255, 0.6)',
-              color: '#1d1d1f',
-              fontSize: '14px',
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-          >
+        <div className="flex justify-end gap-2.5 px-6 pb-6">
+          <Button variant="outline" onClick={onClose}>
             {t('cancel', lang)}
-          </button>
-          <button
-            onClick={handleSave}
-            style={{
-              padding: '10px 24px',
-              borderRadius: '12px',
-              border: 'none',
-              background: '#007aff',
-              color: '#ffffff',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
+          </Button>
+          <Button onClick={handleSave}>
             {t('save', lang)}
-          </button>
+          </Button>
         </div>
       </animated.div>
     </animated.div>,
     document.body,
   );
 }
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: '13px',
-  color: '#1d1d1f',
-  fontWeight: 500,
-  marginBottom: '8px',
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  border: '1px solid rgba(0, 0, 0, 0.08)',
-  borderRadius: '12px',
-  padding: '10px 14px',
-  fontSize: '14px',
-  outline: 'none',
-  background: 'rgba(255, 255, 255, 0.6)',
-  color: '#1d1d1f',
-  boxSizing: 'border-box',
-};

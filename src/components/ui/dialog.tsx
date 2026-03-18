@@ -17,7 +17,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/20 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-black/30 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
     )}
     {...props}
@@ -36,10 +36,10 @@ const DialogContent = React.forwardRef<
       className={cn(
         // Liquid Glass styling
         "fixed left-1/2 top-1/2 z-50 w-full max-w-[440px] -translate-x-1/2 -translate-y-1/2",
-        "rounded-3xl border border-white/20 dark:border-white/10",
-        "bg-white/70 dark:bg-black/50",
-        "backdrop-blur-xl backdrop-saturate-[180%]",
-        "shadow-2xl",
+        "rounded-3xl border border-white/25 dark:border-white/10",
+        "bg-white/72 dark:bg-black/60",
+        "backdrop-blur-[40px] backdrop-saturate-[180%]",
+        "shadow-lg",
         "max-h-[85vh] overflow-hidden flex flex-col",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",

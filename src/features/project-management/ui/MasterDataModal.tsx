@@ -11,6 +11,15 @@
 import { useAtom, useSetAtom } from 'jotai';
 import { useState, useCallback, useTransition } from 'react';
 import { useSpring, animated, config } from '@react-spring/web';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { addZoneAtom } from '@features/canvas/model/graph-actions-atom';
 import { spawnCoordinatesAtom } from '@features/canvas/model/spawn-coordinates-atom';
@@ -281,9 +290,10 @@ export function MasterDataModal({
           </div>
           <button
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-black/5 text-sm text-gray-500 hover:bg-black/10 hover:text-gray-800 cursor-pointer transition-colors"
+            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-black/5 text-sm text-gray-500 transition-colors hover:bg-black/10 hover:text-gray-800 dark:bg-white/10 dark:text-gray-400 dark:hover:bg-white/20"
+            aria-label="Close"
           >
-            {'\u00d7'}
+            &#215;
           </button>
         </div>
 
@@ -327,33 +337,41 @@ export function MasterDataModal({
                   </span>
 
                   {/* Base currency selector */}
-                  <select
+                  <Select
                     value={country.baseCurrency}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => updateCountry(country.id, 'baseCurrency', e.target.value)}
-                    className="w-20 rounded-lg border border-black/8 bg-white/80 px-2 py-1 text-xs outline-none cursor-pointer focus:border-blue-500"
+                    onValueChange={(v) => updateCountry(country.id, 'baseCurrency', v)}
                   >
-                    {CURRENCY_OPTIONS.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
+                    <SelectTrigger
+                      className="h-7 w-20 px-2 text-xs"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CURRENCY_OPTIONS.map((c) => (
+                        <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
                   {/* One-click add to canvas */}
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={(e) => { e.stopPropagation(); handleAddToCanvas(country); }}
                     title="Add zone to canvas"
-                    className="whitespace-nowrap rounded-lg bg-blue-500/8 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-500/15 cursor-pointer transition-colors"
+                    className="h-7 whitespace-nowrap px-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-500/15 hover:text-blue-700 dark:text-blue-400"
                   >
                     + Canvas
-                  </button>
+                  </Button>
 
                   {/* Delete country */}
                   <button
                     onClick={(e) => { e.stopPropagation(); deleteCountry(country.id); }}
-                    className="flex h-6 w-6 items-center justify-center rounded-full bg-transparent text-sm text-red-400 hover:bg-red-500/10 hover:text-red-600 cursor-pointer transition-colors"
+                    className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-transparent text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-600"
                     title="Delete country and all its regimes"
                   >
-                    {'\u2715'}
+                    &#215;
                   </button>
                 </div>
 
@@ -373,65 +391,69 @@ export function MasterDataModal({
                         }}
                       >
                         {/* Regime name */}
-                        <input
+                        <Input
                           type="text"
                           value={regime.name}
                           onChange={(e) => updateRegime(regime.id, 'name', e.target.value)}
-                          className="flex-1 rounded-lg border border-black/8 bg-white/80 px-3 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 transition-all"
+                          className="h-8 flex-1 text-sm"
                           placeholder="Regime name"
                         />
 
                         {/* CIT % */}
-                        <label className="text-xs text-gray-400 font-medium">CIT%</label>
-                        <input
+                        <span className="text-xs font-medium text-gray-400 dark:text-gray-500">CIT%</span>
+                        <Input
                           type="number"
                           value={regime.cit}
                           onChange={(e) => updateRegime(regime.id, 'cit', parseFloat(e.target.value) || 0)}
-                          className="w-16 rounded-lg border border-black/8 bg-white/80 px-2 py-1.5 text-right text-sm outline-none focus:border-blue-500 transition-all"
+                          className="h-8 w-16 text-right text-sm"
                           step="0.1"
                           min="0"
                           max="100"
                         />
 
                         {/* WHT % */}
-                        <label className="text-xs text-gray-400 font-medium">WHT%</label>
-                        <input
+                        <span className="text-xs font-medium text-gray-400 dark:text-gray-500">WHT%</span>
+                        <Input
                           type="number"
                           value={regime.wht}
                           onChange={(e) => updateRegime(regime.id, 'wht', parseFloat(e.target.value) || 0)}
-                          className="w-16 rounded-lg border border-black/8 bg-white/80 px-2 py-1.5 text-right text-sm outline-none focus:border-blue-500 transition-all"
+                          className="h-8 w-16 text-right text-sm"
                           step="0.1"
                           min="0"
                           max="100"
                         />
 
                         {/* One-click add regime as sub-zone */}
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleAddRegimeToCanvas(regime)}
                           title="Add regime as sub-zone to canvas"
-                          className="whitespace-nowrap rounded-lg bg-blue-500/8 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-500/15 cursor-pointer transition-colors"
+                          className="h-7 whitespace-nowrap px-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-500/15 hover:text-blue-700 dark:text-blue-400"
                         >
                           + Canvas
-                        </button>
+                        </Button>
 
                         {/* Delete regime */}
                         <button
                           onClick={() => deleteRegime(regime.id)}
-                          className="flex h-6 w-6 items-center justify-center rounded-full bg-transparent text-sm text-red-400 hover:bg-red-500/10 hover:text-red-600 cursor-pointer transition-colors"
+                          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-transparent text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-600"
                           title="Delete regime"
                         >
-                          {'\u2715'}
+                          &#215;
                         </button>
                       </div>
                     ))}
 
                     {/* Add regime button */}
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => addRegime(country.id)}
-                      className="ml-8 mt-1.5 mb-2 rounded-xl bg-blue-500/6 px-4 py-2 text-xs font-medium text-blue-500 hover:bg-blue-500/12 cursor-pointer transition-colors"
+                      className="mb-2 ml-8 mt-1.5 text-xs font-medium text-blue-500 hover:bg-blue-500/10 hover:text-blue-600 dark:text-blue-400"
                     >
                       + Add Tax Regime
-                    </button>
+                    </Button>
                   </>
                 )}
               </div>
@@ -439,22 +461,18 @@ export function MasterDataModal({
           })}
 
           {/* Add country button */}
-          <button
+          <Button
+            variant="ghost"
             onClick={addCountry}
-            className="mt-3 w-full rounded-2xl bg-green-500/6 px-5 py-3 text-sm font-semibold text-green-600 hover:bg-green-500/12 cursor-pointer transition-colors"
+            className="mt-3 w-full rounded-2xl text-sm font-semibold text-green-600 hover:bg-green-500/10 hover:text-green-700 dark:text-green-400"
           >
             + Add Country
-          </button>
+          </Button>
         </div>
 
         {/* Footer */}
-        <div className="border-t border-black/5 px-7 py-4 text-right">
-          <button
-            onClick={onClose}
-            className="rounded-xl bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 cursor-pointer transition-all active:scale-[0.97]"
-          >
-            Done
-          </button>
+        <div className="border-t border-black/5 px-7 py-4 text-right dark:border-white/5">
+          <Button onClick={onClose}>Done</Button>
         </div>
       </animated.div>
     </animated.div>
