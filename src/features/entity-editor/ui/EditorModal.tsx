@@ -22,6 +22,7 @@ import type { NodeDTO, FlowDTO, OwnershipEdge, FlowType, Zone } from '@shared/ty
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -352,15 +353,18 @@ export function EditorModal() {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent
-        className="no-canvas-events"
+        className="no-canvas-events sm:max-w-[425px] p-6 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-white/20 shadow-2xl rounded-3xl z-50"
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <DialogHeader>
+        <DialogHeader className="px-0 pt-0 pb-4">
           <DialogTitle>{label}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Edit properties for the selected canvas entity.
+          </DialogDescription>
         </DialogHeader>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 pb-4">
+        <div className="flex-1 overflow-y-auto flex flex-col gap-0">
           {isMultiNode ? (
             <div className="rounded-2xl bg-blue-500/6 p-3.5 text-[13px] text-blue-600 dark:text-blue-400">
               <strong>{selection.ids.length} nodes</strong> selected.
@@ -377,7 +381,7 @@ export function EditorModal() {
         </div>
 
         {/* Footer */}
-        <DialogFooter>
+        <DialogFooter className="px-0 pt-4">
           <Button variant="destructive" onClick={handleDelete} data-testid="btn-delete-entity">
             {tr('delete')}
           </Button>

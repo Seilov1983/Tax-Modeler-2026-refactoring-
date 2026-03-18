@@ -1,4 +1,8 @@
 @import "tailwindcss";
+@source "../components";
+@source "../features";
+@source "../shared";
+@source "../app";
 
 /* ─── Base Reset ──────────────────────────────────────────────────────────── */
 
@@ -308,4 +312,24 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.2);
+}
+
+/* ─── Forced Liquid Glass — targets Radix Dialog content directly ────────── */
+/* Targets role="dialog" (Radix), data-state="open" (Radix open state),       */
+/* and the no-canvas-events class used in EditorModal / FlowModal.             */
+[role="dialog"],
+[data-state="open"][data-radix-dialog-content],
+.no-canvas-events[data-state="open"] {
+  background-color: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(40px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  border-radius: 1.5rem !important;
+}
+
+.dark [role="dialog"],
+.dark [data-state="open"][data-radix-dialog-content],
+.dark .no-canvas-events[data-state="open"] {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
 }

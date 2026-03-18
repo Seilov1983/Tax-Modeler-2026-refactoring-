@@ -19,6 +19,7 @@ import { t } from '@shared/lib/i18n';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -61,15 +62,18 @@ export function SettingsModal() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="w-[400px]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[425px] p-6 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-white/20 shadow-2xl rounded-3xl z-50">
+        <DialogHeader className="px-0 pt-0 pb-5">
           <DialogTitle>{t('settings', lang)}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Manage application settings including theme, language, and canvas behaviour.
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-6 px-6 pb-6 pt-2">
+        <div className="flex flex-col gap-4">
           {/* Theme */}
-          <div>
-            <Label className="mb-2 text-[13px] font-medium text-gray-900 dark:text-gray-100">
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-[13px] font-medium text-gray-900 dark:text-gray-100">
               {t('appearance', lang)}
             </Label>
             <Select value={settings.theme} onValueChange={handleThemeChange}>
@@ -85,8 +89,8 @@ export function SettingsModal() {
           </div>
 
           {/* Language */}
-          <div>
-            <Label className="mb-2 text-[13px] font-medium text-gray-900 dark:text-gray-100">
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-[13px] font-medium text-gray-900 dark:text-gray-100">
               {t('language', lang)}
             </Label>
             <Select value={lang} onValueChange={handleLanguageChange}>
@@ -101,12 +105,12 @@ export function SettingsModal() {
           </div>
 
           {/* Snap to Grid */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between rounded-xl bg-black/[0.03] dark:bg-white/5 p-3">
             <div>
-              <Label className="mb-0.5 text-[13px] font-medium text-gray-900 dark:text-gray-100">
+              <Label className="text-[13px] font-medium text-gray-900 dark:text-gray-100">
                 {t('snapToGrid', lang)}
               </Label>
-              <p className="text-xs text-gray-400 dark:text-gray-500">
+              <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
                 {t('snapToGridDesc', lang)}
               </p>
             </div>
