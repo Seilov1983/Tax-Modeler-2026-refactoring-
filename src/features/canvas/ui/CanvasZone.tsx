@@ -28,7 +28,9 @@ import { showNotificationAtom } from '../model/notification-atom';
 import { dragOverFeedbackAtom } from '../model/drag-over-feedback-atom';
 import { contextMenuAtom } from '../model/context-menu-atom';
 import { zonesAtom } from '@entities/zone';
+import { settingsAtom } from '@features/settings';
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
+import { localizedName } from '@shared/lib/i18n';
 import { calculateZoneHeaderLayout } from '../utils/canvas-layout';
 import type { Zone } from '@shared/types';
 import type Konva from 'konva';
@@ -63,6 +65,8 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   const [dragOverFeedback, setDragOverFeedback] = useAtom(dragOverFeedbackAtom);
   const setContextMenu = useSetAtom(contextMenuAtom);
   const allZones = useAtomValue(zonesAtom);
+  const settings = useAtomValue(settingsAtom);
+  const lang = settings.language || 'en';
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
 
   const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
@@ -401,7 +405,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         x={headerLayout.title.x}
         y={headerLayout.title.y - 6}
         width={headerLayout.title.width}
-        text={zone.name.toUpperCase()}
+        text={localizedName(zone.name, lang).toUpperCase()}
         fontSize={16}
         fontStyle="bold"
         fill={isSelected ? '#1d1d1f' : borderColor}

@@ -17,16 +17,6 @@ import { settingsAtom, settingsOpenAtom } from '../model/settings-atom';
 import type { ThemeMode, Language } from '../model/settings-atom';
 import { t } from '@shared/lib/i18n';
 
-const CURRENCY_OPTIONS = [
-  { code: 'USD', label: 'USD ($)' },
-  { code: 'EUR', label: 'EUR (\u20ac)' },
-  { code: 'KZT', label: 'KZT (\u20b8)' },
-  { code: 'AED', label: 'AED (\u062f.\u0625)' },
-  { code: 'GBP', label: 'GBP (\u00a3)' },
-  { code: 'HKD', label: 'HKD ($)' },
-  { code: 'SGD', label: 'SGD ($)' },
-] as const;
-
 export function SettingsModal() {
   const [settings, setSettings] = useAtom(settingsAtom);
   const setOpen = useSetAtom(settingsOpenAtom);
@@ -36,13 +26,6 @@ export function SettingsModal() {
   const handleThemeChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       setSettings((prev) => ({ ...prev, theme: e.target.value as ThemeMode }));
-    },
-    [setSettings],
-  );
-
-  const handleCurrencyChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      setSettings((prev) => ({ ...prev, baseCurrency: e.target.value }));
     },
     [setSettings],
   );
@@ -173,20 +156,6 @@ export function SettingsModal() {
             >
               <option value="en">English</option>
               <option value="ru">{'\u0420\u0443\u0441\u0441\u043a\u0438\u0439'}</option>
-            </select>
-          </div>
-
-          {/* Base Currency */}
-          <div>
-            <label style={labelStyle}>{t('baseCurrency', lang)}</label>
-            <select
-              value={settings.baseCurrency}
-              onChange={handleCurrencyChange}
-              style={selectStyle}
-            >
-              {CURRENCY_OPTIONS.map((c) => (
-                <option key={c.code} value={c.code}>{c.label}</option>
-              ))}
             </select>
           </div>
 

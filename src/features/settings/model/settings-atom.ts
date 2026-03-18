@@ -1,7 +1,7 @@
 /**
  * Settings atom — persisted to localStorage via Jotai's atomWithStorage.
  *
- * Stores user preferences: theme, canvas snap-to-grid, base currency.
+ * Stores user preferences: theme, canvas snap-to-grid, language.
  * Hydrates automatically on mount — no manual hydration needed.
  */
 
@@ -14,14 +14,12 @@ export type Language = 'en' | 'ru';
 export interface AppSettings {
   theme: ThemeMode;
   canvasSnapToGrid: boolean;
-  baseCurrency: string;
   language: Language;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   canvasSnapToGrid: true,
-  baseCurrency: 'USD',
   language: 'en',
 };
 

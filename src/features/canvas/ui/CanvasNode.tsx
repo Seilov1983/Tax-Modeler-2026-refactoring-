@@ -150,54 +150,22 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   // ─── Spatial validation: global hit-test across ALL regimes ──────────────
   // A node can be moved to ANY regime (cross-zone transfer / change of tax residency).
   // It is only an error if the node is outside ALL regimes.
+  // ALL coordinates (zones AND nodes) are ABSOLUTE — flat rendering, no Konva group nesting.
   const validateAndReparentNode = useCallback(
     (nodeX: number, nodeY: number, nodeW: number, nodeH: number, nodeId: string) => {
       // Regimes are zones with a parentId (children of countries).
       const regimes = allZones.filter((z) => z.parentId);
 
-      // Find the regime that fully contains this node's bounding box.
-      // Node coordinates are relative to the parent group in Konva,
-      // so we need to compute absolute positions by walking up the zone hierarchy.
-      const getAbsoluteBounds = (zone: Zone) => {
-        let ax = zone.x;
-        let ay = zone.y;
-        // Walk up: if this zone has a parent, add the parent's offset
-        if (zone.parentId) {
-          const parent = allZones.find((z) => z.id === zone.parentId);
-          if (parent) {
-            ax += parent.x;
-            ay += parent.y;
-          }
-        }
-        return { x: ax, y: ay, w: zone.w, h: zone.h };
-      };
-
-      // The node's absolute position: node coords are relative to its current parent zone group
-      const currentParent = allZones.find((z) => z.id === node.zoneId);
-      let absNodeX = nodeX;
-      let absNodeY = nodeY;
-      if (currentParent) {
-        absNodeX += currentParent.x;
-        absNodeY += currentParent.y;
-        // If the current parent has its own parent (regime inside country), add that too
-        if (currentParent.parentId) {
-          const grandParent = allZones.find((z) => z.id === currentParent.parentId);
-          if (grandParent) {
-            absNodeX += grandParent.x;
-            absNodeY += grandParent.y;
-          }
-        }
-      }
-
-      // Check if node's absolute bounding box is fully contained within any regime
+      // All zone coordinates are absolute (flat rendering) — no parent offset needed.
+      // Node coordinates are also absolute — Konva Group x/y = node.x/y directly.
+      // Check if node's bounding box is fully contained within any regime.
       let containingRegime: Zone | null = null;
       for (const regime of regimes) {
-        const rb = getAbsoluteBounds(regime);
         const fullyContained =
-          absNodeX >= rb.x &&
-          absNodeY >= rb.y &&
-          (absNodeX + nodeW) <= (rb.x + rb.w) &&
-          (absNodeY + nodeH) <= (rb.y + rb.h);
+          nodeX >= regime.x &&
+          nodeY >= regime.y &&
+          (nodeX + nodeW) <= (regime.x + regime.w) &&
+          (nodeY + nodeH) <= (regime.y + regime.h);
         if (fullyContained) {
           // Prefer the smallest containing regime (most specific)
           if (!containingRegime) {
@@ -418,7 +386,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         </Group>
       )}
 
-      {/* Flow port (right edge, blue) */}
+      {/* Flow out port (right edge, blue) — unlimited outgoing flows */}
       {!isTxa && (
         <Circle
           x={node.w}
@@ -432,7 +400,20 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         />
       )}
 
-      {/* Ownership port (bottom edge, purple) */}
+      {/* Flow in port (left edge, blue outline) — unlimited incoming flows */}
+      {!isTxa && (
+        <Circle
+          x={0}
+          y={node.h / 2}
+          radius={PORT_RADIUS}
+          fill="#ffffff"
+          stroke="#007aff"
+          strokeWidth={2}
+          listening={true}
+        />
+      )}
+
+      {/* Ownership port (bottom edge, purple) — unlimited ownership edges */}
       {!isTxa && (
         <Circle
           x={node.w / 2}
