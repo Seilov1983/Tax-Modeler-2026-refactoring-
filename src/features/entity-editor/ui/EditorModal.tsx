@@ -13,11 +13,13 @@
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
 import { useRef, useCallback, useState, useEffect } from 'react';
 import { useSpring, animated, config } from '@react-spring/web';
-import { selectionAtom } from '../model/atoms';
+import { selectionAtom, nodeEditingAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
+import { nodesAtom } from '@entities/node';
 import { deleteNodesAtom, deleteFlowAtom, deleteOwnershipAtom, deleteZoneAtom } from '@features/canvas/model/graph-actions-atom';
 import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
-import type { NodeDTO, FlowDTO, OwnershipEdge, FlowType, Zone, TaxRegime } from '@shared/types';
+import { useTranslation, localizedName, t } from '@shared/lib/i18n';
+import type { NodeDTO, FlowDTO, OwnershipEdge, FlowType, Zone } from '@shared/types';
 
 const FLOW_TYPE_OPTIONS: FlowType[] = [
   'Dividends', 'Royalties', 'Interest', 'Services', 'Salary', 'Goods', 'Equipment',
@@ -109,40 +111,40 @@ function NumericInput({
 // ─── Sub-editors ─────────────────────────────────────────────────────────────
 
 function NodeEditor({
-  node, onChange, availableRegimes, projectZones,
+  node, onChange, projectZones, lang: nodeLang,
 }: {
   node: NodeDTO; onChange: (field: string, value: unknown) => void;
-  availableRegimes: TaxRegime[]; projectZones: Zone[];
+  projectZones: Zone[]; lang: import('@shared/lib/i18n').Language;
 }) {
+  const zone = projectZones.find((z) => z.id === node.zoneId);
   return (
     <>
-      <Field label="Name">
+      <Field label={t('name', nodeLang)}>
         <input style={inputStyle} type="text" value={node.name} onChange={(e) => onChange('name', e.target.value)} />
       </Field>
-      <Field label="Zone">
-        <select style={selectStyle} value={node.zoneId || ''} onChange={(e) => onChange('zoneId', e.target.value || null)}>
-          <option value="">— none —</option>
-          {projectZones.map((z) => <option key={z.id} value={z.id}>{z.name} ({z.jurisdiction} · {z.currency})</option>)}
-        </select>
+      {/* Spatial location — read-only badge (zone assignment is automatic via drag) */}
+      <Field label={t('locatedIn', nodeLang)}>
+        <div style={{
+          padding: '8px 12px', borderRadius: '12px', fontSize: '13px',
+          background: zone ? 'rgba(0,122,255,0.06)' : 'rgba(255,59,48,0.06)',
+          color: zone ? '#007aff' : '#ff3b30', fontWeight: 500,
+          border: `1px solid ${zone ? 'rgba(0,122,255,0.12)' : 'rgba(255,59,48,0.12)'}`,
+        }}>
+          {zone
+            ? `${localizedName(zone.name, nodeLang)} (${zone.jurisdiction} \u00b7 ${zone.currency})`
+            : t('noZone', nodeLang)}
+        </div>
       </Field>
-      {node.type === 'company' && (
-        <Field label="Tax Regime">
-          <select style={selectStyle} value={node.regimeId || ''} onChange={(e) => onChange('regimeId', e.target.value || null)}>
-            <option value="">— none —</option>
-            {availableRegimes.map((r) => <option key={r.id} value={r.id}>{r.name} (CIT {r.cit}%, WHT {r.wht}%)</option>)}
-          </select>
-        </Field>
-      )}
-      <Field label="Annual Income">
+      <Field label={t('annualIncome', nodeLang)}>
         <NumericInput style={inputStyle} value={node.annualIncome} onChange={(v) => onChange('annualIncome', v)} />
       </Field>
       {node.type === 'company' && (
-        <Field label="ETR (manual)">
+        <Field label={t('etrManual', nodeLang)}>
           <NumericInput style={inputStyle} value={node.etr} onChange={(v) => onChange('etr', v)} step="0.01" min={0} max={1} />
         </Field>
       )}
       {node.type === 'person' && node.citizenship && (
-        <Field label="Citizenship">
+        <Field label={t('citizenship', nodeLang)}>
           <input style={inputStyle} type="text" value={node.citizenship.join(', ')} onChange={(e) => onChange('citizenship', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))} />
         </Field>
       )}
@@ -223,8 +225,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const ENTITY_LABELS: Record<string, string> = {
-  node: 'Node', flow: 'Flow', ownership: 'Ownership', zone: 'Zone',
+const ENTITY_LABEL_KEYS: Record<string, string> = {
+  node: 'editNode', flow: 'editFlow', ownership: 'editOwnership', zone: 'editZone',
 };
 
 // ─── Main modal ──────────────────────────────────────────────────────────────
@@ -237,6 +239,9 @@ export function EditorModal() {
   const deleteOwnership = useSetAtom(deleteOwnershipAtom);
   const deleteZone = useSetAtom(deleteZoneAtom);
   const commitHistory = useSetAtom(commitHistoryAtom);
+  const setNodes = useSetAtom(nodesAtom);
+  const [nodeEditing, setNodeEditing] = useAtom(nodeEditingAtom);
+  const { t: tr, lang } = useTranslation();
 
   const [draft, setDraft] = useState<Record<string, unknown> | null>(null);
   const draftInitRef = useRef<string | null>(null);
@@ -261,6 +266,9 @@ export function EditorModal() {
 
   // Zone selection only shows the Transformer for visual resizing — no modal
   if (selection.type === 'zone') return null;
+
+  // Node editing requires double-click (nodeEditingAtom must be true)
+  if (selection.type === 'node' && !nodeEditing) return null;
 
   const isMultiNode = selection.type === 'node' && selection.ids.length > 1;
 
@@ -312,13 +320,21 @@ export function EditorModal() {
       }
       return prev;
     });
+    // Also update nodesAtom so splitAtom-derived nodeAtom triggers CanvasNode re-render
+    if (singleNodeId) {
+      setNodes((prev) =>
+        prev.map((n) => n.id === singleNodeId ? { ...n, ...currentDraft } as NodeDTO : n),
+      );
+    }
     setSelection(null);
+    setNodeEditing(false);
     setDraft(null);
     draftInitRef.current = null;
   };
 
   const handleCancel = () => {
     setSelection(null);
+    setNodeEditing(false);
     setDraft(null);
     draftInitRef.current = null;
   };
@@ -327,22 +343,14 @@ export function EditorModal() {
     if (selection.type === 'node') deleteNodes(selection.ids);
     else if (selection.type === 'zone') deleteZone(selection.id);
     else deleteOwnership(selection.id);
+    setNodeEditing(false);
     setDraft(null);
     draftInitRef.current = null;
   };
 
-  const availableRegimes: TaxRegime[] = (() => {
-    if (selection.type !== 'node' || !currentDraft || (currentDraft as unknown as NodeDTO).type !== 'company') return [];
-    const node = currentDraft as unknown as NodeDTO;
-    const allRegimes = project.masterData?.regimes ?? [];
-    const zone = project.zones?.find((z) => z.id === node.zoneId);
-    if (zone) return allRegimes.filter((r) => r.countryId === zone.jurisdiction);
-    return allRegimes;
-  })();
-
   const label = isMultiNode
-    ? `${selection.ids.length} Nodes`
-    : ENTITY_LABELS[selection.type] ?? selection.type;
+    ? `${selection.ids.length} ${tr('nodesSelected')}`
+    : tr(ENTITY_LABEL_KEYS[selection.type] as Parameters<typeof tr>[0]) ?? selection.type;
 
   return (
     <animated.div
@@ -361,7 +369,7 @@ export function EditorModal() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           padding: '20px 24px 16px',
         }}>
-          <span style={{ fontWeight: 600, fontSize: '18px', letterSpacing: '-0.02em', color: '#1d1d1f' }}>Edit {label}</span>
+          <span style={{ fontWeight: 600, fontSize: '18px', letterSpacing: '-0.02em', color: '#1d1d1f' }}>{label}</span>
           <button onClick={handleCancel} style={{
             background: 'rgba(0,0,0,0.05)', border: 'none', fontSize: '14px', cursor: 'pointer',
             color: '#86868b', width: '28px', height: '28px', borderRadius: '50%',
@@ -384,7 +392,7 @@ export function EditorModal() {
             </div>
           ) : currentDraft ? (
             <>
-              {selection.type === 'node' && <NodeEditor node={currentDraft as unknown as NodeDTO} onChange={updateDraftField} availableRegimes={availableRegimes} projectZones={project.zones ?? []} />}
+              {selection.type === 'node' && <NodeEditor node={currentDraft as unknown as NodeDTO} onChange={updateDraftField} projectZones={project.zones ?? []} lang={lang} />}
               {selection.type === 'ownership' && <OwnershipEditor edge={currentDraft as unknown as OwnershipEdge} onChange={updateDraftField} />}
               {selection.type === 'zone' && <ZoneEditor zone={currentDraft as unknown as Zone} onChange={updateDraftField} />}
             </>
@@ -400,7 +408,7 @@ export function EditorModal() {
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,59,48,0.15)')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,59,48,0.08)')}
-          >Delete</button>
+          >{tr('delete')}</button>
           <div style={{ flex: 1 }} />
           <button onClick={handleCancel} style={{
             padding: '10px 16px', background: 'rgba(0,0,0,0.05)', color: '#1d1d1f', fontWeight: 500,
@@ -409,7 +417,7 @@ export function EditorModal() {
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.1)')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.05)')}
-          >Cancel</button>
+          >{tr('cancel')}</button>
           <button onClick={handleSave} data-testid="btn-save-entity" style={{
             padding: '10px 16px', background: '#007aff', color: '#fff', fontWeight: 600,
             fontSize: '13px', border: 'none', borderRadius: '12px', cursor: 'pointer',
@@ -417,7 +425,7 @@ export function EditorModal() {
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = '#0071e3')}
           onMouseLeave={(e) => (e.currentTarget.style.background = '#007aff')}
-          >Save</button>
+          >{tr('save')}</button>
         </div>
       </animated.div>
     </animated.div>
