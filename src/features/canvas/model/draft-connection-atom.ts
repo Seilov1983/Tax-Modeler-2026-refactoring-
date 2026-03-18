@@ -20,11 +20,15 @@ export const draftConnectionAtom = atom<{
  * Reads draftConnectionAtom internally via `get()` so that CanvasNode components
  * do NOT need to subscribe to the draft state — avoids re-rendering every node
  * whenever a port drag starts or ends.
+ *
+ * UNLIMITED CONNECTIONS: No cap on how many flows/ownership edges a node can have.
+ * The only guard is a self-loop check (source === target).
  */
 export const commitDraftConnectionAtom = atom(
   null,
   (get, set, targetNodeId: string) => {
     const draft = get(draftConnectionAtom);
+    // Only prevent self-loops — no limit on connection count per node
     if (!draft || draft.sourceNodeId === targetNodeId) return;
 
     if (draft.connectionType === 'flow') {

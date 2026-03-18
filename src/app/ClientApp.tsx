@@ -45,21 +45,28 @@ function AppContent() {
   // ─── Theme: sync dark class on <html> based on settings.theme ──────────
   useEffect(() => {
     const root = document.documentElement;
+
+    const applyTheme = (isDark: boolean) => {
+      if (isDark) root.classList.add('dark');
+      else root.classList.remove('dark');
+    };
+
     if (settings.theme === 'dark') {
-      root.classList.add('dark');
+      applyTheme(true);
     } else if (settings.theme === 'light') {
-      root.classList.remove('dark');
+      applyTheme(false);
     } else {
       // system: follow OS preference
       const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      const apply = () => {
-        if (mq.matches) root.classList.add('dark');
-        else root.classList.remove('dark');
-      };
-      apply();
-      mq.addEventListener('change', apply);
-      return () => mq.removeEventListener('change', apply);
+      applyTheme(mq.matches);
+      const onChange = () => applyTheme(mq.matches);
+      mq.addEventListener('change', onChange);
+      return () => mq.removeEventListener('change', onChange);
     }
+
+    // Cleanup: when switching away from dark/light to another mode,
+    // the new effect run will apply the correct state.
+    return () => {};
   }, [settings.theme]);
 
   useEffect(() => {

@@ -22,7 +22,7 @@ import { settingsAtom } from '@features/settings';
 import { zonesAtom } from '@entities/zone';
 import { isSidebarOpenAtom, sidebarContextAtom } from '../model/atoms';
 import { masterDataAtom } from '../model/atoms';
-import { t } from '@shared/lib/i18n';
+import { t, localizedName, localizedTooltip } from '@shared/lib/i18n';
 import { currencySymbol } from '@shared/lib/currency';
 import { EditRegimeModal } from './EditRegimeModal';
 import type { Country, TaxRegime, MasterDataEntry, JurisdictionCode } from '@shared/types';
@@ -477,6 +477,7 @@ export function MasterDataSidebar() {
             onEditRegime={setEditingRegime}
             isOnCanvas={onCanvasJurisdictions.has(country.id)}
             onCanvasRegimeCodes={onCanvasRegimeCodes}
+            lang={lang}
           />
         ))}
       </div>
@@ -553,6 +554,7 @@ interface CountryRowProps {
   onEditRegime: (regime: TaxRegime) => void;
   isOnCanvas: boolean;
   onCanvasRegimeCodes: Set<string>;
+  lang: 'en' | 'ru';
 }
 
 function CountryRow({
@@ -569,6 +571,7 @@ function CountryRow({
   onEditRegime,
   isOnCanvas,
   onCanvasRegimeCodes,
+  lang,
 }: CountryRowProps) {
   const [isHovered, setIsHovered] = useState(false);
 
@@ -665,7 +668,7 @@ function CountryRow({
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
         }}>
-          {country.name}
+          {localizedName(country.name, lang)}
         </span>
 
         {/* VAT badge (if available) */}
@@ -711,6 +714,7 @@ function CountryRow({
                 isEditMode={isEditMode}
                 onEditRegime={onEditRegime}
                 isOnCanvas={regimeOnCanvas}
+                lang={lang}
               />
             );
           })}
@@ -730,16 +734,17 @@ interface RegimeRowProps {
   isEditMode: boolean;
   onEditRegime: (regime: TaxRegime) => void;
   isOnCanvas: boolean;
+  lang: 'en' | 'ru';
 }
 
-function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, onEditRegime, isOnCanvas }: RegimeRowProps) {
+function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, onEditRegime, isOnCanvas, lang }: RegimeRowProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [tooltip, setTooltip] = useState<{ x: number; y: number } | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
 
   const hasSubstance = SUBSTANCE_REGIMES.has(regime.id);
-  const tooltipText = REGIME_TOOLTIPS[regime.id];
+  const tooltipText = localizedTooltip(regime.id, lang) ?? REGIME_TOOLTIPS[regime.id];
 
   // ─── Long-hover tooltip (800ms) ────────────────────────────────────────
   const handleMouseEnter = useCallback(
@@ -857,7 +862,7 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, on
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
         }}>
-          {regime.name}
+          {localizedName(regime.name, lang)}
         </span>
 
         {/* CIT badge */}
