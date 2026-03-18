@@ -62,7 +62,7 @@ export function SettingsModal() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-[425px] p-6 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-xl border border-white/20 shadow-2xl rounded-3xl z-50">
+      <DialogContent className="sm:max-w-[425px] p-6 bg-white/60 backdrop-blur-xl border border-white/50 shadow-2xl rounded-3xl z-50 text-slate-900">
         <DialogHeader className="px-0 pt-0 pb-5">
           <DialogTitle>{t('settings', lang)}</DialogTitle>
           <DialogDescription className="sr-only">
@@ -73,7 +73,7 @@ export function SettingsModal() {
         <div className="flex flex-col gap-4">
           {/* Theme */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-[13px] font-medium text-gray-900 dark:text-gray-100">
+            <Label className="text-[13px] font-medium text-slate-900">
               {t('appearance', lang)}
             </Label>
             <Select value={settings.theme} onValueChange={handleThemeChange}>
@@ -90,7 +90,7 @@ export function SettingsModal() {
 
           {/* Language */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-[13px] font-medium text-gray-900 dark:text-gray-100">
+            <Label className="text-[13px] font-medium text-slate-900">
               {t('language', lang)}
             </Label>
             <Select value={lang} onValueChange={handleLanguageChange}>
@@ -105,12 +105,12 @@ export function SettingsModal() {
           </div>
 
           {/* Snap to Grid */}
-          <div className="flex items-center justify-between rounded-xl bg-black/[0.03] dark:bg-white/5 p-3">
+          <div className="flex items-center justify-between rounded-xl bg-black/[0.03] p-3">
             <div>
-              <Label className="text-[13px] font-medium text-gray-900 dark:text-gray-100">
+              <Label className="text-[13px] font-medium text-slate-900">
                 {t('snapToGrid', lang)}
               </Label>
-              <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">
+              <p className="mt-0.5 text-xs text-slate-500">
                 {t('snapToGridDesc', lang)}
               </p>
             </div>

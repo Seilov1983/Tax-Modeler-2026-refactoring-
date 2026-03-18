@@ -106,7 +106,9 @@ export async function sha256(str: string): Promise<string> {
 
 // ─── Object Utils ────────────────────────────────────────────────────────────
 
-export function deepMerge<T>(base: T, override: Partial<T> | undefined): T {
+type DeepPartial<T> = T extends object ? { [P in keyof T]?: DeepPartial<T[P]> } : T;
+
+export function deepMerge<T>(base: T, override: DeepPartial<T> | undefined): T {
   if (override === undefined)
     return JSON.parse(JSON.stringify(base));
   if (base === null || typeof base !== 'object')

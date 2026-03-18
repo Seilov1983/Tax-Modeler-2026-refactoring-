@@ -52,12 +52,3 @@ export const nodeFamily = atomFamily((id: string) =>
   ),
 );
 
-// ─── Selection state ─────────────────────────────────────────────────────────
-
-export const selectedNodeIdAtom = atom<string | null>(null);
-
-export const selectedNodeAtom = atom((get) => {
-  const id = get(selectedNodeIdAtom);
-  if (!id) return null;
-  return get(nodeByIdAtom).get(id) ?? null;
-});

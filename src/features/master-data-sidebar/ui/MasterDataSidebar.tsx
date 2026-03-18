@@ -475,7 +475,7 @@ export function MasterDataSidebar() {
             onRegimeDragEnd={handleRegimeDragEnd}
             isEditMode={isEditMode}
             onEditRegime={setEditingRegime}
-            isOnCanvas={onCanvasJurisdictions.has(country.id)}
+            isOnCanvas={onCanvasJurisdictions.has(country.id as JurisdictionCode)}
             onCanvasRegimeCodes={onCanvasRegimeCodes}
             lang={lang}
           />

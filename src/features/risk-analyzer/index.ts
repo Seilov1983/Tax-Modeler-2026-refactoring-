@@ -1,1 +1,1 @@
-export { riskCalculationAtom, nodeRiskAtomFamily, flowRiskAtomFamily } from './model/atoms';
+export { riskCalculationAtom } from './model/atoms';

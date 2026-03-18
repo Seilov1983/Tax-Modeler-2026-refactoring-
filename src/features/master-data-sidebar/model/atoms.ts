@@ -18,9 +18,6 @@ export const isSidebarOpenAtom = atom<boolean>(false);
 /** Optional country ID to pre-expand when sidebar opens from a zone click */
 export const sidebarContextAtom = atom<string | null>(null);
 
-/** Whether the sidebar is in edit mode */
-export const editModeAtom = atom<boolean>(false);
-
 /** Persisted master data — Law-as-Code architecture */
 export interface MasterDataState {
   countries: Country[];

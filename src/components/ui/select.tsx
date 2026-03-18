@@ -16,14 +16,10 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-9 w-full items-center justify-between rounded-xl",
-      "border border-black/8 dark:border-white/10",
-      "bg-white/80 dark:bg-white/5",
-      "px-3 py-2 text-sm text-gray-900 dark:text-gray-100",
+      "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background",
       "placeholder:text-muted-foreground",
-      "focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15",
+      "focus:outline-none focus:ring-1 focus:ring-ring",
       "disabled:cursor-not-allowed disabled:opacity-50",
-      "transition-all",
       "[&>span]:line-clamp-1",
       className,
     )}
@@ -73,13 +69,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        // Liquid Glass dropdown
-        "relative z-50 max-h-96 min-w-[8rem] overflow-hidden",
-        "rounded-2xl border border-white/20 dark:border-white/10",
-        "bg-white/70 dark:bg-black/50",
-        "backdrop-blur-xl backdrop-saturate-[180%]",
-        "shadow-2xl",
-        "text-gray-900 dark:text-gray-100",
+        "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
@@ -114,7 +104,7 @@ const SelectLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Label
     ref={ref}
-    className={cn("py-1.5 pl-8 pr-2 text-xs font-medium text-gray-500 dark:text-gray-400", className)}
+    className={cn("px-2 py-1.5 text-sm font-semibold", className)}
     {...props}
   />
 ));
@@ -127,8 +117,8 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-default select-none items-center rounded-lg py-1.5 pl-8 pr-2 text-sm outline-none",
-      "focus:bg-black/5 dark:focus:bg-white/10",
+      "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none",
+      "focus:bg-accent focus:text-accent-foreground",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className,
     )}
@@ -150,7 +140,7 @@ const SelectSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Separator
     ref={ref}
-    className={cn("-mx-1 my-1 h-px bg-black/5 dark:bg-white/5", className)}
+    className={cn("-mx-1 my-1 h-px bg-muted", className)}
     {...props}
   />
 ));

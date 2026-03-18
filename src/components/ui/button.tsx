@@ -4,21 +4,21 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-xl text-xs font-semibold cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-40",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
   {
     variants: {
       variant: {
-        default: "bg-blue-500 text-white hover:bg-blue-600 active:scale-[0.97]",
-        destructive: "bg-red-500/8 dark:bg-red-500/15 text-red-600 dark:text-red-400 hover:bg-red-500/15 dark:hover:bg-red-500/25",
-        outline: "border border-black/8 dark:border-white/10 bg-white/80 dark:bg-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-gray-900 dark:text-gray-100",
-        secondary: "bg-black/5 dark:bg-white/10 text-gray-600 dark:text-gray-300 hover:bg-black/10 dark:hover:bg-white/20",
-        ghost: "hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300",
-        link: "text-blue-500 underline-offset-4 hover:underline",
+        default: "bg-primary text-primary-foreground shadow hover:bg-primary/90",
+        destructive: "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
+        outline: "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2.5",
-        sm: "h-8 px-3 text-[11px]",
-        lg: "h-10 px-6",
+        default: "h-9 px-4 py-2",
+        sm: "h-8 rounded-md px-3 text-xs",
+        lg: "h-10 rounded-md px-8",
         icon: "h-9 w-9",
       },
     },

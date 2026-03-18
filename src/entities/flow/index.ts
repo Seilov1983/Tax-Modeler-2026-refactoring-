@@ -1,1 +1,1 @@
-export { flowsAtom, flowAtomsAtom, selectedFlowIdAtom } from './model/atoms';
+export { flowsAtom, flowAtomsAtom } from './model/atoms';

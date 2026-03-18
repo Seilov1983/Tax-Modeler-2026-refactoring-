@@ -1,7 +1,7 @@
 'use server';
 
 import { prisma } from '@shared/lib/db/prisma';
-import type { DictionaryCountry, DictionaryRegime, TaxFlowRule } from '../../../generated/prisma';
+import type { DictionaryCountry, DictionaryRegime, TaxFlowRule } from '../../../generated/prisma/client';
 
 // ─── Dictionary Country Actions ──────────────────────────────────────────────
 
