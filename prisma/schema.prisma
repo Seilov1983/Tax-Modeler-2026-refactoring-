@@ -21,6 +21,7 @@ model User {
   image         String?
   accounts      Account[]
   sessions      Session[]
+  projects      Project[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -58,6 +59,22 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// ─── Project (serialized canvas graph) ──────────────────────────────────────
+
+model Project {
+  id            String   @id @default(cuid())
+  name          String
+  schemaVersion String   @default("2.4.1")
+  graphJSON     Json     /// Full serialized canvas state (Project interface)
+  userId        String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ─── Master Data: Dictionary Country ─────────────────────────────────────────
