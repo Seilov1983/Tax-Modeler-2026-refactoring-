@@ -1,8 +1,8 @@
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai-family';
-import type { TaxEntry } from '@shared/types';
+import type { TaxEntry, GroupTaxSummary, EntityCITLiability } from '@shared/types';
 import { projectAtom } from '@features/canvas/model/project-atom';
-import { computeWht, computeCITAmount } from '@shared/lib/engine/engine-tax';
+import { computeWht, computeCITAmount, computeGroupTax } from '@shared/lib/engine/engine-tax';
 import { effectiveZoneTax } from '@shared/lib/engine/engine-tax';
 import { ensureMasterData, getZone, convert } from '@shared/lib/engine/engine-core';
 import type { Project } from '@shared/types';
@@ -108,5 +108,41 @@ export const flowTaxAtomFamily = atomFamily((flowId: string) =>
     const taxResults = await get(taxCalculationAtom);
     const flowTax = taxResults.wht.find((f) => f.flowId === flowId);
     return flowTax ? flowTax.whtAmount : null;
+  }),
+);
+
+// ─── Live Tax Summary (uses computeGroupTax — reactive bridge) ──────────────
+
+const EMPTY_SUMMARY: GroupTaxSummary = {
+  citLiabilities: [],
+  whtLiabilities: [],
+  totalCITBase: 0,
+  totalWHTBase: 0,
+  totalTaxBase: 0,
+  totalIncomeBase: 0,
+  totalEffectiveTaxRate: 0,
+  baseCurrency: 'USD',
+};
+
+/**
+ * Derived atom that reactively computes the consolidated GroupTaxSummary.
+ * Re-evaluates whenever projectAtom changes (node edits, zone moves, flow updates).
+ * Uses computeGroupTax — the pure engine function with full CIT mode support.
+ */
+export const liveTaxSummaryAtom = atom((get): GroupTaxSummary => {
+  const project = get(projectAtom);
+  if (!project || !project.nodes || !project.flows) return EMPTY_SUMMARY;
+  return computeGroupTax(project);
+});
+
+/**
+ * Per-node CIT selector — O(1) subscription per CanvasNode.
+ * Returns the EntityCITLiability for a given nodeId, or null if not a company.
+ * Only triggers re-render when THIS node's tax data changes.
+ */
+export const nodeLiveCITAtomFamily = atomFamily((nodeId: string) =>
+  atom((get): EntityCITLiability | null => {
+    const summary = get(liveTaxSummaryAtom);
+    return summary.citLiabilities.find((c) => c.nodeId === nodeId) ?? null;
   }),
 );

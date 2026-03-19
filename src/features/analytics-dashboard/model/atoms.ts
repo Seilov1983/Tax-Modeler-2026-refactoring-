@@ -8,7 +8,7 @@
 
 import { atom } from 'jotai';
 import { projectAtom } from '@features/canvas/model/project-atom';
-import { taxCalculationAtom } from '@features/tax-calculator/model/atoms';
+import { liveTaxSummaryAtom } from '@features/tax-calculator/model/atoms';
 import { riskCalculationAtom } from '@features/risk-analyzer/model/atoms';
 import type { RiskFlag } from '@shared/types';
 
@@ -26,7 +26,7 @@ export interface GlobalSummary {
 
 export const globalSummaryAtom = atom(async (get) => {
   const project = get(projectAtom);
-  const taxes = await get(taxCalculationAtom);
+  const summary = get(liveTaxSummaryAtom);
   const risks = await get(riskCalculationAtom);
 
   const empty: GlobalSummary = {
@@ -37,22 +37,6 @@ export const globalSummaryAtom = atom(async (get) => {
 
   if (!project || !project.nodes) return empty;
 
-  const baseCurrency = project.baseCurrency || 'USD';
-
-  // Total pre-tax income from all company nodes
-  const totalIncome = project.nodes.reduce(
-    (sum, n) => sum + (n.type === 'company' ? Number(n.annualIncome || 0) : 0),
-    0,
-  );
-
-  // Aggregate CIT and WHT (already converted to baseCurrency by taxCalculationAtom)
-  const totalCit = taxes.cit.reduce((sum, t) => sum + (t.citAmount || 0), 0);
-  const totalWht = taxes.wht.reduce((sum, t) => sum + (t.whtAmount || 0), 0);
-  const totalTax = totalCit + totalWht;
-
-  // Global ETR
-  const globalEtr = totalIncome > 0 ? (totalTax / totalIncome) * 100 : 0;
-
   // Count risks
   const nodeRisksCount = Object.values(risks.nodeRisks).reduce(
     (sum, flags: RiskFlag[]) => sum + flags.length, 0,
@@ -62,14 +46,14 @@ export const globalSummaryAtom = atom(async (get) => {
   );
 
   return {
-    totalIncome,
-    totalCit,
-    totalWht,
-    totalTax,
-    globalEtr,
+    totalIncome: summary.totalIncomeBase,
+    totalCit: summary.totalCITBase,
+    totalWht: summary.totalWHTBase,
+    totalTax: summary.totalTaxBase,
+    globalEtr: summary.totalEffectiveTaxRate * 100,
     totalRisks: nodeRisksCount + flowRisksCount,
     nodeCount: project.nodes.filter((n) => n.type === 'company').length,
     flowCount: project.flows.length,
-    baseCurrency,
+    baseCurrency: summary.baseCurrency,
   };
 });

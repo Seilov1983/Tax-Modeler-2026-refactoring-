@@ -30,7 +30,9 @@ import { draftConnectionAtom, commitDraftConnectionAtom } from '../model/draft-c
 import { moveNodesAtom, reparentNodeAtom, flagNodeErrorAtom } from '../model/graph-actions-atom';
 import { showNotificationAtom } from '../model/notification-atom';
 import { zonesAtom } from '@entities/zone';
+import { nodeLiveCITAtomFamily } from '@features/tax-calculator/model/atoms';
 import { calculateNodeCardLayout } from '../utils/canvas-layout';
+import { fmtMoney } from '@shared/lib/engine/utils';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -68,6 +70,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const flagNodeError = useSetAtom(flagNodeErrorAtom);
   const showNotification = useSetAtom(showNotificationAtom);
   const allZones = useAtomValue(zonesAtom);
+  const nodeTax = useAtomValue(nodeLiveCITAtomFamily(node.id));
 
   const groupRef = useRef<Konva.Group>(null);
   const hasDragged = useRef(false);
@@ -404,6 +407,22 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
           fontSize={10}
           fill={node.frozen ? '#ff3b30' : '#ff9f0a'}
           fontStyle="bold"
+          width={cardLayout.title.width}
+          wrap="none"
+          ellipsis={true}
+          listening={false}
+        />
+      )}
+
+      {/* Live tax: CIT amount + ETR — only for company nodes with income */}
+      {nodeTax && nodeTax.taxableIncome > 0 && (
+        <Text
+          x={cardLayout.title.x}
+          y={node.h - NODE_PADDING - 12}
+          text={`CIT ${fmtMoney(nodeTax.citAmount)}  ·  ETR ${(nodeTax.citRate * 100).toFixed(1)}%`}
+          fontSize={10}
+          fontStyle="500"
+          fill={nodeTax.citRate > 0.20 ? '#dc2626' : nodeTax.citRate > 0.10 ? '#d97706' : '#16a34a'}
           width={cardLayout.title.width}
           wrap="none"
           ellipsis={true}
