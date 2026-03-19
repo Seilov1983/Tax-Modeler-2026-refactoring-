@@ -414,3 +414,59 @@ export interface PayrollResult {
   total: number;
   breakdown: PayrollBreakdownItem[];
 }
+
+// ─── Group Tax Summary (consolidated output of computeGroupTax) ──────────────
+
+/** Per-entity CIT liability computed by the tax engine. */
+export interface EntityCITLiability {
+  nodeId: string;
+  nodeName: string;
+  jurisdiction: JurisdictionCode | null;
+  /** The zone/regime the node resides in. */
+  zoneId: string | null;
+  /** Taxable income (annualIncome from the node). */
+  taxableIncome: number;
+  /** Effective CIT rate applied (scalar, 0–1). */
+  citRate: number;
+  /** Computed CIT amount in functional currency. */
+  citAmount: number;
+  /** Functional currency of the zone. */
+  currency: CurrencyCode;
+}
+
+/** Per-flow WHT liability computed by the tax engine. */
+export interface FlowWHTLiability {
+  flowId: string;
+  flowType: FlowType;
+  fromNodeId: string;
+  toNodeId: string;
+  /** Gross amount of the flow in its original currency. */
+  grossAmount: number;
+  originalCurrency: CurrencyCode;
+  /** WHT rate applied (percent, 0–100). */
+  whtRatePercent: number;
+  /** WHT amount in the flow's original currency. */
+  whtAmountOriginal: number;
+  /** WHT amount converted to the project's base currency. */
+  whtAmountBase: number;
+}
+
+/** Consolidated tax summary for the entire project graph. */
+export interface GroupTaxSummary {
+  /** Per-company CIT liabilities. */
+  citLiabilities: EntityCITLiability[];
+  /** Per-flow WHT liabilities. */
+  whtLiabilities: FlowWHTLiability[];
+  /** Sum of all CIT amounts, converted to project base currency. */
+  totalCITBase: number;
+  /** Sum of all WHT amounts, converted to project base currency. */
+  totalWHTBase: number;
+  /** Total tax burden (CIT + WHT) in project base currency. */
+  totalTaxBase: number;
+  /** Total pre-tax income across all company nodes, in project base currency. */
+  totalIncomeBase: number;
+  /** Group-level effective tax rate: totalTaxBase / totalIncomeBase (0–1). */
+  totalEffectiveTaxRate: number;
+  /** Project base currency used for all *Base amounts. */
+  baseCurrency: CurrencyCode;
+}

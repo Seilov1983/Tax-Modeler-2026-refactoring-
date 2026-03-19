@@ -7,11 +7,13 @@
  */
 
 import { deepMerge, bankersRound2, numOrNull, isoDate } from './utils';
-import { convert, getZone, getNode } from './engine-core';
+import { convert, getZone, getNode, buildComputationGraph } from './engine-core';
 import zoneRulesData from '@shared/config/zone-rules.json';
 import type {
   Project, Zone, FlowDTO, NodeDTO, CITConfig, FlowType,
   PayrollResult, PayrollBreakdownItem, WHTResult, WHTExemptionRule,
+  GroupTaxSummary, EntityCITLiability, FlowWHTLiability,
+  CurrencyCode, JurisdictionCode,
 } from '@shared/types';
 
 // ─── Zone Rules Registry ────────────────────────────────────────────────────
@@ -254,4 +256,139 @@ export function effectiveEtrForCompany(p: Project, co: NodeDTO): number {
   const md = (p.masterData?.[z.jurisdiction] ?? {}) as Record<string, unknown>;
   const cit = numOrNull(md.citRateStandard);
   return cit == null ? 0 : cit;
+}
+
+// ─── Consolidated Group Tax Computation ───────────────────────────────────────
+
+/**
+ * computeGroupTax — pure function that produces a consolidated tax summary
+ * for the entire project graph.
+ *
+ * Strategy:
+ * 1. Build the ComputationGraph to get pre-resolved effective tax rates
+ *    for every node (Country → Regime → ZoneOverride inheritance chain).
+ * 2. For each Company node: compute CIT = annualIncome × effective CIT rate,
+ *    using the full CITConfig (flat/threshold/twoTier/qfzp/brackets/smallProfits).
+ * 3. For each Flow: compute WHT using domestic rates from the payer's zone.
+ *    (Bilateral treaty matrix is deferred — uses domestic fallback for now.)
+ * 4. Convert all amounts to the project's base currency and aggregate.
+ * 5. Derive the group-level ETR = totalTax / totalIncome.
+ */
+export function computeGroupTax(project: Project): GroupTaxSummary {
+  const baseCurrency = project.baseCurrency;
+  const graph = buildComputationGraph(project);
+
+  // ── 1. CIT liabilities (company nodes only) ────────────────────────────────
+  const citLiabilities: EntityCITLiability[] = [];
+
+  for (const cn of graph.nodes) {
+    const node = cn.node;
+    if (node.type !== 'company') continue;
+
+    const income = Number(node.annualIncome || 0);
+    const zone = node.zoneId ? project.zones.find((z) => z.id === node.zoneId) ?? null : null;
+    const jurisdiction = zone?.jurisdiction ?? null;
+    const currency: CurrencyCode = zone?.currency ?? baseCurrency;
+
+    // Use the full CIT computation engine (handles all 6 CIT modes)
+    const citAmount = computeCITAmount(income, cn.effectiveTax.cit);
+
+    citLiabilities.push({
+      nodeId: node.id,
+      nodeName: node.name,
+      jurisdiction: jurisdiction as JurisdictionCode | null,
+      zoneId: node.zoneId,
+      taxableIncome: income,
+      citRate: cn.effectiveTax.citRateEffective,
+      citAmount,
+      currency,
+    });
+  }
+
+  // ── 2. WHT liabilities (all flows between nodes) ──────────────────────────
+  const whtLiabilities: FlowWHTLiability[] = [];
+
+  for (const flow of project.flows) {
+    const gross = Number(flow.grossAmount || 0);
+    if (gross <= 0) continue;
+
+    // Resolve payer's zone to get domestic WHT rates
+    const payer = graph.nodeMap.get(flow.fromId);
+    if (!payer) continue;
+
+    // Look up the WHT rate for this flow type from the payer's effective tax config
+    const whtRates = payer.effectiveTax.wht;
+    const ft = flow.flowType as string;
+    let domesticRate = 0;
+    if (ft === 'Dividends') domesticRate = Number(whtRates.dividends || 0);
+    else if (ft === 'Interest') domesticRate = Number(whtRates.interest || 0);
+    else if (ft === 'Royalties') domesticRate = Number(whtRates.royalties || 0);
+    else if (ft === 'Services') domesticRate = Number(whtRates.services || 0);
+    // Salary and Goods/Equipment: no WHT (handled by payroll or customs)
+
+    // Use the flow's explicit whtRate if set, otherwise use the domestic rate
+    // whtRates from master data are fractional (0.15 = 15%), flow.whtRate is percentage (15)
+    const ratePercent = Number(flow.whtRate || 0) > 0
+      ? Number(flow.whtRate)
+      : domesticRate * 100;
+
+    if (ratePercent <= 0) continue;
+
+    const whtOriginal = bankersRound2(gross * (ratePercent / 100));
+    const whtBase = bankersRound2(
+      convert(project, whtOriginal, flow.currency, baseCurrency),
+    );
+
+    whtLiabilities.push({
+      flowId: flow.id,
+      flowType: flow.flowType,
+      fromNodeId: flow.fromId,
+      toNodeId: flow.toId,
+      grossAmount: gross,
+      originalCurrency: flow.currency,
+      whtRatePercent: ratePercent,
+      whtAmountOriginal: whtOriginal,
+      whtAmountBase: whtBase,
+    });
+  }
+
+  // ── 3. Aggregate totals in base currency ──────────────────────────────────
+  let totalCITBase = 0;
+  for (const cit of citLiabilities) {
+    totalCITBase += bankersRound2(convert(project, cit.citAmount, cit.currency, baseCurrency));
+  }
+  totalCITBase = bankersRound2(totalCITBase);
+
+  let totalWHTBase = 0;
+  for (const wht of whtLiabilities) {
+    totalWHTBase += wht.whtAmountBase;
+  }
+  totalWHTBase = bankersRound2(totalWHTBase);
+
+  const totalTaxBase = bankersRound2(totalCITBase + totalWHTBase);
+
+  // Total pre-tax income: sum of all company annualIncome, converted to base currency
+  let totalIncomeBase = 0;
+  for (const cit of citLiabilities) {
+    totalIncomeBase += bankersRound2(
+      convert(project, cit.taxableIncome, cit.currency, baseCurrency),
+    );
+  }
+  totalIncomeBase = bankersRound2(totalIncomeBase);
+
+  // Group ETR: avoid division by zero
+  const totalEffectiveTaxRate = totalIncomeBase > 0
+    ? bankersRound2(totalTaxBase / totalIncomeBase * 10000) / 10000 // 4 decimal places
+    : 0;
+
+  return {
+    citLiabilities,
+    whtLiabilities,
+    totalCITBase,
+    totalWHTBase,
+    totalTaxBase,
+    totalIncomeBase,
+    totalEffectiveTaxRate,
+    baseCurrency,
+  };
 }
