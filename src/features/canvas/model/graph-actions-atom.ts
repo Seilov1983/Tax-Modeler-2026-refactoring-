@@ -509,6 +509,42 @@ export const flagNodeErrorAtom = atom(
   },
 );
 
+// ─── Update Node (partial patch — used by EditorModal) ──────────────────
+
+export const updateNodeAtom = atom(
+  null,
+  (_get, set, payload: { id: string; data: Partial<NodeDTO> }) => {
+    set(commitHistoryAtom);
+
+    const patch = (n: NodeDTO) =>
+      n.id === payload.id ? { ...n, ...payload.data } : n;
+
+    set(nodesAtom, (prev) => prev.map(patch));
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return { ...prev, nodes: prev.nodes.map(patch) };
+    });
+  },
+);
+
+// ─── Update Ownership (partial patch — used by EditorModal) ─────────────
+
+export const updateOwnershipAtom = atom(
+  null,
+  (_get, set, payload: { id: string; data: Partial<OwnershipEdge> }) => {
+    set(commitHistoryAtom);
+
+    const patch = (o: OwnershipEdge) =>
+      o.id === payload.id ? { ...o, ...payload.data } : o;
+
+    set(ownershipAtom, (prev) => prev.map(patch));
+    set(projectAtom, (prev) => {
+      if (!prev) return prev;
+      return { ...prev, ownership: prev.ownership.map(patch) };
+    });
+  },
+);
+
 // ─── Auto-Layout (Dagre) — arrange nodes into a clean hierarchy ──────────
 
 export const autoLayoutAtom = atom(

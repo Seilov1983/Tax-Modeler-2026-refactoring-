@@ -3,7 +3,7 @@ export { hydrateProjectAtom } from './hydrate-atom';
 export { draftConnectionAtom, commitDraftConnectionAtom } from './draft-connection-atom';
 export { viewportAtom } from './viewport-atom';
 export type { ViewportSnapshot } from './viewport-atom';
-export { addNodeAtom, addFlowAtom, addOwnershipAtom, deleteNodeAtom, deleteFlowAtom, deleteOwnershipAtom, moveNodesAtom, deleteNodesAtom, addZoneAtom, autoLayoutAtom } from './graph-actions-atom';
+export { addNodeAtom, addFlowAtom, addOwnershipAtom, deleteNodeAtom, deleteFlowAtom, deleteOwnershipAtom, moveNodesAtom, deleteNodesAtom, addZoneAtom, autoLayoutAtom, updateNodeAtom, updateOwnershipAtom } from './graph-actions-atom';
 export type { AddNodePayload, AddFlowPayload, MoveNodeEntry, AddZonePayload } from './graph-actions-atom';
 export { clipboardAtom, copyAtom, pasteAtom, duplicateAtom } from './clipboard-atoms';
 export { contextMenuAtom } from './context-menu-atom';

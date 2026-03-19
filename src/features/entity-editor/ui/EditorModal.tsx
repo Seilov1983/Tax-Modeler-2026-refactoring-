@@ -1,19 +1,19 @@
 'use client';
 
 /**
- * EditorModal — floating dialog for editing Node and Ownership properties.
+ * EditorModal — floating Liquid Glass dialog for editing Node and Ownership properties.
+ * Uses react-hook-form for form state; dispatches updates via Jotai action atoms.
  * Flow editing is handled by FlowModal; zone editing is via the canvas Transformer.
  */
 
-import { useAtom, useSetAtom } from 'jotai';
-import { useRef, useState, useEffect } from 'react';
+import { useAtom, useSetAtom, useAtomValue } from 'jotai';
+import { useEffect } from 'react';
+import { useForm, Controller } from 'react-hook-form';
 import { selectionAtom, nodeEditingAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
-import { nodesAtom } from '@entities/node';
-import { deleteNodesAtom, deleteOwnershipAtom } from '@features/canvas/model/graph-actions-atom';
-import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
+import { deleteNodesAtom, deleteOwnershipAtom, updateNodeAtom, updateOwnershipAtom } from '@features/canvas/model/graph-actions-atom';
 import { useTranslation, localizedName, t } from '@shared/lib/i18n';
-import type { NodeDTO, OwnershipEdge, Zone } from '@shared/types';
+import type { NodeDTO, OwnershipEdge, NodeType, Zone } from '@shared/types';
 import {
   Dialog,
   DialogContent,
@@ -26,87 +26,72 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
-// ─── Formatted numeric input (preserves existing behaviour) ─────────────────
+// ─── Form types ──────────────────────────────────────────────────────────────
 
-const numFormatter = new Intl.NumberFormat('en-US', { maximumFractionDigits: 10 });
+interface NodeFormValues {
+  name: string;
+  type: NodeType;
+  annualIncome: number;
+  etr: number;
+  citizenship: string;
+}
 
-function NumericInput({
-  value,
-  onChange,
-  className,
-  step,
-  min,
-  max,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  className?: string;
-  step?: string;
-  min?: number;
-  max?: number;
-}) {
-  const [display, setDisplay] = useState(() => formatNum(value));
-  const focusedRef = useRef(false);
-
-  useEffect(() => {
-    if (!focusedRef.current) {
-      setDisplay(formatNum(value));
-    }
-  }, [value]);
-
-  function formatNum(n: number): string {
-    if (n === 0) return '0';
-    return numFormatter.format(n);
-  }
-
-  function parseNum(s: string): number {
-    const cleaned = s.replace(/[^0-9.\-]/g, '');
-    const parsed = parseFloat(cleaned);
-    return isNaN(parsed) ? 0 : parsed;
-  }
-
-  return (
-    <Input
-      className={className}
-      type="text"
-      inputMode="decimal"
-      value={display}
-      onFocus={() => {
-        focusedRef.current = true;
-        setDisplay(String(value));
-      }}
-      onBlur={() => {
-        focusedRef.current = false;
-        const parsed = parseNum(display);
-        const clamped = min != null && parsed < min ? min : max != null && parsed > max ? max : parsed;
-        onChange(clamped);
-        setDisplay(formatNum(clamped));
-      }}
-      onChange={(e) => {
-        setDisplay(e.target.value);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-      }}
-    />
-  );
+interface OwnershipFormValues {
+  percent: number;
+  manualAdjustment: number;
 }
 
 // ─── Sub-editors ─────────────────────────────────────────────────────────────
 
 function NodeEditor({
-  node, onChange, projectZones, lang: nodeLang,
+  node,
+  control,
+  register,
+  projectZones,
+  lang: nodeLang,
 }: {
-  node: NodeDTO; onChange: (field: string, value: unknown) => void;
-  projectZones: Zone[]; lang: import('@shared/lib/i18n').Language;
+  node: NodeDTO;
+  control: ReturnType<typeof useForm<NodeFormValues>>['control'];
+  register: ReturnType<typeof useForm<NodeFormValues>>['register'];
+  projectZones: Zone[];
+  lang: import('@shared/lib/i18n').Language;
 }) {
   const zone = projectZones.find((z) => z.id === node.zoneId);
+  const watchType = node.type;
+
   return (
     <>
       <Field label={t('name', nodeLang)}>
-        <Input type="text" value={node.name} onChange={(e) => onChange('name', e.target.value)} />
+        <Input type="text" {...register('name')} />
       </Field>
+
+      <Field label="Type">
+        <Controller
+          name="type"
+          control={control}
+          render={({ field }) => (
+            <Select value={field.value} onValueChange={field.onChange}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="company">Company</SelectItem>
+                <SelectItem value="person">Person</SelectItem>
+                <SelectItem value="txa">TXA</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        />
+      </Field>
+
       {/* Spatial location — read-only badge (zone assignment is automatic via drag) */}
       <Field label={t('locatedIn', nodeLang)}>
         <Badge variant={zone ? 'default' : 'destructive'} className="w-full justify-start px-3 py-2 text-[13px] font-medium">
@@ -115,19 +100,33 @@ function NodeEditor({
             : t('noZone', nodeLang)}
         </Badge>
       </Field>
+
       <Field label={t('annualIncome', nodeLang)}>
-        <NumericInput value={node.annualIncome} onChange={(v) => onChange('annualIncome', v)} />
+        <Input
+          type="number"
+          step="any"
+          {...register('annualIncome', { valueAsNumber: true })}
+        />
       </Field>
-      {node.type === 'company' && (
+
+      {watchType === 'company' && (
         <Field label={t('etrManual', nodeLang)}>
-          <NumericInput value={node.etr} onChange={(v) => onChange('etr', v)} step="0.01" min={0} max={1} />
+          <Input
+            type="number"
+            step="0.01"
+            min={0}
+            max={1}
+            {...register('etr', { valueAsNumber: true })}
+          />
         </Field>
       )}
-      {node.type === 'person' && node.citizenship && (
+
+      {watchType === 'person' && node.citizenship && (
         <Field label={t('citizenship', nodeLang)}>
-          <Input type="text" value={node.citizenship.join(', ')} onChange={(e) => onChange('citizenship', e.target.value.split(',').map((s) => s.trim()).filter(Boolean))} />
+          <Input type="text" {...register('citizenship')} />
         </Field>
       )}
+
       <div className="mt-4 rounded-xl bg-black/[0.03] p-3 text-[11px] text-gray-500">
         ID: {node.id}<br />Type: {node.type}<br />Frozen: {node.frozen ? 'Yes' : 'No'}
         {node.computedEtr != null && <><br />Computed ETR: {(node.computedEtr * 100).toFixed(2)}%</>}
@@ -137,11 +136,31 @@ function NodeEditor({
   );
 }
 
-function OwnershipEditor({ edge, onChange }: { edge: OwnershipEdge; onChange: (field: string, value: unknown) => void }) {
+function OwnershipEditor({
+  edge,
+  register,
+}: {
+  edge: OwnershipEdge;
+  register: ReturnType<typeof useForm<OwnershipFormValues>>['register'];
+}) {
   return (
     <>
-      <Field label="Ownership (%)"><NumericInput value={edge.percent} onChange={(v) => onChange('percent', v)} min={0} max={100} step="0.01" /></Field>
-      <Field label="Manual Adjustment"><NumericInput value={edge.manualAdjustment} onChange={(v) => onChange('manualAdjustment', v)} step="0.01" /></Field>
+      <Field label="Ownership (%)">
+        <Input
+          type="number"
+          step="0.01"
+          min={0}
+          max={100}
+          {...register('percent', { valueAsNumber: true })}
+        />
+      </Field>
+      <Field label="Manual Adjustment">
+        <Input
+          type="number"
+          step="0.01"
+          {...register('manualAdjustment', { valueAsNumber: true })}
+        />
+      </Field>
       <div className="mt-4 rounded-xl bg-black/[0.03] p-3 text-[11px] text-gray-500">
         ID: {edge.id}<br />Parent: {edge.fromId}<br />Subsidiary: {edge.toId}
       </div>
@@ -166,104 +185,123 @@ const ENTITY_LABEL_KEYS: Record<string, string> = {
 
 export function EditorModal() {
   const [selection, setSelection] = useAtom(selectionAtom);
-  const [project, setProject] = useAtom(projectAtom);
+  const project = useAtomValue(projectAtom);
   const deleteNodes = useSetAtom(deleteNodesAtom);
   const deleteOwnership = useSetAtom(deleteOwnershipAtom);
-  const commitHistory = useSetAtom(commitHistoryAtom);
-  const setNodes = useSetAtom(nodesAtom);
+  const updateNode = useSetAtom(updateNodeAtom);
+  const updateOwnership = useSetAtom(updateOwnershipAtom);
   const [nodeEditing, setNodeEditing] = useAtom(nodeEditingAtom);
   const { t: tr, lang } = useTranslation();
 
-  const [draft, setDraft] = useState<Record<string, unknown> | null>(null);
-  const draftInitRef = useRef<string | null>(null);
-
-  if (!selection || !project) return null;
-
-  // Flow editing is handled by FlowModal
-  if (selection.type === 'flow') return null;
-
-  // Zone selection only shows the Transformer for visual resizing — no modal
-  if (selection.type === 'zone') return null;
-
-  // Node editing requires double-click (nodeEditingAtom must be true)
-  if (selection.type === 'node' && !nodeEditing) return null;
-
-  const isMultiNode = selection.type === 'node' && selection.ids.length > 1;
-
+  // ─── Resolve entity from selection ──────────────────────────────────
   let entity: NodeDTO | OwnershipEdge | undefined;
   let entityKey: string | null = null;
-  if (selection.type === 'node') {
+  let isMultiNode = false;
+
+  if (selection?.type === 'node') {
+    isMultiNode = selection.ids.length > 1;
     if (selection.ids.length === 1) {
-      entity = project.nodes.find((n) => n.id === selection.ids[0]);
+      entity = project?.nodes.find((n) => n.id === selection.ids[0]);
       entityKey = selection.ids[0];
     }
-  } else {
-    entity = project.ownership.find((o) => o.id === selection.id);
+  } else if (selection?.type === 'ownership') {
+    entity = project?.ownership.find((o) => o.id === selection.id);
     entityKey = selection.id;
   }
 
-  if (!entity && !isMultiNode) return null;
+  const isNode = selection?.type === 'node';
+  const isOwnership = selection?.type === 'ownership';
 
-  if (entity && entityKey && draftInitRef.current !== entityKey) {
-    draftInitRef.current = entityKey;
-    if (draft === null || draftInitRef.current !== entityKey) {
-      queueMicrotask(() => setDraft({ ...entity as unknown as Record<string, unknown> }));
+  // ─── react-hook-form for node editing ──────────────────────────────
+  const nodeForm = useForm<NodeFormValues>({
+    defaultValues: { name: '', type: 'company', annualIncome: 0, etr: 0, citizenship: '' },
+  });
+
+  const ownershipForm = useForm<OwnershipFormValues>({
+    defaultValues: { percent: 100, manualAdjustment: 0 },
+  });
+
+  // Reset form when selected entity changes
+  useEffect(() => {
+    if (entity && isNode && 'name' in entity) {
+      const n = entity as NodeDTO;
+      nodeForm.reset({
+        name: n.name,
+        type: n.type,
+        annualIncome: n.annualIncome,
+        etr: n.etr,
+        citizenship: n.citizenship?.join(', ') ?? '',
+      });
     }
-  }
+  }, [entityKey, isNode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const currentDraft = (draft && draftInitRef.current === entityKey) ? draft : (entity ? { ...entity as unknown as Record<string, unknown> } : null);
-  const singleNodeId = selection.type === 'node' && selection.ids.length === 1 ? selection.ids[0] : null;
-  const entityId = selection.type === 'ownership' ? selection.id : null;
-
-  const updateDraftField = (field: string, value: unknown) => {
-    setDraft((prev) => prev ? { ...prev, [field]: value } : prev);
-  };
-
-  const handleSave = () => {
-    if (!currentDraft) return;
-    commitHistory();
-    setProject((prev) => {
-      if (!prev) return prev;
-      if (singleNodeId) {
-        return { ...prev, nodes: prev.nodes.map((n) => n.id === singleNodeId ? { ...n, ...currentDraft } as NodeDTO : n) };
-      }
-      if (entityId) {
-        return { ...prev, ownership: prev.ownership.map((o) => o.id === entityId ? { ...o, ...currentDraft } as OwnershipEdge : o) };
-      }
-      return prev;
-    });
-    // Also update nodesAtom so splitAtom-derived nodeAtom triggers CanvasNode re-render
-    if (singleNodeId) {
-      setNodes((prev) =>
-        prev.map((n) => n.id === singleNodeId ? { ...n, ...currentDraft } as NodeDTO : n),
-      );
+  useEffect(() => {
+    if (entity && isOwnership && 'percent' in entity) {
+      const o = entity as OwnershipEdge;
+      ownershipForm.reset({
+        percent: o.percent,
+        manualAdjustment: o.manualAdjustment,
+      });
     }
-    setSelection(null);
-    setNodeEditing(false);
-    setDraft(null);
-    draftInitRef.current = null;
-  };
+  }, [entityKey, isOwnership]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ─── Gate: determine if modal should be open ───────────────────────
+  const isOpen =
+    !!selection &&
+    !!project &&
+    selection.type !== 'flow' &&
+    selection.type !== 'zone' &&
+    (selection.type !== 'node' || nodeEditing) &&
+    (!!entity || isMultiNode);
+
+  // ─── Handlers ──────────────────────────────────────────────────────
   const handleClose = () => {
     setSelection(null);
     setNodeEditing(false);
-    setDraft(null);
-    draftInitRef.current = null;
+  };
+
+  const handleSaveNode = nodeForm.handleSubmit((values) => {
+    if (!entityKey) return;
+    const patch: Partial<NodeDTO> = {
+      name: values.name,
+      type: values.type,
+      annualIncome: values.annualIncome,
+      etr: values.etr,
+    };
+    if (values.type === 'person' && values.citizenship) {
+      patch.citizenship = values.citizenship.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    updateNode({ id: entityKey, data: patch });
+    setSelection(null);
+    setNodeEditing(false);
+  });
+
+  const handleSaveOwnership = ownershipForm.handleSubmit((values) => {
+    if (!entityKey) return;
+    updateOwnership({ id: entityKey, data: values });
+    setSelection(null);
+    setNodeEditing(false);
+  });
+
+  const handleSave = () => {
+    if (isNode) handleSaveNode();
+    else if (isOwnership) handleSaveOwnership();
   };
 
   const handleDelete = () => {
+    if (!selection) return;
     if (selection.type === 'node') deleteNodes(selection.ids);
-    else deleteOwnership(selection.id);
+    else if (selection.type === 'ownership') deleteOwnership(selection.id);
     setNodeEditing(false);
-    setDraft(null);
-    draftInitRef.current = null;
   };
 
-  const label = isMultiNode
-    ? `${selection.ids.length} ${tr('nodesSelected')}`
-    : tr(ENTITY_LABEL_KEYS[selection.type] as Parameters<typeof tr>[0]) ?? selection.type;
-
-  const isOpen = true;
+  // ─── Label ─────────────────────────────────────────────────────────
+  const label =
+    isMultiNode && selection?.type === 'node'
+      ? `${selection.ids.length} ${tr('nodesSelected')}`
+      : selection
+        ? (tr(ENTITY_LABEL_KEYS[selection.type] as Parameters<typeof tr>[0]) ?? selection.type)
+        : '';
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
@@ -282,14 +320,27 @@ export function EditorModal() {
         <div className="flex-1 overflow-y-auto flex flex-col gap-0">
           {isMultiNode ? (
             <div className="rounded-2xl bg-blue-500/6 p-3.5 text-[13px] text-blue-600">
-              <strong>{selection.ids.length} nodes</strong> selected.
+              <strong>{selection?.type === 'node' ? selection.ids.length : 0} nodes</strong> selected.
               <br /><br />
               Drag any selected node to move all. Press <kbd className="rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[11px]">Delete</kbd> to remove all.
             </div>
-          ) : currentDraft ? (
+          ) : entity ? (
             <>
-              {selection.type === 'node' && <NodeEditor node={currentDraft as unknown as NodeDTO} onChange={updateDraftField} projectZones={project.zones ?? []} lang={lang} />}
-              {selection.type === 'ownership' && <OwnershipEditor edge={currentDraft as unknown as OwnershipEdge} onChange={updateDraftField} />}
+              {isNode && (
+                <NodeEditor
+                  node={entity as NodeDTO}
+                  control={nodeForm.control}
+                  register={nodeForm.register}
+                  projectZones={project?.zones ?? []}
+                  lang={lang}
+                />
+              )}
+              {isOwnership && (
+                <OwnershipEditor
+                  edge={entity as OwnershipEdge}
+                  register={ownershipForm.register}
+                />
+              )}
             </>
           ) : null}
         </div>
