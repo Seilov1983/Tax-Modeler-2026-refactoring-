@@ -20,7 +20,6 @@ import { useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { projectAtom, hydrateProjectAtom } from '@features/canvas';
 import { defaultProject } from '@entities/project';
-import { settingsAtom } from '@features/settings';
 
 const CanvasBoard = dynamic(
   () => import('@widgets/canvas-board').then((mod) => ({ default: mod.CanvasBoard })),
@@ -55,7 +54,6 @@ function prepareProject(p: Project): Project {
 function AppContent() {
   const hydrate = useSetAtom(hydrateProjectAtom);
   const project = useAtomValue(projectAtom);
-  const settings = useAtomValue(settingsAtom);
 
   // Track the remote project ID (set after successful API load or creation)
   const remoteProjectIdRef = useRef<string | null>(null);
@@ -64,30 +62,6 @@ function AppContent() {
 
   /** Offline mode — set when API is unreachable (503, network error, Electron static) */
   const isOfflineModeRef = useRef(false);
-
-  // ─── Theme: sync dark class on <html> based on settings.theme ──────────
-  useEffect(() => {
-    const root = document.documentElement;
-
-    const applyTheme = (isDark: boolean) => {
-      if (isDark) root.classList.add('dark');
-      else root.classList.remove('dark');
-    };
-
-    if (settings.theme === 'dark') {
-      applyTheme(true);
-    } else if (settings.theme === 'light') {
-      applyTheme(false);
-    } else {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      applyTheme(mq.matches);
-      const onChange = () => applyTheme(mq.matches);
-      mq.addEventListener('change', onChange);
-      return () => mq.removeEventListener('change', onChange);
-    }
-
-    return () => {};
-  }, [settings.theme]);
 
   // ─── Hydration: API → localStorage → demo ──────────────────────────────
   useEffect(() => {

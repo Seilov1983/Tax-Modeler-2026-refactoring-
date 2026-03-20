@@ -8,6 +8,7 @@
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useRef, useState, useCallback } from 'react';
+import { useTheme } from 'next-themes';
 import { settingsAtom } from '@features/settings/model/settings-atom';
 import { projectAtom, hydrateProjectAtom } from '@features/canvas';
 import { baseCurrencyAtom } from '@features/canvas/model/project-atom';
@@ -51,6 +52,7 @@ export function ProjectHeader() {
   const setFutureStates = useSetAtom(futureStatesAtom);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [settings, setSettings] = useAtom(settingsAtom);
+  const { theme, setTheme } = useTheme();
 
   const handleCurrencyChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -131,11 +133,8 @@ export function ProjectHeader() {
   }, [hydrate, setSelection, setPastStates, setFutureStates]);
 
   const toggleTheme = useCallback(() => {
-    setSettings((prev) => ({
-      ...prev,
-      theme: prev.theme === 'dark' ? 'light' : 'dark',
-    }));
-  }, [setSettings]);
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  }, [theme, setTheme]);
 
   const toggleLanguage = useCallback(() => {
     setSettings((prev) => ({
@@ -146,7 +145,7 @@ export function ProjectHeader() {
 
   if (!project) return null;
 
-  const isDark = settings.theme === 'dark';
+  const isDark = theme === 'dark';
   const lang = settings.language || 'en';
 
   return (

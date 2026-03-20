@@ -18,6 +18,7 @@ import { nodesAtom } from '@entities/node';
 import { zonesAtom } from '@entities/zone';
 import { flowsAtom } from '@entities/flow';
 import { projectAtom } from '@features/canvas';
+import { generateAuditSnapshot } from '@shared/lib/engine';
 import { MessageSquare, X, Send, Sparkles, AlertTriangle } from 'lucide-react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 
@@ -57,38 +58,45 @@ export function AICopilotChat() {
   const flows = useAtomValue(flowsAtom);
   const project = useAtomValue(projectAtom);
 
-  const buildContext = useCallback(() => {
-    const companies = nodes.filter((n) => n.type === 'company');
-    return {
-      projectTitle: project?.title,
-      isPillarTwoScope: project?.isPillarTwoScope,
-      baseCurrency: project?.baseCurrency,
-      companies: companies.map((n) => {
-        const zone = zones.find((z) => z.id === n.zoneId);
-        const nodeFlows = flows.filter((f) => f.fromId === n.id || f.toId === n.id);
-        return {
-          name: n.name,
-          jurisdiction: zone?.jurisdiction,
-          regime: zone?.name,
-          annualIncome: n.annualIncome,
-          etr: n.etr,
-          hasSubstance: n.hasSubstance,
-          passiveIncomeShare: n.passiveIncomeShare,
-          frozen: n.frozen,
-          riskFlags: n.riskFlags?.map((r) => r.type),
-          flowCount: nodeFlows.length,
-        };
-      }),
-      zoneCount: zones.length,
-      flowCount: flows.length,
-    };
-  }, [nodes, zones, flows, project]);
+  // ─── Smart Context Sync: hash-based canvas snapshot ─────────────────────
+  const [canvasHash, setCanvasHash] = useState<string | null>(null);
+  const snapshotJsonRef = useRef<string>('{}');
+  const lastHashRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!project) return;
+    const timer = setTimeout(async () => {
+      try {
+        const snapshot = await generateAuditSnapshot(project);
+        if (snapshot.hash !== lastHashRef.current) {
+          lastHashRef.current = snapshot.hash;
+          snapshotJsonRef.current = snapshot.canonicalJson;
+          setCanvasHash(snapshot.hash);
+        }
+      } catch {
+        // Snapshot computation is non-critical — fail silently
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [project, nodes, zones, flows]);
+
+  // ─── Transport: prepareSendMessagesRequest ensures fresh snapshot per request ─
+  // The closure captures refs (not state values), so it always reads the latest
+  // snapshot at the moment the user sends a message — not at render time.
+  const transportRef = useRef(new DefaultChatTransport({
+    api: '/api/chat',
+    prepareSendMessagesRequest: ({ id, messages: msgs }) => ({
+      body: {
+        id,
+        messages: msgs,
+        canvasSnapshot: snapshotJsonRef.current,
+        canvasHash: lastHashRef.current,
+      },
+    }),
+  }));
 
   const { messages, sendMessage, status, error } = useChat({
-    transport: new DefaultChatTransport({
-      api: '/api/chat',
-      body: { context: buildContext() },
-    }),
+    transport: transportRef.current,
     onError: (err) => {
       console.warn('[AICopilot] Chat error:', err.message);
     },
@@ -193,6 +201,26 @@ export function AICopilotChat() {
           <span style={{ fontSize: '14px', fontWeight: 600, color: '#1d1d1f' }}>
             AI Tax Advisor
           </span>
+          {canvasHash && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '11px',
+                padding: '2px 8px',
+                borderRadius: '9999px',
+                background: 'rgba(52, 199, 89, 0.12)',
+                border: '1px solid rgba(52, 199, 89, 0.3)',
+                color: '#34c759',
+                boxShadow: '0 0 8px rgba(52, 199, 89, 0.25)',
+              }}
+              title="AI has real-time access to your canvas structure"
+            >
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34c759', boxShadow: '0 0 4px #34c759' }} />
+              Canvas synced ({canvasHash.slice(0, 7)})
+            </span>
+          )}
         </div>
         <button
           onClick={() => setIsOpen(false)}
