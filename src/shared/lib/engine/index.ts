@@ -8,3 +8,4 @@ export * from './engine-core';
 export * from './engine-tax';
 export * from './engine-risks';
 export * from './engine-accounting';
+export * from './audit';

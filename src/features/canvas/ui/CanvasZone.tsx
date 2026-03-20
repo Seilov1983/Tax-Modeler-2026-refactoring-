@@ -146,9 +146,9 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         group.getLayer()?.batchDraw();
       }
 
-      // Determine zone kind: country if it has children, else regime
-      const isCountry = allZones.some((z) => z.parentId === zone.id);
-      const kind = isCountry ? 'country' : 'regime';
+      // Determine zone kind by parentId: countries have no parent, regimes do.
+      // This correctly handles empty countries (zero child regimes).
+      const kind = !zone.parentId ? 'country' : 'regime';
 
       // Get screen coordinates for the DOM overlay menu
       const stage = group?.getStage();
@@ -284,27 +284,37 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   );
 
   // ─── Transform end: Scale-to-Width pattern ─────────────────────────────
-  // Extract scaleX/Y, multiply by current width/height, dispatch new dimensions,
-  // immediately reset Konva node scale to 1 to prevent UI/text distortion.
+  // When resizing from left/top edges, Konva offsets the bgRect's x/y within
+  // the Group. We must fold that offset into the Group position and reset
+  // bgRect to origin — otherwise border, header, and text tear apart.
   const handleTransformEnd = useCallback(() => {
-    const node = bgRectRef.current;
-    if (!node) return;
+    const rect = bgRectRef.current;
+    const group = groupRef.current;
+    if (!rect || !group) return;
 
-    const scaleX = node.scaleX();
-    const scaleY = node.scaleY();
+    const scaleX = rect.scaleX();
+    const scaleY = rect.scaleY();
 
-    // Calculate absolute dimensions from scale, enforce minimums
-    const newW = Math.max(100, Math.round(node.width() * scaleX));
-    const newH = Math.max(100, Math.round(node.height() * scaleY));
+    // 1. Calculate new real dimensions from scale, enforce minimums
+    const newW = Math.max(100, Math.round(rect.width() * scaleX));
+    const newH = Math.max(100, Math.round(rect.height() * scaleY));
 
-    // CRITICAL: Reset scale to 1 immediately to prevent text/UI distortion
-    node.scaleX(1);
-    node.scaleY(1);
-    node.width(newW);
-    node.height(newH);
+    // 2. Fold bgRect's position offset into Group position (left/top resize)
+    const newX = Math.round(group.x() + rect.x());
+    const newY = Math.round(group.y() + rect.y());
 
-    // Dispatch explicit width/height to Jotai (never scaleX/scaleY)
-    resizeZone({ id: zone.id, w: newW, h: newH });
+    // 3. Reset bgRect to origin — all children are Group-relative
+    rect.position({ x: 0, y: 0 });
+    rect.scaleX(1);
+    rect.scaleY(1);
+    rect.width(newW);
+    rect.height(newH);
+
+    // 4. Sync Group position immediately (prevents visual jump on next render)
+    group.position({ x: newX, y: newY });
+
+    // 5. Dispatch position + dimensions to Jotai in one atomic update
+    resizeZone({ id: zone.id, w: newW, h: newH, x: newX, y: newY });
   }, [zone.id, resizeZone]);
 
   // ─── Compute border visual state ───────────────────────────────────────────

@@ -6,7 +6,7 @@
  * reactive state graph.
  */
 
-import { toPng } from 'html-to-image';
+import Konva from 'konva';
 import type { Project } from '@shared/types';
 
 // ─── Save project as JSON file ──────────────────────────────────────────────
@@ -47,24 +47,30 @@ export function importProjectJson(file: File): Promise<Project> {
   });
 }
 
-// ─── Export canvas to PNG ───────────────────────────────────────────────────
+// ─── Export canvas to PNG (native Konva — no DOM-to-image overhead) ─────────
 
-export async function exportCanvasToPng(
+export function exportCanvasToPng(
   elementId: string,
   filename = 'structure.png',
-): Promise<void> {
-  const node = document.getElementById(elementId);
-  if (!node) {
+): void {
+  const container = document.getElementById(elementId);
+  if (!container) {
     console.error(`exportCanvasToPng: element #${elementId} not found`);
     return;
   }
 
+  // Find the Konva Stage whose container lives inside our wrapper
+  const stage = Konva.stages.find(
+    (s) => container.contains(s.container()),
+  );
+
+  if (!stage) {
+    console.error('exportCanvasToPng: no Konva Stage found inside #' + elementId);
+    return;
+  }
+
   try {
-    const dataUrl = await toPng(node, {
-      quality: 0.95,
-      backgroundColor: '#f9fafb',
-      filter: (domNode: HTMLElement) => !domNode.classList?.contains('exclude-from-export'),
-    });
+    const dataUrl = stage.toDataURL({ pixelRatio: 2 });
     const link = document.createElement('a');
     link.download = filename;
     link.href = dataUrl;

@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * ProjectHeader — top bar with project title, Save/Load JSON, and Export PNG.
+ * ProjectHeader — minimalist top bar with project info, file actions,
+ * and inline Theme / Language quick toggles.
  * Liquid Glass design: frosted glass bar, refined typography, subtle borders.
  */
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { useRef, useCallback } from 'react';
-import { SettingsModal } from '@features/settings/ui/SettingsModal';
-import { settingsOpenAtom } from '@features/settings/model/settings-atom';
+import { useRef, useState, useCallback } from 'react';
+import { settingsAtom } from '@features/settings/model/settings-atom';
 import { projectAtom, hydrateProjectAtom } from '@features/canvas';
 import { baseCurrencyAtom } from '@features/canvas/model/project-atom';
 import {
@@ -16,8 +16,6 @@ import {
   pastStatesAtom, futureStatesAtom,
 } from '../model/history-atoms';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
-import { addNodeAtom } from '@features/canvas/model/graph-actions-atom';
-import { viewportAtom } from '@features/canvas/model/viewport-atom';
 import { defaultProject } from '@entities/project';
 import {
   ensureMasterData, ensureZoneTaxDefaults,
@@ -26,6 +24,9 @@ import {
 } from '@shared/lib/engine';
 import type { Project } from '@shared/types';
 import { downloadProjectJson, importProjectJson, exportCanvasToPng } from '../model/export-actions';
+import { generateAuditSnapshot, exportStructureBook, downloadMarkdown } from '@shared/lib/engine';
+import { Sun, Moon, Globe, ShieldCheck, LayoutDashboard } from 'lucide-react';
+import { ProjectDashboard } from './ProjectDashboard';
 
 const CURRENCY_OPTIONS = [
   { code: 'USD', label: 'USD ($)' },
@@ -46,31 +47,10 @@ export function ProjectHeader() {
   const canUndo = useAtomValue(canUndoAtom);
   const canRedo = useAtomValue(canRedoAtom);
   const setSelection = useSetAtom(selectionAtom);
-  const addNode = useSetAtom(addNodeAtom);
-  const viewport = useAtomValue(viewportAtom);
   const setPastStates = useSetAtom(pastStatesAtom);
   const setFutureStates = useSetAtom(futureStatesAtom);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [showSettings, setShowSettings] = useAtom(settingsOpenAtom);
-
-  const getViewportCenter = useCallback(() => {
-    const vp = document.getElementById('viewport');
-    if (!vp) return { x: 400, y: 300 };
-    const rect = vp.getBoundingClientRect();
-    const cx = (rect.width / 2 - viewport.panX) / viewport.scale;
-    const cy = (rect.height / 2 - viewport.panY) / viewport.scale;
-    return { x: Math.round(cx - 90), y: Math.round(cy - 40) };
-  }, [viewport]);
-
-  const handleAddCompany = useCallback(() => {
-    const pos = getViewportCenter();
-    addNode({ type: 'company', name: 'New Company', x: pos.x, y: pos.y });
-  }, [addNode, getViewportCenter]);
-
-  const handleAddPerson = useCallback(() => {
-    const pos = getViewportCenter();
-    addNode({ type: 'person', name: 'New Person', x: pos.x + 20, y: pos.y + 20 });
-  }, [addNode, getViewportCenter]);
+  const [settings, setSettings] = useAtom(settingsAtom);
 
   const handleCurrencyChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -116,6 +96,25 @@ export function ProjectHeader() {
     exportCanvasToPng('canvas-render-area', `structure-${Date.now()}.png`);
   }, []);
 
+  const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+
+  const handleAuditExport = useCallback(async () => {
+    if (!project || auditLoading) return;
+    setAuditLoading(true);
+    try {
+      const snapshot = await generateAuditSnapshot(project);
+      const markdown = exportStructureBook(project, snapshot);
+      const ts = new Date().toISOString().slice(0, 10);
+      downloadMarkdown(markdown, `structure-book-${ts}.md`);
+    } catch (err) {
+      console.error('[Audit Export]', err);
+      alert('Failed to generate audit report.');
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [project, auditLoading]);
+
   const handleNewProject = useCallback(() => {
     if (!confirm('Create a new blank project? All unsaved changes will be lost.')) return;
     const p = defaultProject() as Project;
@@ -131,7 +130,24 @@ export function ProjectHeader() {
     setFutureStates([]);
   }, [hydrate, setSelection, setPastStates, setFutureStates]);
 
+  const toggleTheme = useCallback(() => {
+    setSettings((prev) => ({
+      ...prev,
+      theme: prev.theme === 'dark' ? 'light' : 'dark',
+    }));
+  }, [setSettings]);
+
+  const toggleLanguage = useCallback(() => {
+    setSettings((prev) => ({
+      ...prev,
+      language: prev.language === 'en' ? 'ru' : 'en',
+    }));
+  }, [setSettings]);
+
   if (!project) return null;
+
+  const isDark = settings.theme === 'dark';
+  const lang = settings.language || 'en';
 
   return (
     <div
@@ -188,7 +204,7 @@ export function ProjectHeader() {
         </div>
       </div>
 
-      {/* Right: undo/redo + actions */}
+      {/* Right: undo/redo + file actions + theme/lang toggles */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         <button
           onClick={() => undo()}
@@ -212,23 +228,14 @@ export function ProjectHeader() {
         <div style={{ width: '1px', height: '20px', background: 'rgba(0,0,0,0.06)', margin: '0 4px' }} />
 
         <button
-          onClick={handleAddCompany}
-          data-testid="btn-add-company"
-          title="Add a new company node to the canvas"
-          style={{ ...btnSecondary, background: 'rgba(0,122,255,0.06)', color: '#007aff', borderColor: 'transparent' }}
+          onClick={() => setDashboardOpen(true)}
+          data-testid="btn-projects-dashboard"
+          title="Open Project Dashboard"
+          style={{ ...btnSecondary, display: 'flex', alignItems: 'center', gap: '5px' }}
         >
-          + Company
+          <LayoutDashboard size={14} />
+          Projects
         </button>
-        <button
-          onClick={handleAddPerson}
-          data-testid="btn-add-person"
-          title="Add a new person node to the canvas"
-          style={{ ...btnSecondary, background: 'rgba(48,209,88,0.06)', color: '#30d158', borderColor: 'transparent' }}
-        >
-          + Person
-        </button>
-
-        <div style={{ width: '1px', height: '20px', background: 'rgba(0,0,0,0.06)', margin: '0 4px' }} />
 
         <button
           onClick={handleNewProject}
@@ -252,31 +259,63 @@ export function ProjectHeader() {
         <button onClick={handleSave} style={btnSecondary}>
           Save
         </button>
-        <button
-          onClick={() => setShowSettings(true)}
-          data-testid="btn-settings"
-          title="Settings"
-          style={{
-            ...btnSecondary,
-            width: '34px',
-            height: '34px',
-            padding: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '16px',
-          }}
-          aria-label="Open settings"
-        >
-          {'\u2699'}
-        </button>
 
         <button onClick={handleExportPng} style={btnPrimary}>
           Export PNG
         </button>
+
+        <button
+          onClick={handleAuditExport}
+          disabled={auditLoading}
+          title="Generate SHA-256 audit snapshot and download Corporate Structure Book"
+          style={{
+            ...btnPrimary,
+            background: auditLoading ? '#86868b' : '#34c759',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            opacity: auditLoading ? 0.7 : 1,
+          }}
+        >
+          <ShieldCheck size={14} />
+          {auditLoading ? 'Hashing...' : 'Audit Export'}
+        </button>
+
+        <div style={{ width: '1px', height: '20px', background: 'rgba(0,0,0,0.06)', margin: '0 4px' }} />
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          style={{
+            ...btnIcon,
+            color: isDark ? '#f5a623' : '#86868b',
+          }}
+          aria-label="Toggle theme"
+        >
+          {isDark ? <Moon size={16} /> : <Sun size={16} />}
+        </button>
+
+        {/* Language toggle */}
+        <button
+          onClick={toggleLanguage}
+          title={lang === 'en' ? 'Переключить на русский' : 'Switch to English'}
+          style={{
+            ...btnIcon,
+            fontSize: '12px',
+            fontWeight: 600,
+            color: '#86868b',
+          }}
+          aria-label="Toggle language"
+        >
+          {lang === 'en' ? 'RU' : 'EN'}
+        </button>
       </div>
 
-      {showSettings && <SettingsModal />}
+      <ProjectDashboard
+        open={dashboardOpen}
+        onOpenChange={setDashboardOpen}
+      />
     </div>
   );
 }
@@ -303,4 +342,18 @@ const btnPrimary: React.CSSProperties = {
   borderRadius: '10px',
   cursor: 'pointer',
   transition: 'background 0.15s, transform 0.1s',
+};
+
+const btnIcon: React.CSSProperties = {
+  width: '34px',
+  height: '34px',
+  padding: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'rgba(0, 0, 0, 0.04)',
+  border: 'none',
+  borderRadius: '10px',
+  cursor: 'pointer',
+  transition: 'background 0.15s',
 };

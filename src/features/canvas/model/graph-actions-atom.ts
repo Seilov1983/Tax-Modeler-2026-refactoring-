@@ -301,19 +301,19 @@ export interface AddZonePayload {
   parentId?: string | null;
 }
 
-/** Default zone dimensions — Countries: 200×400, Regimes: 100×200 */
-export const COUNTRY_DEFAULT_SIZE = { w: 200, h: 400 };
-export const REGIME_DEFAULT_SIZE = { w: 100, h: 200 };
+/** Default zone dimensions — Landscape orientation */
+export const COUNTRY_DEFAULT_SIZE = { w: 400, h: 250 };
+export const REGIME_DEFAULT_SIZE = { w: 200, h: 120 };
 
 const ZONE_DEFAULTS: Record<string, { w: number; h: number }> = {
-  KZ: { w: 200, h: 400 },
-  UAE: { w: 200, h: 400 },
-  HK: { w: 200, h: 400 },
-  CY: { w: 200, h: 400 },
-  SG: { w: 200, h: 400 },
-  UK: { w: 200, h: 400 },
-  US: { w: 200, h: 400 },
-  BVI: { w: 200, h: 400 },
+  KZ: { w: 400, h: 250 },
+  UAE: { w: 400, h: 250 },
+  HK: { w: 400, h: 250 },
+  CY: { w: 400, h: 250 },
+  SG: { w: 400, h: 250 },
+  UK: { w: 400, h: 250 },
+  US: { w: 400, h: 250 },
+  BVI: { w: 400, h: 250 },
 };
 
 export const addZoneAtom = atom(
@@ -422,20 +422,21 @@ export const moveZoneAtom = atom(
 
 export const resizeZoneAtom = atom(
   null,
-  (_get, set, payload: { id: string; w: number; h: number }) => {
+  (_get, set, payload: { id: string; w: number; h: number; x?: number; y?: number }) => {
     set(commitHistoryAtom);
 
-    set(zonesAtom, (prev) =>
-      prev.map((z) => (z.id === payload.id ? { ...z, w: payload.w, h: payload.h } : z)),
-    );
+    const update = (z: Zone) => {
+      if (z.id !== payload.id) return z;
+      const patched = { ...z, w: payload.w, h: payload.h };
+      if (payload.x !== undefined) patched.x = payload.x;
+      if (payload.y !== undefined) patched.y = payload.y;
+      return patched;
+    };
+
+    set(zonesAtom, (prev) => prev.map(update));
     set(projectAtom, (prev) => {
       if (!prev) return prev;
-      return {
-        ...prev,
-        zones: prev.zones.map((z) =>
-          z.id === payload.id ? { ...z, w: payload.w, h: payload.h } : z,
-        ),
-      };
+      return { ...prev, zones: prev.zones.map(update) };
     });
   },
 );

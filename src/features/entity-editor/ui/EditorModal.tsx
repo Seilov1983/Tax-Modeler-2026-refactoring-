@@ -26,6 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -33,6 +34,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+
+// ─── Liquid Glass utility classes (localized — no globals.css pollution) ──────
+
+const GLASS_INPUT = 'bg-white/50 border-white/40 text-slate-900 placeholder:text-slate-500 focus-visible:ring-blue-500 focus-visible:border-transparent';
+const GLASS_SELECT = 'bg-white/50 border-white/40 text-slate-900';
+const GLASS_LABEL = 'text-slate-800 font-medium';
 
 // ─── Form types ──────────────────────────────────────────────────────────────
 
@@ -42,6 +49,8 @@ interface NodeFormValues {
   annualIncome: number;
   etr: number;
   citizenship: string;
+  passiveIncomeShare: number;
+  hasSubstance: boolean;
 }
 
 interface OwnershipFormValues {
@@ -70,7 +79,7 @@ function NodeEditor({
   return (
     <>
       <Field label={t('name', nodeLang)}>
-        <Input type="text" {...register('name')} />
+        <Input type="text" className={GLASS_INPUT} {...register('name')} />
       </Field>
 
       <Field label="Type">
@@ -79,7 +88,7 @@ function NodeEditor({
           control={control}
           render={({ field }) => (
             <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger>
+              <SelectTrigger className={GLASS_SELECT}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -105,6 +114,7 @@ function NodeEditor({
         <Input
           type="number"
           step="any"
+          className={GLASS_INPUT}
           {...register('annualIncome', { valueAsNumber: true })}
         />
       </Field>
@@ -116,6 +126,7 @@ function NodeEditor({
             step="0.01"
             min={0}
             max={1}
+            className={GLASS_INPUT}
             {...register('etr', { valueAsNumber: true })}
           />
         </Field>
@@ -123,8 +134,40 @@ function NodeEditor({
 
       {watchType === 'person' && node.citizenship && (
         <Field label={t('citizenship', nodeLang)}>
-          <Input type="text" {...register('citizenship')} />
+          <Input type="text" className={GLASS_INPUT} {...register('citizenship')} />
         </Field>
+      )}
+
+      {watchType === 'company' && (
+        <>
+          <Field label={t('passiveIncomeShare', nodeLang)}>
+            <Input
+              type="number"
+              step="1"
+              min={0}
+              max={100}
+              className={GLASS_INPUT}
+              {...register('passiveIncomeShare', { valueAsNumber: true })}
+            />
+          </Field>
+          <Field label={t('hasSubstance', nodeLang)}>
+            <Controller
+              name="hasSubstance"
+              control={control}
+              render={({ field }) => (
+                <div className="flex items-center gap-2 py-1">
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                  <span className="text-sm text-slate-600">
+                    {field.value ? t('yes', nodeLang) : t('no', nodeLang)}
+                  </span>
+                </div>
+              )}
+            />
+          </Field>
+        </>
       )}
 
       <div className="mt-4 rounded-xl bg-black/[0.03] p-3 text-[11px] text-gray-500">
@@ -151,6 +194,7 @@ function OwnershipEditor({
           step="0.01"
           min={0}
           max={100}
+          className={GLASS_INPUT}
           {...register('percent', { valueAsNumber: true })}
         />
       </Field>
@@ -158,6 +202,7 @@ function OwnershipEditor({
         <Input
           type="number"
           step="0.01"
+          className={GLASS_INPUT}
           {...register('manualAdjustment', { valueAsNumber: true })}
         />
       </Field>
@@ -171,7 +216,7 @@ function OwnershipEditor({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mb-3.5">
-      <Label className="text-slate-900">{label}</Label>
+      <Label className={GLASS_LABEL}>{label}</Label>
       {children}
     </div>
   );
@@ -214,7 +259,7 @@ export function EditorModal() {
 
   // ─── react-hook-form for node editing ──────────────────────────────
   const nodeForm = useForm<NodeFormValues>({
-    defaultValues: { name: '', type: 'company', annualIncome: 0, etr: 0, citizenship: '' },
+    defaultValues: { name: '', type: 'company', annualIncome: 0, etr: 0, citizenship: '', passiveIncomeShare: 0, hasSubstance: false },
   });
 
   const ownershipForm = useForm<OwnershipFormValues>({
@@ -231,6 +276,8 @@ export function EditorModal() {
         annualIncome: n.annualIncome,
         etr: n.etr,
         citizenship: n.citizenship?.join(', ') ?? '',
+        passiveIncomeShare: n.passiveIncomeShare ?? 0,
+        hasSubstance: n.hasSubstance ?? false,
       });
     }
   }, [entityKey, isNode]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -267,6 +314,8 @@ export function EditorModal() {
       type: values.type,
       annualIncome: values.annualIncome,
       etr: values.etr,
+      passiveIncomeShare: values.passiveIncomeShare,
+      hasSubstance: values.hasSubstance,
     };
     if (values.type === 'person' && values.citizenship) {
       patch.citizenship = values.citizenship.split(',').map((s) => s.trim()).filter(Boolean);
@@ -306,7 +355,7 @@ export function EditorModal() {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent
-        className="no-canvas-events sm:max-w-[425px] p-6 bg-white/60 backdrop-blur-xl border border-white/50 shadow-2xl rounded-3xl z-50 text-slate-900"
+        className="no-canvas-events sm:max-w-[425px]"
         onPointerDown={(e) => e.stopPropagation()}
       >
         <DialogHeader className="px-0 pt-0 pb-4">

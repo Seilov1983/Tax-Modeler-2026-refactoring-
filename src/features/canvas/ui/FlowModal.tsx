@@ -38,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 
 const FLOW_TYPES: FlowType[] = [
   'Dividends', 'Royalties', 'Interest', 'Services', 'Salary', 'Goods', 'Equipment',
@@ -47,6 +48,12 @@ const CURRENCIES: CurrencyCode[] = [
   'KZT', 'USD', 'EUR', 'AED', 'HKD', 'SGD', 'GBP', 'SCR', 'CNY',
 ];
 
+// ─── Liquid Glass utility classes (localized — no globals.css pollution) ──────
+
+const GLASS_INPUT = 'bg-white/50 border-white/40 text-slate-900 placeholder:text-slate-500 focus-visible:ring-blue-500 focus-visible:border-transparent';
+const GLASS_SELECT = 'bg-white/50 border-white/40 text-slate-900';
+const GLASS_LABEL = 'text-slate-800 font-medium';
+
 interface FlowFormData {
   flowType: FlowType;
   grossAmount: number;
@@ -54,6 +61,8 @@ interface FlowFormData {
   whtRate: number;
   paymentMethod: 'bank' | 'cash' | 'crypto';
   dealTag: string;
+  applyDTT: boolean;
+  customWhtRate: number | undefined;
 }
 
 export function FlowModal() {
@@ -82,6 +91,8 @@ export function FlowModal() {
       whtRate: flow.whtRate,
       paymentMethod: flow.paymentMethod as 'bank' | 'cash' | 'crypto',
       dealTag: flow.dealTag ?? '',
+      applyDTT: flow.applyDTT ?? false,
+      customWhtRate: flow.customWhtRate,
     } : undefined,
   });
 
@@ -94,6 +105,8 @@ export function FlowModal() {
         whtRate: flow.whtRate,
         paymentMethod: flow.paymentMethod as 'bank' | 'cash' | 'crypto',
         dealTag: flow.dealTag ?? '',
+        applyDTT: flow.applyDTT ?? false,
+        customWhtRate: flow.customWhtRate,
       });
     }
   }, [flow?.id, reset]);
@@ -149,12 +162,12 @@ export function FlowModal() {
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-1 flex-col overflow-y-auto">
           <div className="flex-1 space-y-4 px-6 py-4">
             <div>
-              <Label>{t('flowType')}</Label>
+              <Label className={GLASS_LABEL}>{t('flowType')}</Label>
               <Select
                 value={watch('flowType')}
                 onValueChange={(v) => setValue('flowType', v as FlowType, { shouldDirty: true })}
               >
-                <SelectTrigger>
+                <SelectTrigger className={GLASS_SELECT}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -165,18 +178,18 @@ export function FlowModal() {
             </div>
 
             <div>
-              <Label>{t('grossAmount')}</Label>
-              <Input type="number" step="0.01" min="0" {...register('grossAmount')} />
+              <Label className={GLASS_LABEL}>{t('grossAmount')}</Label>
+              <Input type="number" step="0.01" min="0" className={GLASS_INPUT} {...register('grossAmount')} />
               {errors.grossAmount && <p className="mt-1 text-xs text-red-500">{errors.grossAmount.message}</p>}
             </div>
 
             <div>
-              <Label>{t('currency')}</Label>
+              <Label className={GLASS_LABEL}>{t('currency')}</Label>
               <Select
                 value={watch('currency')}
                 onValueChange={(v) => setValue('currency', v as CurrencyCode, { shouldDirty: true })}
               >
-                <SelectTrigger>
+                <SelectTrigger className={GLASS_SELECT}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -186,18 +199,18 @@ export function FlowModal() {
             </div>
 
             <div>
-              <Label>{t('whtRate')}</Label>
-              <Input type="number" step="0.01" min="0" max="1" {...register('whtRate')} />
+              <Label className={GLASS_LABEL}>{t('whtRate')}</Label>
+              <Input type="number" step="0.01" min="0" max="1" className={GLASS_INPUT} {...register('whtRate')} />
               {errors.whtRate && <p className="mt-1 text-xs text-red-500">{errors.whtRate.message}</p>}
             </div>
 
             <div>
-              <Label>{t('paymentMethod')}</Label>
+              <Label className={GLASS_LABEL}>{t('paymentMethod')}</Label>
               <Select
                 value={watch('paymentMethod')}
                 onValueChange={(v) => setValue('paymentMethod', v as 'bank' | 'cash' | 'crypto', { shouldDirty: true })}
               >
-                <SelectTrigger>
+                <SelectTrigger className={GLASS_SELECT}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -209,11 +222,39 @@ export function FlowModal() {
             </div>
 
             <div>
-              <Label>{t('dealTag')}</Label>
-              <Input type="text" {...register('dealTag')} placeholder={t('optionalTag')} />
+              <Label className={GLASS_LABEL}>{t('dealTag')}</Label>
+              <Input type="text" className={GLASS_INPUT} {...register('dealTag')} placeholder={t('optionalTag')} />
             </div>
 
-            <div className="rounded-2xl bg-black/[0.03] dark:bg-white/5 p-3 text-xs text-gray-400 dark:text-gray-500">
+            <div>
+              <Label className={GLASS_LABEL}>{t('applyDTT')}</Label>
+              <div className="flex items-center gap-2 py-1">
+                <Switch
+                  checked={watch('applyDTT')}
+                  onCheckedChange={(v) => setValue('applyDTT', v, { shouldDirty: true })}
+                />
+                <span className="text-sm text-slate-600">
+                  {watch('applyDTT') ? t('yes') : t('no')}
+                </span>
+              </div>
+            </div>
+
+            {watch('applyDTT') && (
+              <div>
+                <Label className={GLASS_LABEL}>{t('customWhtRate')}</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  className={GLASS_INPUT}
+                  {...register('customWhtRate', { valueAsNumber: true })}
+                  placeholder="e.g. 5"
+                />
+              </div>
+            )}
+
+            <div className="rounded-2xl bg-black/[0.03] p-3 text-xs text-gray-500">
               ID: {flow.id}<br />
               Status: {flow.status}
               {flow.compliance?.exceeded && (

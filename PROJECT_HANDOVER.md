@@ -245,6 +245,8 @@ Z-index is an explicit, enforced data property — not a CSS value:
 
 Konva renders elements in array order; the zones array is sorted by `zIndex` before rendering to guarantee Countries are always beneath Regimes, which are always beneath Nodes.
 
+**Spatial collision priority (detectZoneId):** While Z-indexes control visual rendering order, the `detectZoneId` collision algorithm MUST prioritize the zone with the **smallest physical area** when zones overlap. For example, dropping a node inside a Special Economic Zone (Regime, small area) that sits inside a Country (large area) must assign the node to the Regime, regardless of rendering order. The sort key is `zone.w * zone.h` ascending — smallest area wins.
+
 ### 3.7 60 FPS Performance Patterns
 
 Three patterns work together to ensure the canvas never drops below 60 FPS even with 50+ zones and 200+ nodes:
@@ -807,17 +809,19 @@ The two remaining major engineering tracks are:
 5. Add project list view (create, open, delete projects).
 6. Zod 4 schema validation at the API boundary (`z.object({ graph: ProjectSchema })`) — `ProjectSchema` to be derived from the existing TypeScript types in `shared/types/index.ts`.
 
-**Key constraint:** The localStorage schema (`tsm26_onefile_project_v2`) must remain functional as the offline fallback. Do not remove it.
+**Key constraints:**
+- The localStorage schema (`tsm26_onefile_project_v2`) must remain functional as the offline fallback. Do not remove it.
+- **Append-Only (Event Sourcing) model:** The Postgres `projects` table MUST use an append-only storage pattern for committed graph states. `UPDATE` and `DELETE` on committed snapshots are strictly forbidden. Each save produces a new immutable row (version). This guarantees the cryptographic SHA-256 Audit Log chain is never compromised — any retrospective mutation would break the hash chain and invalidate the entire audit trail.
 
 ### Track 2 — Tax Engine Expansion (Law-as-Code)
 
 **Goal:** Make the tax engine comprehensive enough to produce audit-grade tax computations for the modelled structures.
 
 **Scope of work:**
-1. **Complete WHT treaty matrix:** Implement bilateral tax treaty overrides between all supported jurisdictions (currently only domestic rates are encoded).
-2. **Pillar Two (GloBE) calculation:** Implement the full Income Inclusion Rule (IIR) and Qualified Domestic Minimum Top-up Tax (QDMTT) for groups above the EUR 750M threshold.
+1. **Manual DTT Toggle:** Do NOT hardcode treaty matrices. Add a `[✓] Apply DTT` checkbox in the Editor Drawer where the CFO manually overrides the default WHT rate. The system is a visual simulator, not a treaty database.
+2. **Pillar Two Monitoring:** The system ONLY scans the group ETR. If ETR < 15%, trigger a `PILLAR2_RISK` flag via D-MACE. Zero carve-out or top-up tax math is allowed — this is a What-If simulator, not a GloBE compliance engine.
 3. **CFC attribution calculation:** Compute the attributed income from CFCs back to the controlling entity using the applicable jurisdiction's CFC rules.
-4. **Transfer pricing arm's-length range:** Add a comparable transaction store to `engine-core.ts` master data; flag flows where the stated rate is outside the arm's-length range.
+4. **Transfer pricing risk flags (READ-ONLY):** The Risk Engine may flag a flow with a yellow `TP_WARNING` badge when the stated rate deviates from arm's-length benchmarks, but it MUST NEVER automatically recalculate the tax base. The CFO's manually entered values are sovereign. The engine observes and warns — it does not mutate.
 5. **Consolidated tax summary:** Add `computeGroupTax(project: Project): GroupTaxSummary` to `engine-tax.ts` — produces a per-entity and consolidated effective tax rate across the entire modelled structure.
 6. **Property-based test expansion:** For each new calculation added, write corresponding `fast-check` property tests verifying mathematical invariants (non-negativity, rate bounds, conservation).
 

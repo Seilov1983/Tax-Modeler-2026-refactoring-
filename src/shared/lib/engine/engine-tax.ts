@@ -326,11 +326,14 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
     else if (ft === 'Services') domesticRate = Number(whtRates.services || 0);
     // Salary and Goods/Equipment: no WHT (handled by payroll or customs)
 
-    // Use the flow's explicit whtRate if set, otherwise use the domestic rate
+    // DTT override: if a treaty applies and a custom rate is set, use it
+    // Otherwise use the flow's explicit whtRate, or fall back to domestic rate
     // whtRates from master data are fractional (0.15 = 15%), flow.whtRate is percentage (15)
-    const ratePercent = Number(flow.whtRate || 0) > 0
-      ? Number(flow.whtRate)
-      : domesticRate * 100;
+    const ratePercent = flow.applyDTT && flow.customWhtRate != null
+      ? Number(flow.customWhtRate)
+      : Number(flow.whtRate || 0) > 0
+        ? Number(flow.whtRate)
+        : domesticRate * 100;
 
     if (ratePercent <= 0) continue;
 
@@ -376,10 +379,11 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
   }
   totalIncomeBase = bankersRound2(totalIncomeBase);
 
-  // Group ETR: avoid division by zero
-  const totalEffectiveTaxRate = totalIncomeBase > 0
+  // Group ETR: avoid division by zero; clamp to [0, 1] for display sanity
+  const rawEtr = totalIncomeBase > 0
     ? bankersRound2(totalTaxBase / totalIncomeBase * 10000) / 10000 // 4 decimal places
     : 0;
+  const totalEffectiveTaxRate = Math.min(1, Math.max(0, rawEtr));
 
   return {
     citLiabilities,

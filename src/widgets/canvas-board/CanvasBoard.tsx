@@ -49,6 +49,7 @@ import { addNodeAtom, addZoneAtom, NODE_WIDTH, NODE_HEIGHT } from '@features/can
 import { spawnCoordinatesAtom } from '@features/canvas/model/spawn-coordinates-atom';
 import { notificationAtom } from '@features/canvas/model/notification-atom';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
+import { AICopilotChat } from '@features/ai-copilot/ui/AICopilotChat';
 import { ProjectHeader } from '@features/project-management';
 import { isSidebarOpenAtom, sidebarContextAtom } from '@features/master-data-sidebar';
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
@@ -57,10 +58,10 @@ import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 
 // ─── Default sizes for contextual spawning ──────────────────────────────────
-const COUNTRY_DEFAULT_W = 200;
-const COUNTRY_DEFAULT_H = 400;
-const REGIME_DEFAULT_W = 100;
-const REGIME_DEFAULT_H = 200;
+const COUNTRY_DEFAULT_W = 400;
+const COUNTRY_DEFAULT_H = 250;
+const REGIME_DEFAULT_W = 200;
+const REGIME_DEFAULT_H = 120;
 
 // ─── Notification Toast ──────────────────────────────────────────────────────
 
@@ -624,6 +625,7 @@ export function CanvasBoard() {
       <ProjectHeader />
 
       <div
+        id="canvas-render-area"
         ref={containerRef}
         style={{ position: 'fixed', top: '48px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
         onDragOver={handleDragOver}
@@ -742,6 +744,7 @@ export function CanvasBoard() {
         <FlowModal />
         <EditorModal />
         <NotificationToast />
+        <AICopilotChat />
 
         {/* Add Node Menu — Apple Liquid Glass floating popover.
             Rendered as DOM overlay OUTSIDE Konva to avoid canvas clipping.
