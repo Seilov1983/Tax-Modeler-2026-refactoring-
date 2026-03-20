@@ -81,23 +81,38 @@ export async function POST(req: Request) {
     return errorResponse('EMPTY_MESSAGES', 'messages array must not be empty.', 400);
   }
 
-  // Inject canonical canvas snapshot into system prompt — the AI MUST use this data
+  // ─── Diagnostic: prove the canvas JSON reaches the backend ─────────────────
+  console.log('[AI Context Size]:', canvasSnapshot?.length ?? 0, 'chars');
+  if (canvasSnapshot && canvasSnapshot !== '{}') {
+    console.log('[AI Context Hash]:', canvasHash ?? 'n/a');
+  }
+
+  // ─── Construct system prompt with injected canvas data ────────────────────
   let contextBlock = '';
   if (canvasSnapshot && canvasSnapshot !== '{}') {
-    contextBlock = `\n\n## CURRENT CANVAS DATA (SHA-256: ${canvasHash ?? 'n/a'}) — USE THIS FOR ALL ANALYSIS:\nThe following JSON is the user's COMPLETE tax structure currently on the canvas. Analyze it directly. Do NOT ask the user to describe their structure.\n\n${canvasSnapshot}`;
+    contextBlock = `\n\nAnalyze this tax graph strictly based on the following JSON snapshot. Do not hallucinate entities that are not in this data. SHA-256: ${canvasHash ?? 'n/a'}\n\n${canvasSnapshot}`;
   } else if (context) {
     contextBlock = `\n\n## CURRENT STRUCTURE CONTEXT:\n${JSON.stringify(context, null, 2)}`;
   } else {
     contextBlock = '\n\n## NOTE: No canvas structure data is currently available. The user has not created any entities yet. Let them know they can add zones and companies to the canvas for you to analyze.';
   }
 
+  const systemContent = SYSTEM_PROMPT + contextBlock;
+
   try {
     const modelMessages = await convertToModelMessages(messages);
 
+    // Explicitly prepend system message into the messages array
+    // instead of relying on the SDK's `system` parameter — ensures
+    // the full context (including canvas JSON) reaches Ollama verbatim.
+    const finalMessages = [
+      { role: 'system' as const, content: systemContent },
+      ...modelMessages,
+    ];
+
     const result = streamText({
       model: ollama.chat(MODEL_ID),
-      system: SYSTEM_PROMPT + contextBlock,
-      messages: modelMessages,
+      messages: finalMessages,
     });
 
     return result.toUIMessageStreamResponse();

@@ -80,19 +80,26 @@ export function AICopilotChat() {
     return () => clearTimeout(timer);
   }, [project, nodes, zones, flows]);
 
-  // ─── Transport: prepareSendMessagesRequest ensures fresh snapshot per request ─
-  // The closure captures refs (not state values), so it always reads the latest
-  // snapshot at the moment the user sends a message — not at render time.
+  // ─── Transport: custom fetch interceptor injects canvas context ─────────────
+  // We override fetch instead of relying on prepareSendMessagesRequest because
+  // the AI SDK may strip non-standard body fields during serialization.
+  // This interceptor parses the SDK's serialized body, injects our canvas data,
+  // and re-serializes — guaranteeing canvasSnapshot reaches the backend.
   const transportRef = useRef(new DefaultChatTransport({
     api: '/api/chat',
-    prepareSendMessagesRequest: ({ id, messages: msgs }) => ({
-      body: {
-        id,
-        messages: msgs,
-        canvasSnapshot: snapshotJsonRef.current,
-        canvasHash: lastHashRef.current,
-      },
-    }),
+    fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+      let body: Record<string, unknown> = {};
+      if (init?.body && typeof init.body === 'string') {
+        try { body = JSON.parse(init.body); } catch { /* keep empty */ }
+      }
+      // Inject fresh canvas snapshot from refs (always current at send time)
+      body.canvasSnapshot = snapshotJsonRef.current;
+      body.canvasHash = lastHashRef.current;
+      return globalThis.fetch(input, {
+        ...init,
+        body: JSON.stringify(body),
+      });
+    },
   }));
 
   const { messages, sendMessage, status, error } = useChat({
