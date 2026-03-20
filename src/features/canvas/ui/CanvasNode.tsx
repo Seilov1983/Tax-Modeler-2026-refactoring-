@@ -30,6 +30,7 @@ import { draftConnectionAtom, commitDraftConnectionAtom } from '../model/draft-c
 import { moveNodesAtom, reparentNodeAtom, flagNodeErrorAtom } from '../model/graph-actions-atom';
 import { showNotificationAtom } from '../model/notification-atom';
 import { zonesAtom } from '@entities/zone';
+import { settingsAtom } from '@features/settings';
 import { nodeLiveCITAtomFamily } from '@features/tax-calculator/model/atoms';
 import { calculateNodeCardLayout } from '../utils/canvas-layout';
 import { fmtMoney } from '@shared/lib/engine/utils';
@@ -40,6 +41,13 @@ const NODE_COLORS: Record<string, { bg: string; border: string; header: string }
   company: { bg: '#ffffff', border: '#007aff', header: '#f0f5ff' },
   person: { bg: '#ffffff', border: '#30d158', header: '#f0fdf4' },
   txa: { bg: '#fafafa', border: '#98989d', header: '#f5f5f7' },
+};
+
+// ─── Dark Mode: muted fills + neon strokes for Konva (no Tailwind on canvas) ─
+const NODE_COLORS_DARK: Record<string, { bg: string; border: string; header: string }> = {
+  company: { bg: '#1a1b2e', border: '#60a5fa', header: '#1a2540' },
+  person: { bg: '#1a1b2e', border: '#4ade80', header: '#1a2e1a' },
+  txa: { bg: '#1a1b2e', border: '#71717a', header: '#252530' },
 };
 
 const TYPE_BADGES: Record<string, string> = {
@@ -70,6 +78,8 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const flagNodeError = useSetAtom(flagNodeErrorAtom);
   const showNotification = useSetAtom(showNotificationAtom);
   const allZones = useAtomValue(zonesAtom);
+  const settings = useAtomValue(settingsAtom);
+  const isDark = settings.theme === 'dark' || (settings.theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const nodeTax = useAtomValue(nodeLiveCITAtomFamily(node.id));
 
   const groupRef = useRef<Konva.Group>(null);
@@ -89,7 +99,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
 
   const isSelected = selection?.type === 'node' && selection.ids.includes(node.id);
   const isTxa = node.type === 'txa';
-  const colors = NODE_COLORS[node.type] || NODE_COLORS.company;
+  const colors = isDark ? (NODE_COLORS_DARK[node.type] || NODE_COLORS_DARK.company) : (NODE_COLORS[node.type] || NODE_COLORS.company);
   const riskCount = node.riskFlags?.length || 0;
 
   // ─── Layout math (replaces CSS padding) ──────────────────────────────
@@ -391,7 +401,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         text={node.name}
         fontSize={12}
         fontStyle="600"
-        fill="#1d1d1f"
+        fill={isDark ? '#f1f5f9' : '#1d1d1f'}
         width={cardLayout.title.width - 25}
         ellipsis={true}
         wrap="none"

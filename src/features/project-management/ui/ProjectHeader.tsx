@@ -52,7 +52,9 @@ export function ProjectHeader() {
   const setFutureStates = useSetAtom(futureStatesAtom);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [settings, setSettings] = useAtom(settingsAtom);
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
 
   const handleCurrencyChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -133,8 +135,29 @@ export function ProjectHeader() {
   }, [hydrate, setSelection, setPastStates, setFutureStates]);
 
   const toggleTheme = useCallback(() => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  }, [theme, setTheme]);
+    const newTheme = resolvedTheme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    setSettings((prev) => ({ ...prev, theme: newTheme }));
+  }, [resolvedTheme, setTheme, setSettings]);
+
+  const handleTitleClick = useCallback(() => {
+    if (!project) return;
+    setTitleDraft(project.title);
+    setIsEditingTitle(true);
+  }, [project]);
+
+  const handleTitleSave = useCallback(() => {
+    const name = titleDraft.trim();
+    if (name) {
+      setProject((prev) => prev ? { ...prev, title: name } : prev);
+    }
+    setIsEditingTitle(false);
+  }, [titleDraft, setProject]);
+
+  const handleTitleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleTitleSave();
+    if (e.key === 'Escape') setIsEditingTitle(false);
+  }, [handleTitleSave]);
 
   const toggleLanguage = useCallback(() => {
     setSettings((prev) => ({
@@ -145,7 +168,7 @@ export function ProjectHeader() {
 
   if (!project) return null;
 
-  const isDark = theme === 'dark';
+  const isDark = resolvedTheme === 'dark';
   const lang = settings.language || 'en';
 
   return (
@@ -173,9 +196,35 @@ export function ProjectHeader() {
         <span style={{ fontWeight: 700, fontSize: '15px', color: '#1d1d1f', letterSpacing: '-0.02em' }}>
           Tax-Modeler 2026
         </span>
-        <span style={{ fontSize: '12px', color: '#86868b' }}>
-          {project.title}
-        </span>
+        {isEditingTitle ? (
+          <input
+            autoFocus
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={handleTitleSave}
+            onKeyDown={handleTitleKeyDown}
+            style={{
+              fontSize: '12px',
+              color: '#1d1d1f',
+              background: 'rgba(255,255,255,0.8)',
+              border: '1px solid rgba(0,0,0,0.12)',
+              borderRadius: '6px',
+              padding: '2px 8px',
+              outline: 'none',
+              width: '180px',
+            }}
+          />
+        ) : (
+          <span
+            onClick={handleTitleClick}
+            title="Click to rename project"
+            style={{ fontSize: '12px', color: '#86868b', cursor: 'pointer', borderBottom: '1px dashed transparent' }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderBottomColor = '#86868b'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
+          >
+            {project.title}
+          </span>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px', paddingLeft: '12px', borderLeft: '1px solid rgba(0,0,0,0.06)' }}>
           <label style={{ fontSize: '11px', color: '#86868b', fontWeight: 500, letterSpacing: '0.02em' }}>

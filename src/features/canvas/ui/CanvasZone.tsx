@@ -53,6 +53,19 @@ const ZONE_BORDER_COLORS: Record<string, string> = {
   CAY: '#eab308', SEY: '#2dd4bf',
 };
 
+// ─── Dark Mode: muted fills + neon strokes for Konva (no Tailwind on canvas) ─
+const ZONE_COLORS_DARK: Record<string, string> = {
+  KZ: '#2a2520', UAE: '#1e2a3a', HK: '#2a1e28', CY: '#1a2a22',
+  SG: '#241e30', UK: '#2a1e1e', US: '#1e2030', BVI: '#1a2a28',
+  CAY: '#2a2818', SEY: '#1a2820',
+};
+
+const ZONE_BORDER_COLORS_DARK: Record<string, string> = {
+  KZ: '#fbbf24', UAE: '#60a5fa', HK: '#f472b6', CY: '#34d399',
+  SG: '#a78bfa', UK: '#f87171', US: '#818cf8', BVI: '#2dd4bf',
+  CAY: '#facc15', SEY: '#5eead4',
+};
+
 const HEADER_HEIGHT = 36;
 
 export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZoneProps) {
@@ -67,10 +80,11 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   const allZones = useAtomValue(zonesAtom);
   const settings = useAtomValue(settingsAtom);
   const lang = settings.language || 'en';
+  const isDark = settings.theme === 'dark' || (settings.theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
 
-  const bgColor = ZONE_COLORS[zone.jurisdiction] || '#f1f5f9';
-  const borderColor = ZONE_BORDER_COLORS[zone.jurisdiction] || '#94a3b8';
+  const bgColor = isDark ? (ZONE_COLORS_DARK[zone.jurisdiction] || '#1e1e2e') : (ZONE_COLORS[zone.jurisdiction] || '#f1f5f9');
+  const borderColor = isDark ? (ZONE_BORDER_COLORS_DARK[zone.jurisdiction] || '#64748b') : (ZONE_BORDER_COLORS[zone.jurisdiction] || '#94a3b8');
 
   const headerLayout = useMemo(
     () => calculateZoneHeaderLayout({ width: zone.w, padding: 16 }),
@@ -377,7 +391,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         width={zone.w}
         height={zone.h}
         fill={bgColor}
-        opacity={isSelected ? 0.35 : isValidDropTarget ? 0.3 : 0.2}
+        opacity={isDark ? 0.7 : (isSelected ? 0.35 : isValidDropTarget ? 0.3 : 0.2)}
         cornerRadius={16}
         onPointerDown={handleZonePointerDown}
       />
@@ -418,7 +432,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         text={localizedName(zone.name, lang).toUpperCase()}
         fontSize={16}
         fontStyle="bold"
-        fill={isSelected ? '#1d1d1f' : borderColor}
+        fill={isDark ? '#f1f5f9' : (isSelected ? '#1d1d1f' : borderColor)}
         letterSpacing={1.5}
         wrap="none"
         ellipsis={true}
@@ -440,7 +454,7 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         <Text
           text={'\u2715'}
           fontSize={14}
-          fill={isSelected ? '#86868b' : '#ff3b30'}
+          fill={isDark ? '#94a3b8' : (isSelected ? '#86868b' : '#ff3b30')}
           align="center"
           verticalAlign="middle"
           width={headerLayout.closeIcon.width}
@@ -464,8 +478,8 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
           text={badgeText}
           fontSize={11}
           fontStyle="bold"
-          fill={borderColor}
-          opacity={0.6}
+          fill={isDark ? '#e2e8f0' : borderColor}
+          opacity={isDark ? 0.9 : 0.6}
           wrap="none"
           ellipsis={true}
         />
