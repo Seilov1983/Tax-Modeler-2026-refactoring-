@@ -34,8 +34,13 @@
     ]
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.41",
+    "@ai-sdk/react": "^3.0.118",
     "@auth/prisma-adapter": "^2.11.1",
     "@hookform/resolvers": "^5.2.2",
+    "@libsql/client": "^0.17.2",
+    "@prisma/adapter-better-sqlite3": "^7.5.0",
+    "@prisma/adapter-libsql": "^7.5.0",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -48,6 +53,8 @@
     "@react-spring/web": "^10.0.3",
     "@t3-oss/env-nextjs": "^0.13.10",
     "@tailwindcss/postcss": "^4.2.1",
+    "ai": "^6.0.116",
+    "better-sqlite3": "^12.8.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dagre": "^0.8.5",

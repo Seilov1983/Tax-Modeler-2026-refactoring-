@@ -146,9 +146,9 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
         group.getLayer()?.batchDraw();
       }
 
-      // Determine zone kind: country if it has children, else regime
-      const isCountry = allZones.some((z) => z.parentId === zone.id);
-      const kind = isCountry ? 'country' : 'regime';
+      // Determine zone kind by parentId: countries have no parent, regimes do.
+      // This correctly handles empty countries (zero child regimes).
+      const kind = !zone.parentId ? 'country' : 'regime';
 
       // Get screen coordinates for the DOM overlay menu
       const stage = group?.getStage();

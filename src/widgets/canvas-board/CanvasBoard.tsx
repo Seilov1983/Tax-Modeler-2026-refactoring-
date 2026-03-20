@@ -49,6 +49,7 @@ import { addNodeAtom, addZoneAtom, NODE_WIDTH, NODE_HEIGHT } from '@features/can
 import { spawnCoordinatesAtom } from '@features/canvas/model/spawn-coordinates-atom';
 import { notificationAtom } from '@features/canvas/model/notification-atom';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
+import { AICopilotChat } from '@features/ai-copilot/ui/AICopilotChat';
 import { ProjectHeader } from '@features/project-management';
 import { isSidebarOpenAtom, sidebarContextAtom } from '@features/master-data-sidebar';
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
@@ -742,6 +743,7 @@ export function CanvasBoard() {
         <FlowModal />
         <EditorModal />
         <NotificationToast />
+        <AICopilotChat />
 
         {/* Add Node Menu — Apple Liquid Glass floating popover.
             Rendered as DOM overlay OUTSIDE Konva to avoid canvas clipping.

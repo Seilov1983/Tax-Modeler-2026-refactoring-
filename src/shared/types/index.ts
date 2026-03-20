@@ -205,6 +205,10 @@ export interface NodeDTO {
   declaredAssets?: Record<string, number>;
   ownershipFlags?: string[];
   investments?: { aifcInvestmentUsd: number; aifcFeePaidMci: number; isInvestmentResident: boolean };
+  /** Passive income share as percentage (0–100). Used for CFC risk analysis. */
+  passiveIncomeShare?: number;
+  /** Whether the entity has real economic substance (employees, office, CIGA). */
+  hasSubstance?: boolean;
 }
 
 export interface AccountingYearData {
@@ -229,6 +233,10 @@ export interface FlowDTO {
   status: string;
   flowDate: string;
   dealTag?: string;
+  /** Whether a Double Tax Treaty (DTT) applies to this flow. */
+  applyDTT?: boolean;
+  /** Custom WHT rate (%) when a treaty rate overrides the domestic rate. */
+  customWhtRate?: number;
   isOffshoreSource?: boolean;
   isDirectExemptExpense?: boolean;
   ack: {
@@ -375,6 +383,8 @@ export interface Project {
   taxes: TaxEntry[];
   audit: AuditLog;
   periods: { closedYears: number[] };
+  /** Whether the group is in scope for Pillar Two (GloBE) minimum tax rules. */
+  isPillarTwoScope?: boolean;
   group: { consolidatedRevenueEur: number | null };
   accounting: { years: Record<string, unknown> };
   lawReferences: Record<string, { title: string; version: string; effectiveFrom: string }>;

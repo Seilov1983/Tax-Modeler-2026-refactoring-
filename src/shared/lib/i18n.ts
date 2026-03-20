@@ -11,17 +11,6 @@ import { settingsAtom } from '@features/settings/model/settings-atom';
 export type Language = 'en' | 'ru';
 
 const dictionary = {
-  // Settings Modal
-  settings: { en: 'Settings', ru: '\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438' },
-  appearance: { en: 'Appearance', ru: '\u041e\u0444\u043e\u0440\u043c\u043b\u0435\u043d\u0438\u0435' },
-  baseCurrency: { en: 'Base Currency', ru: '\u0411\u0430\u0437\u043e\u0432\u0430\u044f \u0432\u0430\u043b\u044e\u0442\u0430' },
-  snapToGrid: { en: 'Snap to Grid', ru: '\u041f\u0440\u0438\u0432\u044f\u0437\u043a\u0430 \u043a \u0441\u0435\u0442\u043a\u0435' },
-  snapToGridDesc: { en: 'Align canvas elements to a 24px grid', ru: '\u0412\u044b\u0440\u0430\u0432\u043d\u0438\u0432\u0430\u043d\u0438\u0435 \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u043e\u0432 \u043f\u043e \u0441\u0435\u0442\u043a\u0435 24px' },
-  language: { en: 'Language', ru: '\u042f\u0437\u044b\u043a' },
-  light: { en: 'Light', ru: '\u0421\u0432\u0435\u0442\u043b\u0430\u044f' },
-  dark: { en: 'Dark', ru: '\u0422\u0451\u043c\u043d\u0430\u044f' },
-  system: { en: 'System', ru: '\u0421\u0438\u0441\u0442\u0435\u043c\u043d\u0430\u044f' },
-
   // Sidebar
   masterData: { en: 'Master Data', ru: '\u0421\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0438' },
   dragHint: { en: 'Drag a row onto the canvas', ru: '\u041f\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0441\u0442\u0440\u043e\u043a\u0443 \u043d\u0430 \u0445\u043e\u043b\u0441\u0442' },
@@ -78,6 +67,14 @@ const dictionary = {
   bank: { en: 'Bank', ru: '\u0411\u0430\u043d\u043a' },
   cash: { en: 'Cash', ru: '\u041d\u0430\u043b\u0438\u0447\u043d\u044b\u0435' },
   crypto: { en: 'Crypto', ru: '\u041a\u0440\u0438\u043f\u0442\u043e' },
+
+  // Phase 2: expanded fields
+  passiveIncomeShare: { en: 'Passive Income Share (%)', ru: 'Доля пассивного дохода (%)' },
+  hasSubstance: { en: 'Has Substance', ru: 'Наличие субстанции' },
+  applyDTT: { en: 'Apply Treaty (DTT)', ru: 'Применить соглашение (ДНН)' },
+  customWhtRate: { en: 'Custom WHT Rate (%)', ru: 'Особая ставка WHT (%)' },
+  yes: { en: 'Yes', ru: 'Да' },
+  no: { en: 'No', ru: 'Нет' },
 
   // Notifications
   invalidPlacement: { en: 'Invalid placement: Companies and Persons must reside within a valid Tax Regime.', ru: '\u041d\u0435\u0432\u0435\u0440\u043d\u043e\u0435 \u0440\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u0438\u0435: \u043a\u043e\u043c\u043f\u0430\u043d\u0438\u0438 \u0438 \u043b\u0438\u0446\u0430 \u0434\u043e\u043b\u0436\u043d\u044b \u043d\u0430\u0445\u043e\u0434\u0438\u0442\u044c\u0441\u044f \u0432 \u043d\u0430\u043b\u043e\u0433\u043e\u0432\u043e\u043c \u0440\u0435\u0436\u0438\u043c\u0435.' },

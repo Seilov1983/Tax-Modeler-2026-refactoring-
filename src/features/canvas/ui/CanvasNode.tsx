@@ -430,13 +430,25 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         />
       )}
 
-      {/* CFC badge */}
-      {node.riskFlags?.some((r) => r.type === 'CFC_RISK') && (
-        <Group x={node.w - NODE_PADDING - 28} y={HEADER_HEIGHT + 4} listening={false}>
-          <Rect width={28} height={14} fill="rgba(255,159,10,0.1)" cornerRadius={5} stroke="#ff9f0a" strokeWidth={0.5} />
-          <Text x={4} y={2} text="CFC" fontSize={9} fontStyle="bold" fill="#ff9f0a" />
-        </Group>
-      )}
+      {/* Risk badges: CFC (coral-red), PILLAR2 (coral-red), TP (amber) */}
+      {(() => {
+        const badges: Array<{ label: string; color: string; bg: string }> = [];
+        if (node.riskFlags?.some((r) => r.type === 'CFC_RISK'))
+          badges.push({ label: 'CFC', color: '#ff453a', bg: 'rgba(255,69,58,0.1)' });
+        if (node.riskFlags?.some((r) => r.type === 'PILLAR2_LOW_ETR'))
+          badges.push({ label: 'P2', color: '#ff453a', bg: 'rgba(255,69,58,0.1)' });
+        if (node.riskFlags?.some((r) => r.type === 'TRANSFER_PRICING_RISK'))
+          badges.push({ label: 'TP', color: '#ff9f0a', bg: 'rgba(255,159,10,0.1)' });
+        if (!badges.length) return null;
+        const badgeW = 26;
+        const gap = 2;
+        return badges.map((b, i) => (
+          <Group key={b.label} x={node.w - NODE_PADDING - (badges.length - i) * (badgeW + gap)} y={HEADER_HEIGHT + 4} listening={false}>
+            <Rect width={badgeW} height={14} fill={b.bg} cornerRadius={5} stroke={b.color} strokeWidth={0.5} />
+            <Text x={3} y={2} text={b.label} fontSize={9} fontStyle="bold" fill={b.color} />
+          </Group>
+        ));
+      })()}
 
       {/* Flow out port (right edge, blue) — unlimited outgoing flows */}
       {!isTxa && (

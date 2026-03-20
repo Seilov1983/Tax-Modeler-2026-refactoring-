@@ -5,7 +5,6 @@
  * Hydrates automatically on mount — no manual hydration needed.
  */
 
-import { atom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
@@ -28,4 +27,3 @@ export const settingsAtom = atomWithStorage<AppSettings>(
   DEFAULT_SETTINGS,
 );
 
-export const settingsOpenAtom = atom<boolean>(false);

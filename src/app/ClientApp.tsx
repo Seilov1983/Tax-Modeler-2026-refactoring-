@@ -6,9 +6,13 @@
  * Hydrates the Jotai store with project data and renders the canvas.
  * Wraps everything in a Jotai Provider for atom isolation.
  *
- * Persistence strategy:
+ * Persistence strategy (offline-first):
  *   1. On mount: try API fetch → fall back to localStorage → fall back to demo project
- *   2. On change: update localStorage immediately (offline-first), debounce PUT to API
+ *   2. On change: update localStorage immediately, debounce PUT to API (skipped in offline mode)
+ *
+ * Offline mode is activated when:
+ *   - API returns 503 (database not configured / unreachable)
+ *   - fetch throws (no server — Electron static bundle, file:// etc.)
  */
 
 import { Provider, useSetAtom, useAtomValue } from 'jotai';
@@ -58,6 +62,9 @@ function AppContent() {
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isHydratedRef = useRef(false);
 
+  /** Offline mode — set when API is unreachable (503, network error, Electron static) */
+  const isOfflineModeRef = useRef(false);
+
   // ─── Theme: sync dark class on <html> based on settings.theme ──────────
   useEffect(() => {
     const root = document.documentElement;
@@ -94,7 +101,12 @@ function AppContent() {
         const listRes = await fetch('/api/projects', {
           headers: { 'x-user-id': 'local-user' },
         });
-        if (listRes.ok) {
+
+        if (listRes.status === 503) {
+          // Database not configured / unreachable — enter offline mode
+          isOfflineModeRef.current = true;
+          console.info('[Tax-Modeler] API returned 503 — offline mode activated. Data persists to localStorage.');
+        } else if (listRes.ok) {
           const projects = await listRes.json();
           if (Array.isArray(projects) && projects.length > 0) {
             const latest = projects[0];
@@ -113,7 +125,9 @@ function AppContent() {
           }
         }
       } catch {
-        // API unavailable — fall through to localStorage
+        // fetch threw — no server (Electron static bundle, file://, offline)
+        isOfflineModeRef.current = true;
+        console.info('[Tax-Modeler] API unreachable — offline mode activated. Data persists to localStorage.');
       }
 
       // 2. Fall back to localStorage (offline fallback)
@@ -146,12 +160,15 @@ function AppContent() {
     return () => { cancelled = true; };
   }, [hydrate]);
 
-  // ─── Debounced API flush ────────────────────────────────────────────────
+  // ─── Debounced API flush (skipped in offline mode) ─────────────────────
   const flushToAPI = useCallback(async (proj: Project) => {
+    // In offline mode, localStorage is the sole persistence — skip API calls
+    if (isOfflineModeRef.current) return;
+
     try {
       if (remoteProjectIdRef.current) {
         // Update existing project
-        await fetch(`/api/projects/${remoteProjectIdRef.current}`, {
+        const res = await fetch(`/api/projects/${remoteProjectIdRef.current}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -160,6 +177,10 @@ function AppContent() {
             graphJSON: proj,
           }),
         });
+        if (res.status === 503) {
+          isOfflineModeRef.current = true;
+          console.info('[Tax-Modeler] API returned 503 during save — switching to offline mode.');
+        }
       } else {
         // Create new project
         const res = await fetch('/api/projects', {
@@ -177,10 +198,14 @@ function AppContent() {
         if (res.ok) {
           const created = await res.json();
           remoteProjectIdRef.current = created.id;
+        } else if (res.status === 503) {
+          isOfflineModeRef.current = true;
+          console.info('[Tax-Modeler] API returned 503 during create — switching to offline mode.');
         }
       }
     } catch {
-      // API unavailable — localStorage already saved, data is safe
+      // Network error — switch to offline mode silently
+      isOfflineModeRef.current = true;
     }
   }, []);
 
@@ -192,7 +217,7 @@ function AppContent() {
     project.updatedAt = new Date().toISOString();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
 
-    // 2. Debounced: API flush (avoids spamming DB on rapid edits/drags)
+    // 2. Debounced: API flush (skipped in offline mode)
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }

@@ -149,6 +149,8 @@ export function recomputeRisks(p: Project): void {
         if (incomeKZT <= incomeThrKZT) return;
         const etr = effectiveEtrForCompany(p, co);
         if (etr >= etrThr!) return;
+        // Substance exemption: if the company has real economic substance, skip CFC flag
+        if (co.hasSubstance) return;
         co.riskFlags.push({ type: 'CFC_RISK', byPersonId: per.id, control: cf, incomeKZT, etr, lawRef: 'KZ_CFC_MVP' });
       });
     });
@@ -170,8 +172,10 @@ export function recomputeRisks(p: Project): void {
     }
   });
 
+  // Pillar Two: trigger if explicit scope flag OR consolidated revenue > €750M
   const rev = numOrNull(p.group?.consolidatedRevenueEur);
-  if (rev != null && rev > 750_000_000) {
+  const pillarTwoInScope = p.isPillarTwoScope || (rev != null && rev > 750_000_000);
+  if (pillarTwoInScope) {
     const low: Array<{ companyId: string; etr: number }> = [];
     listCompanies(p).forEach((co) => {
       const etr = effectiveEtrForCompany(p, co);
@@ -183,7 +187,8 @@ export function recomputeRisks(p: Project): void {
     if (low.length) {
       p.projectRiskFlags.push({
         type: 'PILLAR2_TOPUP_RISK', lawRef: 'APP_G_G5_PILLAR2',
-        consolidatedRevenueEur: rev, minEtr: 0.15, affectedCount: low.length,
+        consolidatedRevenueEur: rev, isPillarTwoScope: !!p.isPillarTwoScope,
+        minEtr: 0.15, affectedCount: low.length,
       });
     }
   }
