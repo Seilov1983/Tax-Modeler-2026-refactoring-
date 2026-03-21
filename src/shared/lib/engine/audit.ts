@@ -123,6 +123,18 @@ function buildCanonicalPayload(project: Project) {
   };
 }
 
+/** JSON.stringify replacer that sorts object keys at every nesting level. */
+function sortKeysReplacer(_key: string, value: unknown): unknown {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const sorted: Record<string, unknown> = {};
+    for (const k of Object.keys(value as Record<string, unknown>).sort()) {
+      sorted[k] = (value as Record<string, unknown>)[k];
+    }
+    return sorted;
+  }
+  return value;
+}
+
 // ─── SHA-256 Hashing ────────────────────────────────────────────────────────
 
 async function sha256(data: string): Promise<string> {
@@ -151,7 +163,7 @@ export async function generateAuditSnapshot(project: Project): Promise<AuditSnap
 
   const timestamp = new Date().toISOString();
   const payload = buildCanonicalPayload(clone);
-  const canonicalJson = JSON.stringify(payload, Object.keys(payload).sort(), 2);
+  const canonicalJson = JSON.stringify(payload, sortKeysReplacer, 2);
   const hash = await sha256(canonicalJson);
   const taxSummary = computeGroupTax(clone);
 

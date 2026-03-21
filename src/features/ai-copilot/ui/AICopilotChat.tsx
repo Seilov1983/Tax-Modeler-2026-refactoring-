@@ -30,6 +30,38 @@ function getMessageText(msg: UIMessage): string {
     .join('');
 }
 
+// ─── Tool Invocation Detection (AI SDK v6) ────────────────────────────────────
+// In v6, tool parts have type 'tool-<name>' and state field directly on the part.
+
+interface ActiveToolPart {
+  type: string;
+  toolCallId: string;
+  state: string;
+  input: unknown;
+  toolName: string;
+}
+
+/** Extract in-progress tool invocations from UIMessage parts. */
+function getActiveToolParts(msg: UIMessage): ActiveToolPart[] {
+  return msg.parts
+    .filter((p) => p.type.startsWith('tool-') && (p as any).state !== 'output-available')
+    .map((p) => ({
+      type: p.type,
+      toolCallId: (p as any).toolCallId ?? '',
+      state: (p as any).state ?? '',
+      input: (p as any).input,
+      toolName: p.type.replace(/^tool-/, ''),
+    }));
+}
+
+const TOOL_LABELS: Record<string, string> = {
+  calculate_tax_flow: '\u{1F9EE} \u0421\u0438\u043C\u0443\u043B\u044F\u0446\u0438\u044F \u043D\u0430\u043B\u043E\u0433\u043E\u0432\u044B\u0445 \u043F\u043E\u0442\u043E\u043A\u043E\u0432...',
+};
+
+function toolLabel(part: ActiveToolPart): string {
+  return TOOL_LABELS[part.toolName] || `\u2699\uFE0F Processing ${part.toolName}...`;
+}
+
 /** Map error messages to user-friendly descriptions. */
 function friendlyErrorMessage(error: Error | undefined): string | null {
   if (!error) return null;
@@ -269,7 +301,8 @@ export function AICopilotChat() {
 
         {messages.map((msg) => {
           const text = getMessageText(msg);
-          if (!text) return null;
+          const activeTools = getActiveToolParts(msg);
+          if (!text && activeTools.length === 0) return null;
           return (
             <div
               key={msg.id}
@@ -278,22 +311,43 @@ export function AICopilotChat() {
                 maxWidth: '85%',
               }}
             >
-              <div
-                style={{
-                  padding: '10px 14px',
-                  borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                  background: msg.role === 'user'
-                    ? '#007aff'
-                    : 'rgba(0, 0, 0, 0.04)',
-                  color: msg.role === 'user' ? '#fff' : '#1d1d1f',
-                  fontSize: '13px',
-                  lineHeight: 1.5,
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                }}
-              >
-                {text}
-              </div>
+              {text && (
+                <div
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                    background: msg.role === 'user'
+                      ? '#007aff'
+                      : 'rgba(0, 0, 0, 0.04)',
+                    color: msg.role === 'user' ? '#fff' : '#1d1d1f',
+                    fontSize: '13px',
+                    lineHeight: 1.5,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {text}
+                </div>
+              )}
+              {/* Liquid Glass tool invocation indicator */}
+              {activeTools.map((part, i) => (
+                <div
+                  key={part.toolCallId || i}
+                  className="flex items-center gap-2 w-fit px-3 py-1.5 mt-2 text-xs font-medium text-slate-700 bg-white/40 backdrop-blur-md border border-white/50 rounded-full shadow-sm animate-pulse dark:bg-slate-800/50 dark:text-slate-200 dark:border-slate-700/50"
+                >
+                  <span
+                    style={{
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      background: '#3b82f6',
+                      boxShadow: '0 0 4px #3b82f6',
+                      flexShrink: 0,
+                    }}
+                  />
+                  {toolLabel(part)}
+                </div>
+              ))}
             </div>
           );
         })}
