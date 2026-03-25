@@ -24,7 +24,7 @@
 
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { Stage, Layer, Rect, Shape, Line } from 'react-konva';
+import { Stage, Layer, Rect, Shape, Line, Group, Text } from 'react-konva';
 import { nodeAtomsAtom, nodesAtom } from '@entities/node';
 import { flowsAtom } from '@entities/flow';
 import { zonesAtom } from '@entities/zone';
@@ -53,9 +53,94 @@ import { AICopilotChat } from '@features/ai-copilot/ui/AICopilotChat';
 import { ProjectHeader } from '@features/project-management';
 import { isSidebarOpenAtom, sidebarContextAtom } from '@features/master-data-sidebar';
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
-import type { JurisdictionCode, CurrencyCode, Zone } from '@shared/types';
+import type { JurisdictionCode, CurrencyCode, Zone, NodeDTO } from '@shared/types';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
+
+// ─── Shadow Containers (Management Layer — Dual-Track Analysis) ─────────────
+// Renders translucent dashed containers on the canvas background layer to
+// visually group nodes that share a management tag. Uses flat rendering
+// (absolute Stage coordinates) and listening: false to avoid intercepting
+// mouse events meant for actual nodes. Z-index < Countries (10).
+
+const TAG_COLORS: Record<number, string> = {
+  0: '#6366f1', // indigo
+  1: '#8b5cf6', // violet
+  2: '#ec4899', // pink
+  3: '#f59e0b', // amber
+  4: '#10b981', // emerald
+};
+
+function ShadowContainers({ nodes }: { nodes: NodeDTO[] }) {
+  const groups = useMemo(() => {
+    const tagMap = new Map<string, NodeDTO[]>();
+    for (const node of nodes) {
+      if (!node.managementTags?.length) continue;
+      for (const tag of node.managementTags) {
+        if (!tagMap.has(tag)) tagMap.set(tag, []);
+        tagMap.get(tag)!.push(node);
+      }
+    }
+    return tagMap;
+  }, [nodes]);
+
+  if (groups.size === 0) return null;
+
+  const PAD = 20;
+  let colorIdx = 0;
+
+  return (
+    <>
+      {Array.from(groups.entries()).map(([tag, tagNodes]) => {
+        if (tagNodes.length === 0) return null;
+
+        // Compute bounding box spanning all tagged nodes (absolute coordinates)
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const n of tagNodes) {
+          minX = Math.min(minX, n.x);
+          minY = Math.min(minY, n.y);
+          maxX = Math.max(maxX, n.x + n.w);
+          maxY = Math.max(maxY, n.y + n.h);
+        }
+
+        const x = minX - PAD;
+        const y = minY - PAD;
+        const w = maxX - minX + PAD * 2;
+        const h = maxY - minY + PAD * 2;
+        const color = TAG_COLORS[colorIdx % 5] || '#6366f1';
+        colorIdx++;
+
+        return (
+          <Group key={`shadow-${tag}`} listening={false}>
+            <Rect
+              x={x}
+              y={y}
+              width={w}
+              height={h}
+              fill="rgba(255, 255, 255, 0.07)"
+              stroke={color}
+              strokeWidth={1.5}
+              dash={[8, 4]}
+              cornerRadius={12}
+              listening={false}
+            />
+            <Text
+              x={x + 8}
+              y={y + 4}
+              text={tag}
+              fontSize={11}
+              fontFamily="Inter, sans-serif"
+              fontStyle="600"
+              fill={color}
+              opacity={0.8}
+              listening={false}
+            />
+          </Group>
+        );
+      })}
+    </>
+  );
+}
 
 // ─── Default sizes for contextual spawning ──────────────────────────────────
 const COUNTRY_DEFAULT_W = 400;
@@ -650,8 +735,13 @@ export function CanvasBoard() {
 
           {/* Layer 2: Committed Zones + Nodes —
               Zones rendered first (below), nodes on top.
+              Shadow containers (management tags) rendered first, below zones.
               Hierarchical zone nesting via Konva <Group>. */}
           <Layer>
+            {/* Shadow containers for management-layer tag grouping (z < Countries).
+                Flat rendering: absolute coords. listening: false (non-interactive). */}
+            <ShadowContainers nodes={nodes} />
+
             {/* Zones rendered flat — all coordinates are absolute.
                 moveZoneAtom cascades dx/dy to child zones, so no Konva
                 group nesting needed (avoids double-offset).

@@ -209,6 +209,8 @@ export interface NodeDTO {
   passiveIncomeShare?: number;
   /** Whether the entity has real economic substance (employees, office, CIGA). */
   hasSubstance?: boolean;
+  /** Management-layer tags for dual-track analysis (shadow grouping). */
+  managementTags?: string[];
 }
 
 export interface AccountingYearData {
@@ -395,7 +397,30 @@ export interface Project {
     runs: unknown[];
   };
   projectRiskFlags: RiskFlag[];
+  /** Management-layer shadow links for dual-track analysis. */
+  shadowLinks?: ShadowLink[];
 }
+
+// ─── Shadow Link (Management Layer — Dual-Track Analysis) ───────────────────
+
+/**
+ * A ShadowLink represents a management-layer connection between two nodes
+ * that are de-jure independent (no legal ownership). Used for dual-track
+ * analysis to visualize beneficial control or economic groupings.
+ */
+export interface ShadowLink {
+  id: string;
+  fromId: string;
+  toId: string;
+  tag: string;
+  label?: string;
+}
+
+/** Valid audit actions for management-layer mutations. */
+export type ManagementAuditAction =
+  | 'SHADOW_LINK_CREATE'
+  | 'SHADOW_LINK_DELETE'
+  | 'TAG_UPDATE';
 
 // ─── WHT Computation Result ──────────────────────────────────────────────────
 
@@ -478,5 +503,39 @@ export interface GroupTaxSummary {
   /** Group-level effective tax rate: totalTaxBase / totalIncomeBase (0–1). */
   totalEffectiveTaxRate: number;
   /** Project base currency used for all *Base amounts. */
+  baseCurrency: CurrencyCode;
+}
+
+/**
+ * Management-layer consolidated summary for a specific management tag.
+ * Dual-track analysis: Legal layer uses OwnershipEdge for control;
+ * Management layer uses managementTags for economic grouping.
+ */
+export interface ManagementGroupSummary {
+  /** The management tag this summary covers. */
+  tag: string;
+  /** Node IDs in this management group. */
+  nodeIds: string[];
+  /** Total pre-tax income of tagged nodes (base currency). */
+  totalIncomeBase: number;
+  /** Total CIT for tagged nodes (base currency). */
+  totalCITBase: number;
+  /** Total WHT on flows between tagged nodes and outsiders (base currency). */
+  totalWHTBase: number;
+  /** Total tax burden (CIT + WHT) in base currency. */
+  totalTaxBase: number;
+  /**
+   * Capital Leakage: WHT withheld on flows between two de-jure independent
+   * nodes that share the same management tag. This tax is "lost" group capital.
+   */
+  capitalLeakageBase: number;
+  /**
+   * Management ETR: totalTaxBase / totalIncomeBase (0–1).
+   * Formula: Total Taxes / (Net Profit + Total Taxes) × 100
+   * where Net Profit = totalIncomeBase - totalTaxBase.
+   */
+  managementETR: number;
+  /** Consolidated cash flow: totalIncomeBase - totalTaxBase - capitalLeakageBase. */
+  consolidatedCashFlow: number;
   baseCurrency: CurrencyCode;
 }

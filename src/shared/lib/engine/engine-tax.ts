@@ -13,7 +13,7 @@ import type {
   Project, Zone, FlowDTO, NodeDTO, CITConfig, FlowType,
   PayrollResult, PayrollBreakdownItem, WHTResult, WHTExemptionRule,
   GroupTaxSummary, EntityCITLiability, FlowWHTLiability,
-  CurrencyCode, JurisdictionCode,
+  ManagementGroupSummary, CurrencyCode, JurisdictionCode,
 } from '@shared/types';
 
 // ─── Zone Rules Registry ────────────────────────────────────────────────────
@@ -258,7 +258,11 @@ export function effectiveEtrForCompany(p: Project, co: NodeDTO): number {
   return cit == null ? 0 : cit;
 }
 
-// ─── Consolidated Group Tax Computation ───────────────────────────────────────
+// ─── Consolidated Group Tax Computation (LEGAL LAYER) ────────────────────────
+// INVARIANT: computeGroupTax is the Legal Layer calculator. It is strictly
+// "blind" to managementTags, ShadowLinks, and any management-layer data.
+// Traversal follows only OwnershipEdge.percent for legal control.
+// Management-layer analysis is handled by computeGroupTaxByTag (below).
 
 /**
  * computeGroupTax — pure function that produces a consolidated tax summary
@@ -393,6 +397,109 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
     totalTaxBase,
     totalIncomeBase,
     totalEffectiveTaxRate,
+    baseCurrency,
+  };
+}
+
+// ─── Management Layer: Tag-Based Group Analysis ──────────────────────────────
+// Dual-track: this function operates on managementTags (economic grouping)
+// while the Legal Layer (computeGroupTax above) uses OwnershipEdge.
+
+/**
+ * computeGroupTaxByTag — Management Layer consolidated analysis.
+ *
+ * Aggregates income, CIT, WHT, and Capital Leakage for all nodes sharing
+ * the specified management tag.
+ *
+ * Capital Leakage: when a flow crosses between two nodes that BOTH have
+ * the same management tag but are de-jure independent (no direct ownership),
+ * the WHT on that flow is classified as "capital leakage" — tax lost to
+ * the group due to legal structure misalignment.
+ *
+ * Management ETR: totalTax / totalIncome (0–1).
+ */
+export function computeGroupTaxByTag(
+  project: Project,
+  tag: string,
+): ManagementGroupSummary {
+  const baseCurrency = project.baseCurrency;
+
+  // 1. Identify all nodes with this management tag
+  const taggedNodeIds = new Set<string>();
+  for (const node of project.nodes) {
+    if (node.managementTags?.includes(tag)) {
+      taggedNodeIds.add(node.id);
+    }
+  }
+
+  // 2. Compute the full legal-layer tax summary (reuses existing engine)
+  const legalSummary = computeGroupTax(project);
+
+  // 3. Filter CIT liabilities to tagged nodes only
+  let totalCITBase = 0;
+  let totalIncomeBase = 0;
+  const nodeIds: string[] = [];
+
+  for (const cit of legalSummary.citLiabilities) {
+    if (!taggedNodeIds.has(cit.nodeId)) continue;
+    nodeIds.push(cit.nodeId);
+    totalCITBase += bankersRound2(convert(project, cit.citAmount, cit.currency, baseCurrency));
+    totalIncomeBase += bankersRound2(convert(project, cit.taxableIncome, cit.currency, baseCurrency));
+  }
+  totalCITBase = bankersRound2(totalCITBase);
+  totalIncomeBase = bankersRound2(totalIncomeBase);
+
+  // 4. Filter WHT liabilities — split into external WHT and capital leakage
+  let totalWHTBase = 0;
+  let capitalLeakageBase = 0;
+
+  // Build ownership lookup for "de-jure independent" check
+  const ownershipPairs = new Set<string>();
+  for (const edge of project.ownership) {
+    ownershipPairs.add(`${edge.fromId}→${edge.toId}`);
+    ownershipPairs.add(`${edge.toId}→${edge.fromId}`);
+  }
+
+  for (const wht of legalSummary.whtLiabilities) {
+    const fromTagged = taggedNodeIds.has(wht.fromNodeId);
+    const toTagged = taggedNodeIds.has(wht.toNodeId);
+
+    if (!fromTagged && !toTagged) continue; // neither party is in this group
+
+    totalWHTBase += wht.whtAmountBase;
+
+    // Capital Leakage: both nodes share the tag, but no direct ownership edge
+    if (fromTagged && toTagged) {
+      const hasOwnership =
+        ownershipPairs.has(`${wht.fromNodeId}→${wht.toNodeId}`) ||
+        ownershipPairs.has(`${wht.toNodeId}→${wht.fromNodeId}`);
+      if (!hasOwnership) {
+        capitalLeakageBase += wht.whtAmountBase;
+      }
+    }
+  }
+  totalWHTBase = bankersRound2(totalWHTBase);
+  capitalLeakageBase = bankersRound2(capitalLeakageBase);
+
+  const totalTaxBase = bankersRound2(totalCITBase + totalWHTBase);
+
+  // Management ETR: Total Taxes / Total Income
+  const managementETR = totalIncomeBase > 0
+    ? Math.min(1, Math.max(0, bankersRound2(totalTaxBase / totalIncomeBase * 10000) / 10000))
+    : 0;
+
+  const consolidatedCashFlow = bankersRound2(totalIncomeBase - totalTaxBase - capitalLeakageBase);
+
+  return {
+    tag,
+    nodeIds,
+    totalIncomeBase,
+    totalCITBase,
+    totalWHTBase,
+    totalTaxBase,
+    capitalLeakageBase,
+    managementETR,
+    consolidatedCashFlow,
     baseCurrency,
   };
 }

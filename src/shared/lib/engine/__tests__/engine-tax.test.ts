@@ -3,6 +3,8 @@ import {
   computeCITAmount,
   computeWht,
   computePayroll,
+  computeGroupTax,
+  computeGroupTaxByTag,
   defaultZoneTax,
   effectiveZoneTax,
   whtDefaultPercentForFlow,
@@ -460,5 +462,172 @@ describe('effectiveEtrForCompany', () => {
     const p = makeProject({ zones: [z], nodes: [co] });
     // Falls back to citRateStandard = 0.20
     expect(effectiveEtrForCompany(p, co)).toBe(0.20);
+  });
+});
+
+// ─── Dual-Track Analysis: Management Layer ──────────────────────────────────
+
+describe('computeGroupTaxByTag (Management Layer)', () => {
+  /**
+   * Helper: build a two-node project with a cross-border dividend flow.
+   * Both nodes share the given management tag.
+   * Ownership edge is optional — omit it to test Capital Leakage.
+   */
+  function makeDualTrackProject(opts: { withOwnership: boolean }) {
+    const kzCo = makeNode('KZ HoldCo', 'company', 100, 100);
+    kzCo.zoneId = 'z_kz';
+    kzCo.annualIncome = 1_000_000;
+    kzCo.managementTags = ['group-alpha'];
+
+    const uaeCo = makeNode('UAE OpCo', 'company', 400, 100);
+    uaeCo.zoneId = 'z_uae';
+    uaeCo.annualIncome = 2_000_000;
+    uaeCo.managementTags = ['group-alpha'];
+
+    const zKz = makeZone({ id: 'z_kz', jurisdiction: 'KZ', code: 'KZ_MAIN', currency: 'KZT' });
+    const zUae = makeZone({ id: 'z_uae', jurisdiction: 'UAE', code: 'UAE_MAIN', currency: 'AED' });
+
+    const flow = makeFlow({
+      id: 'f_div',
+      fromId: kzCo.id,
+      toId: uaeCo.id,
+      flowType: 'Dividends',
+      currency: 'KZT',
+      grossAmount: 500_000,
+      whtRate: 15,
+    });
+
+    const ownership = opts.withOwnership
+      ? [{ id: 'o_1', fromId: kzCo.id, toId: uaeCo.id, percent: 100, manualAdjustment: 0 }]
+      : [];
+
+    const p = makeProject({
+      zones: [zKz, zUae],
+      nodes: [kzCo, uaeCo],
+      flows: [flow],
+      ownership,
+      baseCurrency: 'KZT',
+    } as Partial<Project>);
+
+    return { p, kzCo, uaeCo, flow };
+  }
+
+  it('detects Capital Leakage when tagged nodes have no ownership edge', () => {
+    const { p } = makeDualTrackProject({ withOwnership: false });
+    const summary = computeGroupTaxByTag(p, 'group-alpha');
+
+    expect(summary.tag).toBe('group-alpha');
+    expect(summary.nodeIds.length).toBe(2);
+
+    // WHT on the dividend flow: 500,000 * 15% = 75,000 KZT
+    // Both nodes share tag but no ownership → classified as capital leakage
+    expect(summary.capitalLeakageBase).toBe(75_000);
+    expect(summary.totalWHTBase).toBeGreaterThan(0);
+  });
+
+  it('reports zero Capital Leakage when tagged nodes HAVE an ownership edge', () => {
+    const { p } = makeDualTrackProject({ withOwnership: true });
+    const summary = computeGroupTaxByTag(p, 'group-alpha');
+
+    expect(summary.tag).toBe('group-alpha');
+    // Same WHT exists, but ownership edge means it is NOT capital leakage
+    expect(summary.capitalLeakageBase).toBe(0);
+    expect(summary.totalWHTBase).toBeGreaterThan(0);
+  });
+
+  it('returns empty summary for a tag with no matching nodes', () => {
+    const { p } = makeDualTrackProject({ withOwnership: false });
+    const summary = computeGroupTaxByTag(p, 'nonexistent-tag');
+
+    expect(summary.nodeIds).toEqual([]);
+    expect(summary.totalIncomeBase).toBe(0);
+    expect(summary.totalCITBase).toBe(0);
+    expect(summary.totalWHTBase).toBe(0);
+    expect(summary.capitalLeakageBase).toBe(0);
+    expect(summary.managementETR).toBe(0);
+  });
+
+  it('calculates managementETR = totalTax / totalIncome', () => {
+    const { p } = makeDualTrackProject({ withOwnership: true });
+    const summary = computeGroupTaxByTag(p, 'group-alpha');
+
+    // totalTax = totalCIT + totalWHT; managementETR = totalTax / totalIncome
+    expect(summary.managementETR).toBeGreaterThan(0);
+    expect(summary.managementETR).toBeLessThanOrEqual(1);
+    const expected = summary.totalTaxBase / summary.totalIncomeBase;
+    expect(summary.managementETR).toBeCloseTo(expected, 4);
+  });
+
+  it('consolidatedCashFlow = income - tax - leakage', () => {
+    const { p } = makeDualTrackProject({ withOwnership: false });
+    const summary = computeGroupTaxByTag(p, 'group-alpha');
+
+    const expectedCash = summary.totalIncomeBase - summary.totalTaxBase - summary.capitalLeakageBase;
+    expect(summary.consolidatedCashFlow).toBeCloseTo(expectedCash, 0);
+  });
+});
+
+// ─── Legal Layer Blindness: managementTags must not affect computeGroupTax ──
+
+describe('computeGroupTax ignores managementTags (Legal Layer invariant)', () => {
+  it('produces identical results with and without managementTags', () => {
+    const kzCo = makeNode('KZ HoldCo', 'company', 100, 100);
+    kzCo.zoneId = 'z_kz';
+    kzCo.annualIncome = 1_000_000;
+
+    const uaeCo = makeNode('UAE OpCo', 'company', 400, 100);
+    uaeCo.zoneId = 'z_uae';
+    uaeCo.annualIncome = 2_000_000;
+
+    const zKz = makeZone({ id: 'z_kz', jurisdiction: 'KZ', code: 'KZ_MAIN', currency: 'KZT' });
+    const zUae = makeZone({ id: 'z_uae', jurisdiction: 'UAE', code: 'UAE_MAIN', currency: 'AED' });
+
+    const flow = makeFlow({
+      fromId: kzCo.id,
+      toId: uaeCo.id,
+      flowType: 'Dividends',
+      currency: 'KZT',
+      grossAmount: 500_000,
+      whtRate: 15,
+    });
+
+    const ownership = [
+      { id: 'o_1', fromId: kzCo.id, toId: uaeCo.id, percent: 100, manualAdjustment: 0 },
+    ];
+
+    // Project WITHOUT managementTags
+    const pWithout = makeProject({
+      zones: [zKz, zUae],
+      nodes: [kzCo, uaeCo],
+      flows: [flow],
+      ownership,
+      baseCurrency: 'KZT',
+    } as Partial<Project>);
+
+    const resultWithout = computeGroupTax(pWithout);
+
+    // Now add managementTags to both nodes
+    kzCo.managementTags = ['group-alpha'];
+    uaeCo.managementTags = ['group-alpha', 'group-beta'];
+
+    const pWith = makeProject({
+      zones: [zKz, zUae],
+      nodes: [kzCo, uaeCo],
+      flows: [flow],
+      ownership,
+      baseCurrency: 'KZT',
+      shadowLinks: [{ id: 'sl_1', fromId: kzCo.id, toId: uaeCo.id, tag: 'group-alpha' }],
+    } as Partial<Project>);
+
+    const resultWith = computeGroupTax(pWith);
+
+    // Legal layer must produce identical output regardless of managementTags
+    expect(resultWith.totalCITBase).toBe(resultWithout.totalCITBase);
+    expect(resultWith.totalWHTBase).toBe(resultWithout.totalWHTBase);
+    expect(resultWith.totalTaxBase).toBe(resultWithout.totalTaxBase);
+    expect(resultWith.totalIncomeBase).toBe(resultWithout.totalIncomeBase);
+    expect(resultWith.totalEffectiveTaxRate).toBe(resultWithout.totalEffectiveTaxRate);
+    expect(resultWith.citLiabilities.length).toBe(resultWithout.citLiabilities.length);
+    expect(resultWith.whtLiabilities.length).toBe(resultWithout.whtLiabilities.length);
   });
 });

@@ -12,7 +12,7 @@ import type {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-export const SCHEMA_VERSION = '2.4.1';
+export const SCHEMA_VERSION = '2.5.0';
 export const ENGINE_VERSION = '0.10.0';
 
 // ─── Law References ──────────────────────────────────────────────────────────
