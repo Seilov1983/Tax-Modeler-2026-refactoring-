@@ -3,9 +3,14 @@
 /**
  * AICopilotChat — Liquid Glass floating chat panel for the Strategy Agent.
  *
- * Uses Vercel AI SDK v5 useChat hook for streaming responses.
+ * Uses Vercel AI SDK v6 useChat hook for streaming responses.
  * Positioned bottom-right as a DOM overlay (outside Konva Stage).
  * Context (node ETR, income, risk flags) passed via transport body.
+ *
+ * Tool Invocation UX: when the backend triggers calculate_tax_flow,
+ * the SDK streams tool parts to the client. This component intercepts
+ * them to show a Liquid Glass pulsing badge during execution, and
+ * a formatted result card once the simulation completes.
  *
  * Error resilience: intercepts API errors (401, 429, 502) and displays
  * user-friendly messages inside the chat window without breaking the UI.
@@ -19,7 +24,7 @@ import { zonesAtom } from '@entities/zone';
 import { flowsAtom } from '@entities/flow';
 import { projectAtom } from '@features/canvas';
 import { generateAuditSnapshot } from '@shared/lib/engine';
-import { MessageSquare, X, Send, Sparkles, AlertTriangle } from 'lucide-react';
+import { MessageSquare, X, Send, Sparkles, AlertTriangle, Check } from 'lucide-react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 
 /** Extract concatenated text from UIMessage parts. */
@@ -31,35 +36,50 @@ function getMessageText(msg: UIMessage): string {
 }
 
 // ─── Tool Invocation Detection (AI SDK v6) ────────────────────────────────────
-// In v6, tool parts have type 'tool-<name>' and state field directly on the part.
+// In v6, tool parts have type 'tool-<name>' with state and result on the part.
 
-interface ActiveToolPart {
+interface ToolPart {
   type: string;
   toolCallId: string;
   state: string;
   input: unknown;
+  output: unknown;
   toolName: string;
 }
 
-/** Extract in-progress tool invocations from UIMessage parts. */
-function getActiveToolParts(msg: UIMessage): ActiveToolPart[] {
+/** Extract all tool invocation parts from UIMessage parts. */
+function getToolParts(msg: UIMessage): ToolPart[] {
   return msg.parts
-    .filter((p) => p.type.startsWith('tool-') && (p as any).state !== 'output-available')
+    .filter((p) => p.type.startsWith('tool-'))
     .map((p) => ({
       type: p.type,
       toolCallId: (p as any).toolCallId ?? '',
       state: (p as any).state ?? '',
       input: (p as any).input,
+      output: (p as any).output,
       toolName: p.type.replace(/^tool-/, ''),
     }));
 }
 
-const TOOL_LABELS: Record<string, string> = {
-  calculate_tax_flow: '\u{1F9EE} \u0421\u0438\u043C\u0443\u043B\u044F\u0446\u0438\u044F \u043D\u0430\u043B\u043E\u0433\u043E\u0432\u044B\u0445 \u043F\u043E\u0442\u043E\u043A\u043E\u0432...',
+const TOOL_LABELS: Record<string, { active: string; done: string }> = {
+  calculate_tax_flow: {
+    active: '\u{1F9EE} \u0421\u0438\u043C\u0443\u043B\u044F\u0446\u0438\u044F \u043D\u0430\u043B\u043E\u0433\u043E\u0432\u044B\u0445 \u043F\u043E\u0442\u043E\u043A\u043E\u0432...',
+    done: '\u2705 \u0420\u0430\u0441\u0447\u0451\u0442 \u0437\u0430\u0432\u0435\u0440\u0448\u0451\u043D',
+  },
 };
 
-function toolLabel(part: ActiveToolPart): string {
-  return TOOL_LABELS[part.toolName] || `\u2699\uFE0F Processing ${part.toolName}...`;
+function toolActiveLabel(part: ToolPart): string {
+  return TOOL_LABELS[part.toolName]?.active || `\u2699\uFE0F Processing ${part.toolName}...`;
+}
+
+function toolDoneLabel(part: ToolPart): string {
+  return TOOL_LABELS[part.toolName]?.done || `\u2705 ${part.toolName} done`;
+}
+
+/** Format a currency value for display in tool result cards. */
+function fmtToolAmount(val: unknown): string {
+  if (typeof val !== 'number') return String(val ?? '-');
+  return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 /** Map error messages to user-friendly descriptions. */
@@ -113,10 +133,6 @@ export function AICopilotChat() {
   }, [project, nodes, zones, flows]);
 
   // ─── Transport: custom fetch interceptor injects canvas context ─────────────
-  // We override fetch instead of relying on prepareSendMessagesRequest because
-  // the AI SDK may strip non-standard body fields during serialization.
-  // This interceptor parses the SDK's serialized body, injects our canvas data,
-  // and re-serializes — guaranteeing canvasSnapshot reaches the backend.
   const transportRef = useRef(new DefaultChatTransport({
     api: '/api/chat',
     fetch: (input: RequestInfo | URL, init?: RequestInit) => {
@@ -124,7 +140,6 @@ export function AICopilotChat() {
       if (init?.body && typeof init.body === 'string') {
         try { body = JSON.parse(init.body); } catch { /* keep empty */ }
       }
-      // Inject fresh canvas snapshot from refs (always current at send time)
       body.canvasSnapshot = snapshotJsonRef.current;
       body.canvasHash = lastHashRef.current;
       return globalThis.fetch(input, {
@@ -301,8 +316,8 @@ export function AICopilotChat() {
 
         {messages.map((msg) => {
           const text = getMessageText(msg);
-          const activeTools = getActiveToolParts(msg);
-          if (!text && activeTools.length === 0) return null;
+          const toolParts = getToolParts(msg);
+          if (!text && toolParts.length === 0) return null;
           return (
             <div
               key={msg.id}
@@ -329,25 +344,129 @@ export function AICopilotChat() {
                   {text}
                 </div>
               )}
-              {/* Liquid Glass tool invocation indicator */}
-              {activeTools.map((part, i) => (
-                <div
-                  key={part.toolCallId || i}
-                  className="flex items-center gap-2 w-fit px-3 py-1.5 mt-2 text-xs font-medium text-slate-700 bg-white/40 backdrop-blur-md border border-white/50 rounded-full shadow-sm animate-pulse dark:bg-slate-800/50 dark:text-slate-200 dark:border-slate-700/50"
-                >
-                  <span
-                    style={{
-                      width: '6px',
-                      height: '6px',
-                      borderRadius: '50%',
-                      background: '#3b82f6',
-                      boxShadow: '0 0 4px #3b82f6',
-                      flexShrink: 0,
-                    }}
-                  />
-                  {toolLabel(part)}
-                </div>
-              ))}
+
+              {/* Tool invocation states — Liquid Glass UX */}
+              {toolParts.map((part) => {
+                const isComplete = part.state === 'output-available';
+                const output = part.output as Record<string, unknown> | null;
+
+                if (!isComplete) {
+                  // ── Active: Liquid Glass pulsing badge ──────────────
+                  return (
+                    <div
+                      key={part.toolCallId}
+                      className="flex items-center gap-2 w-fit px-3 py-1.5 mt-2 text-xs font-medium text-slate-700 bg-white/40 backdrop-blur-md border border-white/50 rounded-full shadow-sm animate-pulse dark:bg-slate-800/50 dark:text-slate-200 dark:border-slate-700/50"
+                    >
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          animation: 'spin 1s linear infinite',
+                          fontSize: '14px',
+                          lineHeight: 1,
+                        }}
+                      >
+                        {'\u{1F9EE}'}
+                      </span>
+                      {toolActiveLabel(part)}
+                    </div>
+                  );
+                }
+
+                // ── Complete: show result card if output has data ───
+                if (output && output.success) {
+                  return (
+                    <div
+                      key={part.toolCallId}
+                      style={{
+                        marginTop: '8px',
+                        padding: '10px 12px',
+                        borderRadius: '12px',
+                        background: 'rgba(59, 130, 246, 0.06)',
+                        border: '1px solid rgba(59, 130, 246, 0.15)',
+                        fontSize: '12px',
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                        <Check size={14} style={{ color: '#22c55e' }} />
+                        <span style={{ fontWeight: 600, color: '#1d1d1f' }}>
+                          {toolDoneLabel(part)}
+                        </span>
+                      </div>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 1fr',
+                        gap: '4px 12px',
+                        color: '#374151',
+                      }}>
+                        {output.grossAmount != null && (
+                          <>
+                            <span style={{ color: '#6b7280' }}>Gross:</span>
+                            <span style={{ fontWeight: 600 }}>{fmtToolAmount(output.grossAmount)}</span>
+                          </>
+                        )}
+                        {output.whtAmount != null && (
+                          <>
+                            <span style={{ color: '#6b7280' }}>WHT:</span>
+                            <span style={{ fontWeight: 600, color: '#dc2626' }}>-{fmtToolAmount(output.whtAmount)}</span>
+                          </>
+                        )}
+                        {output.citImpact != null && (
+                          <>
+                            <span style={{ color: '#6b7280' }}>CIT:</span>
+                            <span style={{ fontWeight: 600, color: '#dc2626' }}>-{fmtToolAmount(output.citImpact)}</span>
+                          </>
+                        )}
+                        {output.netAfterTax != null && (
+                          <>
+                            <span style={{ color: '#6b7280' }}>Net:</span>
+                            <span style={{ fontWeight: 600, color: '#16a34a' }}>{fmtToolAmount(output.netAfterTax)}</span>
+                          </>
+                        )}
+                        {output.effectiveTaxRate != null && (
+                          <>
+                            <span style={{ color: '#6b7280' }}>ETR:</span>
+                            <span style={{ fontWeight: 600 }}>{String(output.effectiveTaxRate)}%</span>
+                          </>
+                        )}
+                        {Boolean(output.dttApplied) && (
+                          <>
+                            <span style={{ color: '#6b7280' }}>DTT:</span>
+                            <span style={{ fontWeight: 600, color: '#2563eb' }}>
+                              Applied (-{fmtToolAmount(output.dttBenefit)})
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      {Boolean(output.pillarTwoFlag) && (
+                        <div style={{
+                          marginTop: '6px',
+                          padding: '4px 8px',
+                          borderRadius: '6px',
+                          background: 'rgba(245, 158, 11, 0.1)',
+                          border: '1px solid rgba(245, 158, 11, 0.2)',
+                          fontSize: '11px',
+                          color: '#92400e',
+                          fontWeight: 500,
+                        }}>
+                          {String(output.pillarTwoFlag)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // Completed but no structured output — subtle checkmark
+                return (
+                  <div
+                    key={part.toolCallId}
+                    className="flex items-center gap-2 w-fit px-3 py-1.5 mt-2 text-xs font-medium text-green-700 bg-green-50/40 backdrop-blur-md border border-green-200/50 rounded-full shadow-sm dark:bg-green-900/20 dark:text-green-300 dark:border-green-700/50"
+                  >
+                    <Check size={12} />
+                    {toolDoneLabel(part)}
+                  </div>
+                );
+              })}
             </div>
           );
         })}
