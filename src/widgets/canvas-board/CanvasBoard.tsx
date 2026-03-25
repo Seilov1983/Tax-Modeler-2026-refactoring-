@@ -254,6 +254,15 @@ export function CanvasBoard() {
     return () => window.removeEventListener('resize', updateSize);
   }, []);
 
+  // ─── Force Konva redraw after React commits new entities ────────────────
+  // HTML5 drag-and-drop and Jotai atom updates don't trigger Konva's internal
+  // draw cycle. This effect fires AFTER React reconciles the new <CanvasNode>
+  // into the Konva scene graph, ensuring the layer actually paints.
+  const entityCount = nodeAtoms.length + zones.length + flows.length + ownership.length;
+  useEffect(() => {
+    stageRef.current?.batchDraw();
+  }, [entityCount]);
+
   // ─── Viewport (pan & zoom) ─────────────────────────────────────────────
   const { stateRef: viewportStateRef, zoomBy, panTo, resetViewport } = useCanvasViewport(
     stageRef,
@@ -515,7 +524,7 @@ export function CanvasBoard() {
         parentId: null,
       });
     },
-    [addZone, zones],
+    [addNode, addZone, zones],
   );
 
   // ─── Stage pointer up → clear draft if dropped on empty space ────────

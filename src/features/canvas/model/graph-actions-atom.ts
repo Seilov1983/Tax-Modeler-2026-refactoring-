@@ -120,14 +120,21 @@ export interface AddOwnershipPayload {
 
 export const addOwnershipAtom = atom(
   null,
-  (_get, set, payload: AddOwnershipPayload) => {
+  (get, set, payload: AddOwnershipPayload) => {
     set(commitHistoryAtom);
+
+    // Auto-calculate remaining available percentage for the subsidiary
+    const existing = get(ownershipAtom);
+    const currentSum = existing
+      .filter((o) => o.toId === payload.subsidiaryId)
+      .reduce((sum, o) => sum + (o.percent || 0), 0);
+    const remainder = Math.max(0, Math.round((100 - currentSum) * 100) / 100);
 
     const edge: OwnershipEdge = {
       id: 'own_' + uid(),
       fromId: payload.parentId,
       toId: payload.subsidiaryId,
-      percent: 100,
+      percent: remainder,
       manualAdjustment: 0,
     };
 

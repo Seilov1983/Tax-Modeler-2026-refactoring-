@@ -4,10 +4,13 @@
  * EditorModal — floating Liquid Glass dialog for editing Node and Ownership properties.
  * Uses react-hook-form for form state; dispatches updates via Jotai action atoms.
  * Flow editing is handled by FlowModal; zone editing is via the canvas Transformer.
+ *
+ * Cap Table: NodeEditor includes a "Shareholders" section showing all incoming
+ * ownership edges with inline percent editing, proportional redistribution, and validation.
  */
 
 import { useAtom, useSetAtom, useAtomValue } from 'jotai';
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { selectionAtom, nodeEditingAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
@@ -58,6 +61,186 @@ interface OwnershipFormValues {
   manualAdjustment: number;
 }
 
+// ─── Cap Table: round to 2 decimals (avoids JS floating-point drift) ─────────
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+// ─── Shareholders Section (Cap Table inside NodeEditor) ──────────────────────
+
+interface ShareholderEntry {
+  edgeId: string;
+  parentName: string;
+  percent: number;
+}
+
+function ShareholdersSection({
+  nodeId,
+  ownership,
+  nodes,
+  updateOwnership,
+}: {
+  nodeId: string;
+  ownership: OwnershipEdge[];
+  nodes: NodeDTO[];
+  updateOwnership: (payload: { id: string; data: Partial<OwnershipEdge> }) => void;
+}) {
+  const incomingEdges = ownership.filter((o) => o.toId === nodeId);
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+
+  const [shares, setShares] = useState<ShareholderEntry[]>([]);
+  const [showRedistribute, setShowRedistribute] = useState<string | null>(null);
+
+  // Sync local state from incoming edges
+  useEffect(() => {
+    setShares(
+      incomingEdges.map((e) => ({
+        edgeId: e.id,
+        parentName: nodeMap.get(e.fromId)?.name ?? e.fromId,
+        percent: e.percent,
+      })),
+    );
+  }, [nodeId, ownership.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const total = round2(shares.reduce((s, sh) => s + sh.percent, 0));
+  const isOver100 = total > 100.005;
+  const isUnder100 = total < 99.995 && shares.length > 0;
+
+  const handlePercentChange = useCallback(
+    (edgeId: string, newPercent: number) => {
+      setShares((prev) =>
+        prev.map((sh) => (sh.edgeId === edgeId ? { ...sh, percent: round2(newPercent) } : sh)),
+      );
+      setShowRedistribute(shares.length > 1 ? edgeId : null);
+    },
+    [shares.length],
+  );
+
+  const handleRedistributeProportionally = useCallback(
+    (editedEdgeId: string) => {
+      setShares((prev) => {
+        const edited = prev.find((s) => s.edgeId === editedEdgeId);
+        if (!edited) return prev;
+
+        const remaining = round2(100 - edited.percent);
+        const others = prev.filter((s) => s.edgeId !== editedEdgeId);
+        const othersSum = others.reduce((s, sh) => s + sh.percent, 0);
+
+        if (othersSum <= 0 || others.length === 0) return prev;
+
+        // Scale proportionally
+        let distributed = 0;
+        const updated = others.map((sh, idx) => {
+          const isLast = idx === others.length - 1;
+          const scaled = isLast
+            ? round2(remaining - distributed)
+            : round2((sh.percent / othersSum) * remaining);
+          distributed += scaled;
+          return { ...sh, percent: Math.max(0, scaled) };
+        });
+
+        return prev.map(
+          (sh) => updated.find((u) => u.edgeId === sh.edgeId) ?? sh,
+        );
+      });
+      setShowRedistribute(null);
+    },
+    [],
+  );
+
+  const handleSaveShares = useCallback(() => {
+    for (const sh of shares) {
+      const edge = incomingEdges.find((e) => e.id === sh.edgeId);
+      if (edge && edge.percent !== sh.percent) {
+        updateOwnership({ id: sh.edgeId, data: { percent: sh.percent } });
+      }
+    }
+  }, [shares, incomingEdges, updateOwnership]);
+
+  if (incomingEdges.length === 0) return null;
+
+  return (
+    <div className="mt-4">
+      <Label className={GLASS_LABEL}>Shareholders</Label>
+      <div className="mt-1.5 space-y-2">
+        {shares.map((sh) => (
+          <div key={sh.edgeId}>
+            <div className="flex items-center gap-2">
+              <span className="flex-1 truncate text-[13px] text-slate-700">
+                {sh.parentName}
+              </span>
+              <Input
+                type="number"
+                step="0.01"
+                min={0}
+                max={100}
+                value={sh.percent}
+                onChange={(e) => handlePercentChange(sh.edgeId, Number(e.target.value) || 0)}
+                className={`${GLASS_INPUT} w-24 text-right`}
+              />
+              <span className="text-[12px] text-slate-500">%</span>
+            </div>
+            {showRedistribute === sh.edgeId && shares.length > 1 && (
+              <div className="mt-1 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleRedistributeProportionally(sh.edgeId)}
+                  className="rounded-lg bg-blue-500/10 px-2.5 py-1 text-[11px] font-medium text-blue-600 hover:bg-blue-500/20 transition-colors"
+                >
+                  Redistribute proportionally
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRedistribute(null)}
+                  className="rounded-lg bg-slate-500/10 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-500/20 transition-colors"
+                >
+                  Manual
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Total bar */}
+      <div className={`mt-2 flex items-center justify-between rounded-lg px-3 py-1.5 text-[12px] font-medium ${
+        isOver100
+          ? 'bg-red-500/10 text-red-600'
+          : isUnder100
+            ? 'bg-amber-500/10 text-amber-600'
+            : 'bg-emerald-500/10 text-emerald-600'
+      }`}>
+        <span>Total</span>
+        <span>{total.toFixed(2)}%</span>
+      </div>
+
+      {isOver100 && (
+        <p className="mt-1 text-[11px] text-red-500 font-medium">
+          Total exceeds 100%. Adjust shares before saving.
+        </p>
+      )}
+      {isUnder100 && (
+        <p className="mt-1 text-[11px] text-amber-500 font-medium">
+          Warning: less than 100% allocated.
+        </p>
+      )}
+
+      {/* Save shares button */}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={isOver100}
+        onClick={handleSaveShares}
+        className="mt-2 w-full text-[12px]"
+      >
+        Save shares
+      </Button>
+    </div>
+  );
+}
+
 // ─── Sub-editors ─────────────────────────────────────────────────────────────
 
 function NodeEditor({
@@ -66,12 +249,18 @@ function NodeEditor({
   register,
   projectZones,
   lang: nodeLang,
+  ownership,
+  allNodes,
+  updateOwnership,
 }: {
   node: NodeDTO;
   control: ReturnType<typeof useForm<NodeFormValues>>['control'];
   register: ReturnType<typeof useForm<NodeFormValues>>['register'];
   projectZones: Zone[];
   lang: import('@shared/lib/i18n').Language;
+  ownership: OwnershipEdge[];
+  allNodes: NodeDTO[];
+  updateOwnership: (payload: { id: string; data: Partial<OwnershipEdge> }) => void;
 }) {
   const zone = projectZones.find((z) => z.id === node.zoneId);
   const watchType = node.type;
@@ -169,6 +358,14 @@ function NodeEditor({
           </Field>
         </>
       )}
+
+      {/* Cap Table: Shareholders section */}
+      <ShareholdersSection
+        nodeId={node.id}
+        ownership={ownership}
+        nodes={allNodes}
+        updateOwnership={updateOwnership}
+      />
 
       <div className="mt-4 rounded-xl bg-black/[0.03] p-3 text-[11px] text-gray-500">
         ID: {node.id}<br />Type: {node.type}<br />Frozen: {node.frozen ? 'Yes' : 'No'}
@@ -382,6 +579,9 @@ export function EditorModal() {
                   register={nodeForm.register}
                   projectZones={project?.zones ?? []}
                   lang={lang}
+                  ownership={project?.ownership ?? []}
+                  allNodes={project?.nodes ?? []}
+                  updateOwnership={updateOwnership}
                 />
               )}
               {isOwnership && (
