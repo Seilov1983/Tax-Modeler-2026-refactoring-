@@ -7,6 +7,9 @@ release/
 .env
 .env.local
 
+# ChromaDB (RAG vector store — local data, rebuild via scripts/index_knowledge_base.py)
+.chromadb/
+
 # Playwright
 /test-results/
 /playwright-report/
