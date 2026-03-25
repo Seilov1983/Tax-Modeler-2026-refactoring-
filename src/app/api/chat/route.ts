@@ -162,6 +162,11 @@ function errorResponse(code: string, message: string, status: number): Response 
   );
 }
 
+// ─── GET /api/chat — health check (prevents 404 on non-POST requests) ────────
+export function GET() {
+  return Response.json({ ok: true, model: MODEL_ID });
+}
+
 // ─── POST /api/chat — Streaming tax advisory via local Ollama ────────────────
 // Architecture note: this handler uses streamText for conversational responses.
 // Tool calling is always registered; multi-turn tool execution is capped at

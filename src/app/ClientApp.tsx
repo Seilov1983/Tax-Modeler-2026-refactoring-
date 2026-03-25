@@ -8,18 +8,19 @@
  *
  * Persistence strategy (offline-first):
  *   1. On mount: try API fetch → fall back to localStorage → fall back to demo project
- *   2. On change: update localStorage immediately, debounce PUT to API (skipped in offline mode)
+ *   2. On change: useDebouncedCloudSync handles localStorage + /api/projects/sync (1500ms debounce)
  *
  * Offline mode is activated when:
  *   - API returns 503 (database not configured / unreachable)
  *   - fetch throws (no server — Electron static bundle, file:// etc.)
  */
 
-import { Provider, useSetAtom, useAtomValue } from 'jotai';
-import { useEffect, useRef, useCallback } from 'react';
+import { Provider, useSetAtom } from 'jotai';
+import { useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { projectAtom, hydrateProjectAtom } from '@features/canvas';
+import { hydrateProjectAtom } from '@features/canvas';
 import { defaultProject } from '@entities/project';
+import { useDebouncedCloudSync } from '@shared/hooks/useDebouncedCloudSync';
 
 const CanvasBoard = dynamic(
   () => import('@widgets/canvas-board').then((mod) => ({ default: mod.CanvasBoard })),
@@ -38,7 +39,6 @@ import { SCHEMA_VERSION } from '@shared/lib/engine/engine-core';
 import type { Project } from '@shared/types';
 
 const STORAGE_KEY = 'tsm26_onefile_project_v2';
-const API_DEBOUNCE_MS = 2000;
 
 /** Prepare a raw project object for use: ensure masterData, zones, risks, etc. */
 function prepareProject(p: Project): Project {
@@ -53,15 +53,10 @@ function prepareProject(p: Project): Project {
 
 function AppContent() {
   const hydrate = useSetAtom(hydrateProjectAtom);
-  const project = useAtomValue(projectAtom);
-
-  // Track the remote project ID (set after successful API load or creation)
-  const remoteProjectIdRef = useRef<string | null>(null);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isHydratedRef = useRef(false);
 
-  /** Offline mode — set when API is unreachable (503, network error, Electron static) */
-  const isOfflineModeRef = useRef(false);
+  // ─── Cloud Sync: debounced at 1500ms via /api/projects/sync ──────────
+  const { remoteProjectIdRef, isOfflineModeRef } = useDebouncedCloudSync(isHydratedRef.current);
 
   // ─── Hydration: API → localStorage → demo ──────────────────────────────
   useEffect(() => {
@@ -77,7 +72,6 @@ function AppContent() {
         });
 
         if (listRes.status === 503) {
-          // Database not configured / unreachable — enter offline mode
           isOfflineModeRef.current = true;
           console.info('[Tax-Modeler] API returned 503 — offline mode activated. Data persists to localStorage.');
         } else if (listRes.ok) {
@@ -99,7 +93,6 @@ function AppContent() {
           }
         }
       } catch {
-        // fetch threw — no server (Electron static bundle, file://, offline)
         isOfflineModeRef.current = true;
         console.info('[Tax-Modeler] API unreachable — offline mode activated. Data persists to localStorage.');
       }
@@ -132,79 +125,7 @@ function AppContent() {
 
     loadProject();
     return () => { cancelled = true; };
-  }, [hydrate]);
-
-  // ─── Debounced API flush (skipped in offline mode) ─────────────────────
-  const flushToAPI = useCallback(async (proj: Project) => {
-    // In offline mode, localStorage is the sole persistence — skip API calls
-    if (isOfflineModeRef.current) return;
-
-    try {
-      if (remoteProjectIdRef.current) {
-        // Update existing project
-        const res = await fetch(`/api/projects/${remoteProjectIdRef.current}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: proj.title,
-            schemaVersion: proj.schemaVersion,
-            graphJSON: proj,
-          }),
-        });
-        if (res.status === 503) {
-          isOfflineModeRef.current = true;
-          console.info('[Tax-Modeler] API returned 503 during save — switching to offline mode.');
-        }
-      } else {
-        // Create new project
-        const res = await fetch('/api/projects', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-id': 'local-user',
-          },
-          body: JSON.stringify({
-            name: proj.title,
-            schemaVersion: proj.schemaVersion,
-            graphJSON: proj,
-          }),
-        });
-        if (res.ok) {
-          const created = await res.json();
-          remoteProjectIdRef.current = created.id;
-        } else if (res.status === 503) {
-          isOfflineModeRef.current = true;
-          console.info('[Tax-Modeler] API returned 503 during create — switching to offline mode.');
-        }
-      }
-    } catch {
-      // Network error — switch to offline mode silently
-      isOfflineModeRef.current = true;
-    }
-  }, []);
-
-  // ─── Persist on project change ──────────────────────────────────────────
-  useEffect(() => {
-    if (!project || !isHydratedRef.current) return;
-
-    // 1. Immediate: localStorage (offline-first, zero latency)
-    project.updatedAt = new Date().toISOString();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
-
-    // 2. Debounced: API flush (skipped in offline mode)
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    debounceTimerRef.current = setTimeout(() => {
-      flushToAPI(project);
-    }, API_DEBOUNCE_MS);
-
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, [project, flushToAPI]);
+  }, [hydrate, remoteProjectIdRef, isOfflineModeRef]);
 
   return (
     <>

@@ -66,7 +66,7 @@ model VerificationToken {
 model Project {
   id            String   @id @default(cuid())
   name          String
-  schemaVersion String   @default("2.4.1")
+  schemaVersion String   @default("2.5.0")
   graphJSON     Json     /// Full serialized canvas state (Project interface)
   userId        String
   createdAt     DateTime @default(now())
