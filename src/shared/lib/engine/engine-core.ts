@@ -12,8 +12,8 @@ import type {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-export const SCHEMA_VERSION = '2.5.0';
-export const ENGINE_VERSION = '0.10.0';
+export const SCHEMA_VERSION = '2.6.0';
+export const ENGINE_VERSION = '0.11.0';
 
 // ─── Law References ──────────────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ export function defaultMasterData(): MasterData {
     },
     UAE: { countryCode: 'UAE', baseCurrency: 'AED', vatRateStandard: 0.05, cit: { mode: 'threshold', zeroUpTo: 375000, zeroRate: 0.00, mainRate: 0.09, currency: 'AED' }, wht: { dividends: 0.00, interest: 0.00, royalties: 0.00, services: 0.00 }, payroll: { pitRate: 0.00, employerRate: 0.00, employeeRate: 0.00 }, statuteOfLimitationsYears: 5 },
     HK: { countryCode: 'HK', baseCurrency: 'HKD', vatRateStandard: 0.00, cit: { mode: 'twoTier', smallRate: 0.0825, smallLimit: 2000000, mainRate: 0.165, currency: 'HKD' }, wht: { dividends: 0.00, interest: 0.00, royalties: 0.0495, services: 0.00 }, payroll: { pitRate: 0.15 }, statuteOfLimitationsYears: 6 },
-    CY: { countryCode: 'CY', baseCurrency: 'EUR', vatRateStandard: 0.19, citRateStandard: 0.15, wht: { dividends: 0.00, interest: 0.00, royalties: 0.10, services: 0.00 }, payroll: { pitRate: 0.00 }, special: { defensiveMeasures: { enabled: false, dividendWhtLowTax: 0.17 } }, statuteOfLimitationsYears: 6 },
+    CY: { countryCode: 'CY', baseCurrency: 'EUR', vatRateStandard: 0.19, citRateStandard: 0.15, wht: { dividends: 0.00, interest: 0.00, royalties: 0.10, services: 0.00 }, payroll: { pitRate: 0.00 }, special: { defensiveMeasures: { enabled: true, dividendWhtLowTax: 0.17, deductionDenialFlowTypes: ['Interest', 'Royalties'], lowTaxJurisdictions: ['BVI', 'CAY', 'SEY'], lawRef: 'APP_G_G3_CY_DEFENSIVE', validFrom: '2026-01-01', validTo: null } }, statuteOfLimitationsYears: 6 },
     SG: { countryCode: 'SG', baseCurrency: 'SGD', vatRateStandard: 0.09, citRateStandard: 0.17, wht: { dividends: 0.00, interest: 0.15, royalties: 0.10, services: 0.17 }, payroll: { pitRate: 0.00 }, statuteOfLimitationsYears: 4 },
     UK: { countryCode: 'UK', baseCurrency: 'GBP', vatRateStandard: 0.20, cit: { mode: 'smallProfits', smallRate: 0.19, smallLimit: 50000, mainRate: 0.25, mainLimit: 250000, currency: 'GBP' }, wht: { dividends: 0.00, interest: 0.20, royalties: 0.20, services: 0.00 }, payroll: { pitRate: 0.00 }, statuteOfLimitationsYears: 4 },
     US: { countryCode: 'US', baseCurrency: 'USD', vatRateStandard: 0.00, citRateStandard: 0.21, wht: { dividends: 0.30, interest: 0.30, royalties: 0.30, services: 0.30 }, payroll: { pitRate: 0.00 }, statuteOfLimitationsYears: 3 },

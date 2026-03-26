@@ -24,10 +24,73 @@ import {
   ensureCountriesAndRegimes,
 } from '@shared/lib/engine';
 import type { Project } from '@shared/types';
-import { downloadProjectJson, importProjectJson, exportCanvasToPng } from '../model/export-actions';
+import { exportProjectJson, duplicateProject, importProjectJson, exportCanvasToPng } from '../model/export-actions';
 import { generateAuditSnapshot, exportStructureBook, downloadMarkdown } from '@shared/lib/engine';
-import { Sun, Moon, Globe, ShieldCheck, LayoutDashboard } from 'lucide-react';
+import { Sun, Moon, Globe, ShieldCheck, LayoutDashboard, FileText } from 'lucide-react';
+import { activeTabAtom } from '@features/canvas/model/project-atom';
+import { syncStatusAtom } from '@shared/hooks/sync-status-atom';
 import { ProjectDashboard } from './ProjectDashboard';
+
+// ─── SyncBadge — autosave indicator next to title ────────────────────────────
+
+function SyncBadge() {
+  const { isSyncing, lastSavedAt } = useAtomValue(syncStatusAtom);
+
+  if (isSyncing) {
+    return (
+      <span
+        title="Saving..."
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          fontSize: '11px',
+          color: '#86868b',
+          fontWeight: 500,
+        }}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ animation: 'spin 1s linear infinite' }}
+        >
+          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+        </svg>
+        Saving...
+      </span>
+    );
+  }
+
+  if (lastSavedAt) {
+    return (
+      <span
+        title={`Saved at ${lastSavedAt.toLocaleTimeString()}`}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          fontSize: '11px',
+          color: '#34c759',
+          fontWeight: 500,
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10" />
+          <path d="M7.5 12l3 3 6-6" />
+        </svg>
+        Saved
+      </span>
+    );
+  }
+
+  return null;
+}
 
 const CURRENCY_OPTIONS = [
   { code: 'USD', label: 'USD ($)' },
@@ -48,13 +111,13 @@ export function ProjectHeader() {
   const canUndo = useAtomValue(canUndoAtom);
   const canRedo = useAtomValue(canRedoAtom);
   const setSelection = useSetAtom(selectionAtom);
+  const [activeTab, setActiveTab] = useAtom(activeTabAtom);
   const setPastStates = useSetAtom(pastStatesAtom);
   const setFutureStates = useSetAtom(futureStatesAtom);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [settings, setSettings] = useAtom(settingsAtom);
   const { resolvedTheme, setTheme } = useTheme();
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState('');
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const handleCurrencyChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -65,10 +128,24 @@ export function ProjectHeader() {
     [setProject],
   );
 
-  const handleSave = useCallback(() => {
+  const handleSaveAs = useCallback(() => {
     if (!project) return;
-    const ts = new Date().toISOString().slice(0, 10);
-    downloadProjectJson(project, `tax-model-${ts}.json`);
+    const clone = duplicateProject(project);
+    ensureMasterData(clone);
+    ensureCountriesAndRegimes(clone);
+    ensureZoneTaxDefaults(clone);
+    bootstrapNormalizeZones(clone);
+    recomputeFrozen(clone);
+    recomputeRisks(clone);
+    hydrate(clone);
+    setSelection(null);
+    setPastStates([]);
+    setFutureStates([]);
+  }, [project, hydrate, setSelection, setPastStates, setFutureStates]);
+
+  const handleExportJson = useCallback(async () => {
+    if (!project) return;
+    await exportProjectJson(project);
   }, [project]);
 
   const handleImport = useCallback(
@@ -140,24 +217,23 @@ export function ProjectHeader() {
     setSettings((prev) => ({ ...prev, theme: newTheme }));
   }, [resolvedTheme, setTheme, setSettings]);
 
-  const handleTitleClick = useCallback(() => {
-    if (!project) return;
-    setTitleDraft(project.title);
-    setIsEditingTitle(true);
-  }, [project]);
+  const handleTitleBlur = useCallback(() => {
+    const input = titleInputRef.current;
+    if (!input) return;
+    const name = input.value.trim() || 'New Project';
+    input.value = name;
+    setProject((prev) => prev ? { ...prev, title: name } : prev);
+  }, [setProject]);
 
-  const handleTitleSave = useCallback(() => {
-    const name = titleDraft.trim();
-    if (name) {
-      setProject((prev) => prev ? { ...prev, title: name } : prev);
+  const handleTitleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.currentTarget.blur();
     }
-    setIsEditingTitle(false);
-  }, [titleDraft, setProject]);
-
-  const handleTitleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleTitleSave();
-    if (e.key === 'Escape') setIsEditingTitle(false);
-  }, [handleTitleSave]);
+    if (e.key === 'Escape') {
+      e.currentTarget.value = project?.title ?? 'New Project';
+      e.currentTarget.blur();
+    }
+  }, [project?.title]);
 
   const toggleLanguage = useCallback(() => {
     setSettings((prev) => ({
@@ -196,35 +272,42 @@ export function ProjectHeader() {
         <span style={{ fontWeight: 700, fontSize: '15px', color: '#1d1d1f', letterSpacing: '-0.02em' }}>
           Tax-Modeler 2026
         </span>
-        {isEditingTitle ? (
-          <input
-            autoFocus
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={handleTitleSave}
-            onKeyDown={handleTitleKeyDown}
-            style={{
-              fontSize: '12px',
-              color: '#1d1d1f',
-              background: 'rgba(255,255,255,0.8)',
-              border: '1px solid rgba(0,0,0,0.12)',
-              borderRadius: '6px',
-              padding: '2px 8px',
-              outline: 'none',
-              width: '180px',
-            }}
-          />
-        ) : (
-          <span
-            onClick={handleTitleClick}
-            title="Click to rename project"
-            style={{ fontSize: '12px', color: '#86868b', cursor: 'pointer', borderBottom: '1px dashed transparent' }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderBottomColor = '#86868b'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderBottomColor = 'transparent'; }}
-          >
-            {project.title}
-          </span>
-        )}
+        <input
+          ref={titleInputRef}
+          defaultValue={project.title}
+          key={project.projectId}
+          onBlur={handleTitleBlur}
+          onKeyDown={handleTitleKeyDown}
+          onFocus={(e) => e.currentTarget.select()}
+          title="Click to rename project"
+          spellCheck={false}
+          style={{
+            fontSize: '14px',
+            fontWeight: 500,
+            color: '#1d1d1f',
+            background: 'transparent',
+            border: '1px solid transparent',
+            borderRadius: '6px',
+            padding: '2px 8px',
+            outline: 'none',
+            width: '200px',
+            cursor: 'text',
+            transition: 'border-color 0.15s, background 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            if (document.activeElement !== e.currentTarget) {
+              e.currentTarget.style.background = 'rgba(0,0,0,0.03)';
+              e.currentTarget.style.borderColor = 'rgba(0,0,0,0.08)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (document.activeElement !== e.currentTarget) {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.borderColor = 'transparent';
+            }
+          }}
+        />
+        <SyncBadge />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px', paddingLeft: '12px', borderLeft: '1px solid rgba(0,0,0,0.06)' }}>
           <label style={{ fontSize: '11px', color: '#86868b', fontWeight: 500, letterSpacing: '0.02em' }}>
@@ -249,6 +332,48 @@ export function ProjectHeader() {
               <option key={c.code} value={c.code}>{c.label}</option>
             ))}
           </select>
+        </div>
+
+        {/* Tab toggle: Canvas ↔ Reports */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginLeft: '12px', paddingLeft: '12px', borderLeft: '1px solid rgba(0,0,0,0.06)', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', padding: '2px' }}>
+          <button
+            onClick={() => setActiveTab('canvas')}
+            style={{
+              padding: '4px 12px',
+              fontSize: '12px',
+              fontWeight: activeTab === 'canvas' ? 600 : 400,
+              background: activeTab === 'canvas' ? '#fff' : 'transparent',
+              color: activeTab === 'canvas' ? '#1d1d1f' : '#86868b',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              boxShadow: activeTab === 'canvas' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              transition: 'all 0.15s',
+            }}
+          >
+            Canvas
+          </button>
+          <button
+            onClick={() => setActiveTab('reports')}
+            style={{
+              padding: '4px 12px',
+              fontSize: '12px',
+              fontWeight: activeTab === 'reports' ? 600 : 400,
+              background: activeTab === 'reports' ? '#fff' : 'transparent',
+              color: activeTab === 'reports' ? '#1d1d1f' : '#86868b',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              boxShadow: activeTab === 'reports' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              transition: 'all 0.15s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <FileText size={12} />
+            Reports
+          </button>
         </div>
       </div>
 
@@ -301,14 +426,19 @@ export function ProjectHeader() {
           style={{ display: 'none' }}
           onChange={handleImport}
         />
-        <button onClick={() => fileInputRef.current?.click()} style={btnSecondary}>
+        <button onClick={() => fileInputRef.current?.click()} style={btnSecondary} title="Load project from JSON file">
           Load
         </button>
-        <button onClick={handleSave} style={btnSecondary}>
-          Save
+        <button onClick={handleSaveAs} style={btnSecondary} title="Duplicate as a new project">
+          Save As
         </button>
 
-        <button onClick={handleExportPng} style={btnPrimary}>
+        <div style={{ width: '1px', height: '20px', background: 'rgba(0,0,0,0.06)', margin: '0 4px' }} />
+
+        <button onClick={handleExportJson} style={btnPrimary} title="Export project as JSON file">
+          Export JSON
+        </button>
+        <button onClick={handleExportPng} style={btnPrimary} title="Export canvas as PNG image">
           Export PNG
         </button>
 

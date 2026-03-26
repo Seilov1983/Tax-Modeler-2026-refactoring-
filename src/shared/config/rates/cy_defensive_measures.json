@@ -1,0 +1,26 @@
+{
+  "$schema": "temporal-rates",
+  "$jurisdiction": "CY",
+  "$description": "Cyprus Defensive Measures 2026 — Penalty WHT on dividends to LTJ, deduction denial for interest/royalties to LTJ.",
+
+  "citRates": [
+    { "validFrom": "2024-01-01", "validTo": "2024-12-31", "value": 0.125 },
+    { "validFrom": "2025-01-01", "validTo": null, "value": 0.15 }
+  ],
+
+  "defensiveMeasures": [
+    {
+      "validFrom": "2026-01-01",
+      "validTo": null,
+      "enabled": true,
+      "penaltyWhtDividendsToLTJ": 0.17,
+      "deductionDenial": {
+        "flowTypes": ["Interest", "Royalties"],
+        "effect": "DISALLOW",
+        "lawRef": "CY_DEFENSIVE_2026_DEDUCTION_DENIAL"
+      },
+      "lowTaxJurisdictions": ["BVI", "CAY", "SEY"],
+      "lawRef": "APP_G_G3_CY_DEFENSIVE"
+    }
+  ]
+}

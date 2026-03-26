@@ -1,0 +1,25 @@
+{
+  "$schema": "temporal-rates",
+  "$jurisdiction": "UAE",
+  "$description": "UAE Corporate Tax rates with tax group support for consolidated reporting.",
+
+  "citRates": [
+    { "validFrom": "2023-06-01", "validTo": null, "value": 0.09 }
+  ],
+
+  "freeZoneThreshold": [
+    { "validFrom": "2023-06-01", "validTo": null, "zeroUpTo": 375000, "mainRate": 0.09, "currency": "AED" }
+  ],
+
+  "taxGroupRules": [
+    {
+      "validFrom": "2023-06-01",
+      "validTo": null,
+      "enabled": true,
+      "eliminateIntraGroupFlows": true,
+      "consolidatedReporting": true,
+      "conditions": ["sameJurisdiction", "ownership95Percent"],
+      "lawRef": "UAE_CT_LAW_2023_TAX_GROUPS"
+    }
+  ]
+}

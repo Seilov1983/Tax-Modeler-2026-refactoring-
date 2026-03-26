@@ -69,7 +69,8 @@ export function computeControlFromPerson(p: Project, personId: string): Map<stri
       if (!isCompany(e.fromId) || !isCompany(e.toId)) return;
       const parentControl = control.get(e.fromId) || 0;
       const ownedFrac = Math.max(0, Math.min(1, (Number(e.percent || 0) + Number(e.manualAdjustment || 0)) / 100));
-      const via = parentControl > 0.5 ? 1.0 * ownedFrac : parentControl * ownedFrac;
+      // Pure proportional multiplication across edges (no majority control inflation)
+      const via = parentControl * ownedFrac;
       if (via > (control.get(e.toId) || 0) + 1e-9) {
         control.set(e.toId, via);
         changed = true;
@@ -149,22 +150,45 @@ export function recomputeRisks(p: Project): void {
         if (incomeKZT <= incomeThrKZT) return;
         const etr = effectiveEtrForCompany(p, co);
         if (etr >= etrThr!) return;
-        // Substance exemption: if the company has real economic substance, skip CFC flag
+        // Safe Harbor: real economic substance exempts from CFC rules
         if (co.hasSubstance) return;
         co.riskFlags.push({ type: 'CFC_RISK', byPersonId: per.id, control: cf, incomeKZT, etr, lawRef: 'KZ_CFC_MVP' });
+        // hasSubstance === false → flag substance breach on the CFC entity
+        co.riskFlags.push({ type: 'SUBSTANCE_BREACH', byPersonId: per.id, lawRef: 'KZ_CFC_SUBSTANCE', message: 'CFC entity lacks economic substance.' });
       });
     });
   }
 
+  // ── SUBSTANCE_BREACH: BVI and other offshore jurisdictions requiring substance ──
+  const offshoreSubstanceJurisdictions = ['BVI', 'CAY', 'SEY'];
   listCompanies(p).forEach((co) => {
     const z = getZone(p, co.zoneId);
     if (!z) return;
     const comp = co.complianceData;
+
+    // BVI-specific substance check (detailed: relevant activity + employees + office)
     if (z.jurisdiction === 'BVI' && comp?.bvi) {
       if (comp.bvi.relevantActivity && (Number(comp.bvi.employees || 0) <= 0 || !comp.bvi.office)) {
         co.riskFlags.push({ type: 'SUBSTANCE_BREACH', lawRef: 'APP_G_G1_BVI_SUBSTANCE', penaltyUsd: 20000 });
       }
     }
+
+    // Generic offshore substance check: any node in offshore jurisdiction without hasSubstance
+    if (offshoreSubstanceJurisdictions.includes(z.jurisdiction) && co.hasSubstance === false) {
+      // Avoid duplicate BVI_SUBSTANCE_BREACH — only flag if not already flagged by BVI-specific check
+      const alreadyFlagged = co.riskFlags.some(
+        (r) => r.type === 'SUBSTANCE_BREACH' && (r.lawRef === 'APP_G_G1_BVI_SUBSTANCE' || r.lawRef === 'KZ_CFC_SUBSTANCE'),
+      );
+      if (!alreadyFlagged) {
+        co.riskFlags.push({
+          type: 'SUBSTANCE_BREACH',
+          lawRef: `OFFSHORE_SUBSTANCE_${z.jurisdiction}`,
+          message: `Entity in ${z.jurisdiction} lacks real economic substance (office/staff).`,
+        });
+      }
+    }
+
+    // AIFC presence breach
     if (z.code === 'KZ_AIFC' && comp?.aifc) {
       if (comp.aifc.usesCITBenefit && !comp.aifc.cigaInZone) {
         co.riskFlags.push({ type: 'AIFC_PRESENCE_BREACH', lawRef: 'APP_G_G4_AIFC_PRESENCE', effectiveCitRate: 0.20 });
@@ -172,7 +196,9 @@ export function recomputeRisks(p: Project): void {
     }
   });
 
-  // Pillar Two: trigger if explicit scope flag OR consolidated revenue > €750M
+  // ── Pillar Two Exposure Risk (PILLAR2_TRIGGER) ────────────────────────────
+  // Trigger if global group revenue > 750M EUR AND local jurisdiction ETR < 15%.
+  // Does NOT calculate HKMTT Top-up Tax.
   const rev = numOrNull(p.group?.consolidatedRevenueEur);
   const pillarTwoInScope = p.isPillarTwoScope || (rev != null && rev > 750_000_000);
   if (pillarTwoInScope) {
@@ -186,7 +212,7 @@ export function recomputeRisks(p: Project): void {
     });
     if (low.length) {
       p.projectRiskFlags.push({
-        type: 'PILLAR2_TOPUP_RISK', lawRef: 'APP_G_G5_PILLAR2',
+        type: 'PILLAR2_TRIGGER', lawRef: 'APP_G_G5_PILLAR2',
         consolidatedRevenueEur: rev, isPillarTwoScope: !!p.isPillarTwoScope,
         minEtr: 0.15, affectedCount: low.length,
       });
@@ -194,7 +220,7 @@ export function recomputeRisks(p: Project): void {
   }
 
   (p.flows || []).forEach((f) => {
-    if (['Goods', 'Equipment', 'Services'].includes(f.flowType) && isRelatedParty(p, f.fromId, f.toId)) {
+    if (['Goods', 'Equipment', 'Services', 'Royalties'].includes(f.flowType) && isRelatedParty(p, f.fromId, f.toId)) {
       const pZ = getZone(p, getNode(p, f.fromId)?.zoneId);
       const payeeZ = getZone(p, getNode(p, f.toId)?.zoneId);
       if (pZ && payeeZ && pZ.jurisdiction !== payeeZ.jurisdiction) {

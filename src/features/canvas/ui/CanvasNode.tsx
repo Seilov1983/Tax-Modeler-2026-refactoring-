@@ -26,6 +26,7 @@ import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type { NodeDTO, Zone } from '@shared/types';
 import { selectionAtom, nodeEditingAtom } from '@features/entity-editor/model/atoms';
+import { canvasFilterAtom } from '../model/canvas-filter-atom';
 import { draftConnectionAtom, commitDraftConnectionAtom } from '../model/draft-connection-atom';
 import { moveNodesAtom, reparentNodeAtom, flagNodeErrorAtom } from '../model/graph-actions-atom';
 import { showNotificationAtom } from '../model/notification-atom';
@@ -81,6 +82,21 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const settings = useAtomValue(settingsAtom);
   const isDark = settings.theme === 'dark' || (settings.theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const nodeTax = useAtomValue(nodeLiveCITAtomFamily(node.id));
+  const canvasFilter = useAtomValue(canvasFilterAtom);
+
+  // ─── Ghosting: declarative match against active filters ────────────
+  const isGhosted = useMemo(() => {
+    if (!canvasFilter.isActive) return false;
+    const { managementTags, zoneIds } = canvasFilter;
+    const noTagFilter = managementTags.length === 0;
+    const noZoneFilter = zoneIds.length === 0;
+    // If no filters are set at all, nothing is ghosted
+    if (noTagFilter && noZoneFilter) return false;
+    // Node matches if it passes ALL active filter dimensions
+    const tagMatch = noTagFilter || (node.managementTags ?? []).some((t) => managementTags.includes(t));
+    const zoneMatch = noZoneFilter || (node.zoneId != null && zoneIds.includes(node.zoneId));
+    return !(tagMatch && zoneMatch);
+  }, [canvasFilter, node.managementTags, node.zoneId]);
 
   const groupRef = useRef<Konva.Group>(null);
   const hasDragged = useRef(false);
@@ -348,7 +364,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       id={`node-${node.id}`}
       x={node.x}
       y={node.y}
-      draggable={!isTxa}
+      draggable={!isTxa && !isGhosted}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
@@ -358,7 +374,8 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       onPointerUp={handleNodePointerUp}
       scaleX={entranceSpring.scaleX.get()}
       scaleY={entranceSpring.scaleY.get()}
-      opacity={entranceSpring.opacity.get()}
+      opacity={isGhosted ? 0.15 : entranceSpring.opacity.get()}
+      listening={!isGhosted}
     >
       {/* Node body — uses layout background dimensions; refined red glow if hasError */}
       <Rect

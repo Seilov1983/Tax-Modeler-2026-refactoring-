@@ -61,7 +61,36 @@ interface TaxFlowParams {
 // AI SDK v6 tool() generics are incompatible with zod v4 at the type level.
 // Plain object definition is runtime-identical (tool() is a passthrough).
 // Using jsonSchema<T>() for parameter validation with explicit execute typing.
+// Canvas snapshot stashed per-request for tool access (set in POST handler)
+let _canvasSnapshotForTool = '{}';
+
 const taxTools = {
+  get_canvas_structure: {
+    description:
+      'Retrieves the current corporate structure from the TSM26 canvas — ' +
+      'nodes (companies, persons), zones (jurisdictions), flows (payments), ' +
+      'and ownership edges. Call this to inspect the user\'s structure.',
+    parameters: jsonSchema<Record<string, never>>({
+      type: 'object',
+      properties: {},
+      required: [],
+    }),
+    execute: async () => {
+      try {
+        const data = JSON.parse(_canvasSnapshotForTool);
+        return {
+          success: true,
+          nodes: data.nodes ?? [],
+          zones: data.zones ?? [],
+          flows: data.flows ?? [],
+          ownership: data.ownership ?? [],
+          projectRiskFlags: data.projectRiskFlags ?? [],
+        };
+      } catch {
+        return { success: false, error: 'Canvas snapshot not available.' };
+      }
+    },
+  },
   calculate_tax_flow: {
     description:
       'Вызывает математическое ядро TSM26 для расчёта WHT, CIT и ETR при симуляции выплаты. ' +
@@ -211,6 +240,9 @@ export async function POST(req: Request) {
 
   const systemContent = SYSTEM_PROMPT + canvasBlock;
 
+  // Stash snapshot for the get_canvas_structure tool to access
+  _canvasSnapshotForTool = canvasSnapshot && canvasSnapshot !== '{}' ? canvasSnapshot : '{}';
+
   try {
     const modelMessages = await convertToModelMessages(messages);
 
@@ -230,6 +262,11 @@ export async function POST(req: Request) {
     const result = streamText({
       model: ollama.chat(MODEL_ID),
       messages: finalMessages,
+      // Ollama-specific: set context window to 8192 tokens for the custom model.
+      // @ai-sdk/openai forwards providerOptions.openai as extra body fields.
+      providerOptions: {
+        openai: { options: { num_ctx: 8192 } },
+      },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ...(enableTools
         ? { tools: taxTools as any, stopWhen: stepCountIs(3) }

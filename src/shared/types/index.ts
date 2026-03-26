@@ -1,3 +1,31 @@
+// ─── Temporal Resolution Types ───────────────────────────────────────────────
+
+/** A single temporal rate entry: value is valid within [validFrom, validTo). */
+export interface TemporalRate {
+  validFrom: string;
+  validTo: string | null;
+  value: number;
+}
+
+/** Progressive WHT bracket for a specific temporal window. */
+export interface TemporalWHTBrackets {
+  validFrom: string;
+  validTo: string | null;
+  brackets: Array<{ upToMRP: number | null; rate: number }>;
+}
+
+/** Nexus fraction parameters for IP income (Astana Hub). */
+export interface NexusFractionParams {
+  /** R&D expenditures incurred by the taxpayer. */
+  rUp: number;
+  /** Outsourced R&D to unrelated parties. */
+  rOut1: number;
+  /** Outsourced R&D to related parties. */
+  rOut2: number;
+  /** Acquisition costs of IP. */
+  rAcq: number;
+}
+
 // ─── Core Domain Types ───────────────────────────────────────────────────────
 
 export type JurisdictionCode =
@@ -209,6 +237,12 @@ export interface NodeDTO {
   passiveIncomeShare?: number;
   /** Whether the entity has real economic substance (employees, office, CIGA). */
   hasSubstance?: boolean;
+  /** Whether the entity's income qualifies as IP income (Astana Hub Nexus). */
+  isIPIncome?: boolean;
+  /** Nexus fraction parameters for Astana Hub IP income CIT reduction. */
+  nexusParams?: NexusFractionParams;
+  /** Whether this entity maintains separate accounting (AIFC requirement). */
+  hasSeparateAccounting?: boolean;
   /** Management-layer tags for dual-track analysis (shadow grouping). */
   managementTags?: string[];
 }
@@ -300,7 +334,7 @@ export type RiskFlagType =
   | 'CFC_RISK' | 'SUBSTANCE_BREACH' | 'AIFC_PRESENCE_BREACH'
   | 'PILLAR2_LOW_ETR' | 'TRANSFER_PRICING_RISK'
   | 'CASH_LIMIT_EXCEEDED' | 'INTERIM_DIVIDENDS_RISK' | 'CONSTRUCTIVE_DIVIDEND'
-  | 'PILLAR2_TOPUP_RISK' | 'NO_JURISDICTION';
+  | 'PILLAR2_TOPUP_RISK' | 'PILLAR2_TRIGGER' | 'NO_JURISDICTION';
 
 export interface RiskFlag {
   type: RiskFlagType | string;
@@ -388,6 +422,8 @@ export interface Project {
   /** Whether the group is in scope for Pillar Two (GloBE) minimum tax rules. */
   isPillarTwoScope?: boolean;
   group: { consolidatedRevenueEur: number | null };
+  /** UAE-style tax group arrays for consolidated reporting. */
+  taxGroups?: Array<{ id: string; name: string; nodeIds: string[]; jurisdiction: JurisdictionCode }>;
   accounting: { years: Record<string, unknown> };
   lawReferences: Record<string, { title: string; version: string; effectiveFrom: string }>;
   snapshots: unknown[];

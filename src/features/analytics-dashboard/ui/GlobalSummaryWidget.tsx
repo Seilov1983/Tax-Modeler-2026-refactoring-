@@ -27,6 +27,7 @@ const RISK_LABELS: Record<string, string> = {
   AIFC_PRESENCE_BREACH: 'AIFC Presence Breach',
   PILLAR2_LOW_ETR: 'Pillar Two Low ETR',
   PILLAR2_TOPUP_RISK: 'Pillar Two Top-Up Risk',
+  PILLAR2_TRIGGER: 'Pillar Two Exposure Risk',
   TRANSFER_PRICING_RISK: 'Transfer Pricing Risk',
   CASH_LIMIT_EXCEEDED: 'Cash Limit Exceeded',
   INTERIM_DIVIDENDS_RISK: 'Interim Dividends Risk',
@@ -39,6 +40,7 @@ const RISK_ICONS: Record<string, string> = {
   SUBSTANCE_BREACH: '\ud83c\udfe2',
   PILLAR2_LOW_ETR: '\ud83c\udf10',
   PILLAR2_TOPUP_RISK: '\ud83c\udf10',
+  PILLAR2_TRIGGER: '\ud83c\udf10',
   TRANSFER_PRICING_RISK: '\ud83d\udcb1',
   NO_JURISDICTION: '\ud83d\udea9',
 };
@@ -54,7 +56,8 @@ function friendlyRiskLine(flag: RiskFlag, nodeName: string, jurisdiction: string
     case 'PILLAR2_LOW_ETR':
       return `${nodeName} (${jurisdiction}) — ETR below 15% GloBE minimum${ref}`;
     case 'PILLAR2_TOPUP_RISK':
-      return `${nodeName} (${jurisdiction}) — subject to Pillar Two top-up tax${ref}`;
+    case 'PILLAR2_TRIGGER':
+      return `${nodeName} (${jurisdiction}) — Pillar Two exposure: ETR below 15% GloBE minimum${ref}`;
     case 'TRANSFER_PRICING_RISK':
       return `${nodeName} — arm's-length compliance risk detected${ref}`;
     case 'NO_JURISDICTION':
@@ -65,7 +68,7 @@ function friendlyRiskLine(flag: RiskFlag, nodeName: string, jurisdiction: string
 }
 
 function riskSeverity(type: string): 'HIGH' | 'MEDIUM' | 'LOW' {
-  if (type === 'CFC_RISK' || type === 'PILLAR2_LOW_ETR' || type === 'PILLAR2_TOPUP_RISK') return 'HIGH';
+  if (type === 'CFC_RISK' || type === 'PILLAR2_LOW_ETR' || type === 'PILLAR2_TOPUP_RISK' || type === 'PILLAR2_TRIGGER') return 'HIGH';
   if (type === 'SUBSTANCE_BREACH' || type === 'TRANSFER_PRICING_RISK') return 'MEDIUM';
   return 'LOW';
 }

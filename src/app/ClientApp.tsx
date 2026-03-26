@@ -16,7 +16,7 @@
  */
 
 import { Provider, useSetAtom } from 'jotai';
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { hydrateProjectAtom } from '@features/canvas';
 import { defaultProject } from '@entities/project';
@@ -40,6 +40,14 @@ import type { Project } from '@shared/types';
 
 const STORAGE_KEY = 'tsm26_onefile_project_v2';
 
+/** Major version compatibility: accept any schema from the same major (2.x). */
+function isCompatibleSchema(version: string | undefined): boolean {
+  if (!version) return false;
+  const major = version.split('.')[0];
+  const currentMajor = SCHEMA_VERSION.split('.')[0];
+  return major === currentMajor;
+}
+
 /** Prepare a raw project object for use: ensure masterData, zones, risks, etc. */
 function prepareProject(p: Project): Project {
   ensureMasterData(p);
@@ -53,10 +61,10 @@ function prepareProject(p: Project): Project {
 
 function AppContent() {
   const hydrate = useSetAtom(hydrateProjectAtom);
-  const isHydratedRef = useRef(false);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   // ─── Cloud Sync: debounced at 1500ms via /api/projects/sync ──────────
-  const { remoteProjectIdRef, isOfflineModeRef } = useDebouncedCloudSync(isHydratedRef.current);
+  const { remoteProjectIdRef, isOfflineModeRef } = useDebouncedCloudSync(isHydrated);
 
   // ─── Hydration: API → localStorage → demo ──────────────────────────────
   useEffect(() => {
@@ -83,7 +91,8 @@ function AppContent() {
               const record = await detailRes.json();
               if (record.graphJSON && typeof record.graphJSON === 'object') {
                 const graph = record.graphJSON as Project;
-                if (graph.schemaVersion === SCHEMA_VERSION) {
+                if (isCompatibleSchema(graph.schemaVersion)) {
+                  graph.schemaVersion = SCHEMA_VERSION;
                   graph.readOnly = false;
                   p = graph;
                   remoteProjectIdRef.current = record.id;
@@ -103,7 +112,8 @@ function AppContent() {
           const raw = localStorage.getItem(STORAGE_KEY);
           if (raw) {
             const obj = JSON.parse(raw);
-            if (obj.schemaVersion === SCHEMA_VERSION) {
+            if (isCompatibleSchema(obj.schemaVersion)) {
+              obj.schemaVersion = SCHEMA_VERSION;
               obj.readOnly = false;
               p = obj as Project;
             }
@@ -119,8 +129,8 @@ function AppContent() {
       if (cancelled) return;
 
       prepareProject(p);
-      isHydratedRef.current = true;
       hydrate(p);
+      setIsHydrated(true);
     }
 
     loadProject();

@@ -32,6 +32,7 @@ import { settingsAtom } from '@features/settings';
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
 import { localizedName } from '@shared/lib/i18n';
 import { calculateZoneHeaderLayout } from '../utils/canvas-layout';
+import { canvasFilterAtom } from '../model/canvas-filter-atom';
 import type { Zone } from '@shared/types';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
@@ -81,7 +82,19 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   const settings = useAtomValue(settingsAtom);
   const lang = settings.language || 'en';
   const isDark = settings.theme === 'dark' || (settings.theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const canvasFilter = useAtomValue(canvasFilterAtom);
   const isSelected = selection?.type === 'zone' && selection.id === zone.id;
+
+  // ─── Ghosting: declarative match against active zone filters ───────
+  const isGhosted = useMemo(() => {
+    if (!canvasFilter.isActive) return false;
+    const { zoneIds } = canvasFilter;
+    if (zoneIds.length === 0) return false;
+    // A zone is ghosted if it has a parentId (regime) and is NOT in the filter list
+    // Countries (no parentId) are never ghosted — they are structural containers
+    if (!zone.parentId) return false;
+    return !zoneIds.includes(zone.id);
+  }, [canvasFilter, zone.id, zone.parentId]);
 
   const bgColor = isDark ? (ZONE_COLORS_DARK[zone.jurisdiction] || '#1e1e2e') : (ZONE_COLORS[zone.jurisdiction] || '#f1f5f9');
   const borderColor = isDark ? (ZONE_BORDER_COLORS_DARK[zone.jurisdiction] || '#64748b') : (ZONE_BORDER_COLORS[zone.jurisdiction] || '#94a3b8');
@@ -375,14 +388,15 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
       ref={groupRef}
       x={zone.x}
       y={zone.y}
-      draggable
+      draggable={!isGhosted}
       onDblClick={handleDblClick}
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
       scaleX={entranceSpring.scaleX.get()}
       scaleY={entranceSpring.scaleY.get()}
-      opacity={entranceSpring.opacity.get()}
+      opacity={isGhosted ? 0.15 : entranceSpring.opacity.get()}
+      listening={!isGhosted}
     >
       {/* Zone background fill — onPointerDown selects zone + stops bubble to Stage */}
       <Rect

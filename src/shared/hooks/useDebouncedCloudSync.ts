@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { projectAtom } from '@features/canvas';
+import { syncStatusAtom } from './sync-status-atom';
 import type { Project } from '@shared/types';
 
 const SYNC_DEBOUNCE_MS = 1500;
@@ -17,17 +18,22 @@ const STORAGE_KEY = 'tsm26_onefile_project_v2';
  * 2. POST to /api/projects/sync is debounced at 1500ms.
  * 3. On 503 / network error, activates offline mode (localStorage-only).
  *
- * Returns the remote project ID ref for external consumers.
+ * Exposes sync state via syncStatusAtom for the autosave indicator.
  */
 export function useDebouncedCloudSync(isHydrated: boolean) {
   const project = useAtomValue(projectAtom);
+  const setSyncStatus = useSetAtom(syncStatusAtom);
 
   const remoteProjectIdRef = useRef<string | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isOfflineModeRef = useRef(false);
 
   const syncToCloud = useCallback(async (proj: Project) => {
-    if (isOfflineModeRef.current) return;
+    if (isOfflineModeRef.current) {
+      // In offline mode, localStorage write already happened — mark as saved
+      setSyncStatus({ isSyncing: false, lastSavedAt: new Date() });
+      return;
+    }
 
     try {
       const res = await fetch(SYNC_ENDPOINT, {
@@ -55,7 +61,9 @@ export function useDebouncedCloudSync(isHydrated: boolean) {
       isOfflineModeRef.current = true;
       console.info('[CloudSync] Network error — offline mode activated.');
     }
-  }, []);
+
+    setSyncStatus({ isSyncing: false, lastSavedAt: new Date() });
+  }, [setSyncStatus]);
 
   useEffect(() => {
     if (!project || !isHydrated) return;
@@ -64,7 +72,10 @@ export function useDebouncedCloudSync(isHydrated: boolean) {
     project.updatedAt = new Date().toISOString();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
 
-    // 2. Debounced: cloud sync (1500ms)
+    // 2. Mark as syncing while debounce timer is pending
+    setSyncStatus((prev) => ({ ...prev, isSyncing: true }));
+
+    // 3. Debounced: cloud sync (1500ms)
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
@@ -77,7 +88,7 @@ export function useDebouncedCloudSync(isHydrated: boolean) {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [project, isHydrated, syncToCloud]);
+  }, [project, isHydrated, syncToCloud, setSyncStatus]);
 
   return { remoteProjectIdRef, isOfflineModeRef };
 }

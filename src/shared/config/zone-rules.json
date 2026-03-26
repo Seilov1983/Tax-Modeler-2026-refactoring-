@@ -1,6 +1,6 @@
 {
   "$schema": "zone-rules-schema",
-  "$version": "2026-03-06",
+  "$version": "2026-03-26",
   "$description": "Declarative zone tax overrides — Law-as-Code. AI Legal Parser can update this file when legislation changes without touching engine code.",
 
   "zoneOverrides": {
@@ -13,7 +13,8 @@
         "payroll": { "pitRate": 0.00, "socialTaxEmployerRate": 0.00 }
       },
       "lawRef": "KZ_ASTANA_HUB_2026",
-      "effectiveFrom": "2026-01-01"
+      "effectiveFrom": "2018-01-01",
+      "effectiveTo": null
     },
     "KZ_AIFC": {
       "jurisdiction": "KZ",
@@ -22,7 +23,8 @@
         "cit": { "mode": "flat", "rate": 0.00 }
       },
       "lawRef": "KZ_AIFC_ACT_2026",
-      "effectiveFrom": "2026-01-01"
+      "effectiveFrom": "2018-01-01",
+      "effectiveTo": "2066-01-01"
     },
     "UAE_FREEZONE_QFZP": {
       "jurisdiction": "UAE",
@@ -30,7 +32,8 @@
         "cit": { "mode": "qfzp", "qualifyingRate": 0.00, "nonQualifyingRate": 0.09, "currency": "AED" }
       },
       "lawRef": "UAE_CT_LAW_2023_QFZP",
-      "effectiveFrom": "2024-06-01"
+      "effectiveFrom": "2024-06-01",
+      "effectiveTo": null
     },
     "UAE_FREEZONE_NONQFZP": {
       "jurisdiction": "UAE",
@@ -38,7 +41,8 @@
         "cit": { "mode": "threshold", "zeroUpTo": 375000, "zeroRate": 0.00, "mainRate": 0.09, "currency": "AED" }
       },
       "lawRef": "UAE_CT_LAW_2023_NONQFZP",
-      "effectiveFrom": "2024-06-01"
+      "effectiveFrom": "2024-06-01",
+      "effectiveTo": null
     },
     "HK_OFFSHORE": {
       "jurisdiction": "HK",
@@ -46,7 +50,8 @@
         "cit": { "mode": "flat", "rate": 0.00 }
       },
       "lawRef": "HK_IRO_OFFSHORE_CLAIM",
-      "effectiveFrom": "2023-01-01"
+      "effectiveFrom": "2023-01-01",
+      "effectiveTo": null
     }
   },
 
@@ -59,7 +64,9 @@
       "effect": {
         "rate": 0,
         "lawRef": "KZ_NK_2026_ART_680_P1_S4"
-      }
+      },
+      "validFrom": "2026-01-01",
+      "validTo": null
     },
     {
       "id": "DOMESTIC_SAME_JURISDICTION",
@@ -69,14 +76,18 @@
       "effect": {
         "rate": 0,
         "lawRef": "DOMESTIC_WHT_EXEMPTION"
-      }
+      },
+      "validFrom": "2000-01-01",
+      "validTo": null
     }
   ],
 
   "aifcPresenceRule": {
     "zoneCode": "KZ_AIFC",
-    "condition": "usesCITBenefit && !cigaInZone",
+    "condition": "usesCITBenefit && !cigaInZone && (!hasSubstance || !hasSeparateAccounting)",
     "fallbackCitRate": 0.20,
-    "lawRef": "APP_G_G4_AIFC_PRESENCE"
+    "lawRef": "APP_G_G4_AIFC_PRESENCE",
+    "validFrom": "2018-01-01",
+    "validTo": "2066-01-01"
   }
 }

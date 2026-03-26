@@ -196,7 +196,7 @@ function formatPercent(rate: number): string {
 
 function riskSeverity(flag: RiskFlag): string {
   const type = flag.type;
-  if (type === 'CFC_RISK' || type === 'PILLAR2_LOW_ETR' || type === 'PILLAR2_TOPUP_RISK') return 'HIGH';
+  if (type === 'CFC_RISK' || type === 'PILLAR2_LOW_ETR' || type === 'PILLAR2_TOPUP_RISK' || type === 'PILLAR2_TRIGGER') return 'HIGH';
   if (type === 'SUBSTANCE_BREACH' || type === 'TRANSFER_PRICING_RISK') return 'MEDIUM';
   return 'LOW';
 }
@@ -272,18 +272,29 @@ export function exportStructureBook(
   lines.push('');
 
   // ── Flow WHT Schedule ───────────────────────────────────────────────────
+  // Appendix D: ALL flows appear in the ledger, including domestic (0% WHT).
   lines.push('## Flow WHT Schedule');
   lines.push('');
-  if (taxSummary.whtLiabilities.length > 0) {
+  if (project.flows.length > 0) {
+    // Build a lookup for WHT liabilities from the tax summary
+    const whtByFlowId = new Map<string, { ratePercent: number; amount: number }>();
+    for (const wht of taxSummary.whtLiabilities) {
+      whtByFlowId.set(wht.flowId, { ratePercent: wht.whtRatePercent, amount: wht.whtAmountOriginal });
+    }
     lines.push('| Flow Type | From | To | Gross Amount | WHT Rate | WHT Amount |');
     lines.push('|---|---|---|---|---|---|');
-    for (const wht of taxSummary.whtLiabilities) {
-      const fromName = project.nodes.find((n) => n.id === wht.fromNodeId)?.name ?? wht.fromNodeId;
-      const toName = project.nodes.find((n) => n.id === wht.toNodeId)?.name ?? wht.toNodeId;
-      lines.push(`| ${wht.flowType} | ${fromName} | ${toName} | ${formatCurrency(wht.grossAmount, wht.originalCurrency)} | ${wht.whtRatePercent.toFixed(2)}% | ${formatCurrency(wht.whtAmountOriginal, wht.originalCurrency)} |`);
+    for (const flow of project.flows) {
+      const gross = Number(flow.grossAmount || 0);
+      if (gross <= 0) continue;
+      const fromName = project.nodes.find((n) => n.id === flow.fromId)?.name ?? flow.fromId;
+      const toName = project.nodes.find((n) => n.id === flow.toId)?.name ?? flow.toId;
+      const whtEntry = whtByFlowId.get(flow.id);
+      const ratePercent = whtEntry?.ratePercent ?? 0;
+      const whtAmount = whtEntry?.amount ?? 0;
+      lines.push(`| ${flow.flowType} | ${fromName} | ${toName} | ${formatCurrency(gross, flow.currency)} | ${ratePercent.toFixed(2)}% | ${formatCurrency(whtAmount, flow.currency)} |`);
     }
   } else {
-    lines.push('*No WHT-liable flows in the structure.*');
+    lines.push('*No flows in the structure.*');
   }
   lines.push('');
 
@@ -318,6 +329,21 @@ export function exportStructureBook(
   } else {
     lines.push('*No active risk flags. Structure appears compliant.*');
   }
+  lines.push('');
+
+  // ── Data Manifest (Служебный подвал) ─────────────────────────────────
+  lines.push('## Data Manifest');
+  lines.push('');
+  lines.push('| Field | Value |');
+  lines.push('|---|---|');
+  lines.push(`| **schemaVersion** | \`${project.schemaVersion}\` |`);
+  lines.push(`| **engineVersion** | \`${project.engineVersion}\` |`);
+  lines.push(`| **masterDataVersion** | \`${(project.masterData as Record<string, unknown>).version ?? project.schemaVersion}\` |`);
+  lines.push(`| **fxTableSnapshotDate** | ${project.fx.fxDate} |`);
+  lines.push(`| **fxSource** | ${project.fx.source} |`);
+  lines.push(`| **auditLogLastHash** | \`${project.audit.lastHash || 'EMPTY_CHAIN'}\` |`);
+  lines.push(`| **snapshotId** | \`${hash.slice(0, 16)}\` |`);
+  lines.push(`| **generatedAt** | ${timestamp} |`);
   lines.push('');
 
   // ── Footer ──────────────────────────────────────────────────────────────

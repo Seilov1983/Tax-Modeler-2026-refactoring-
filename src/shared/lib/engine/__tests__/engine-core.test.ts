@@ -73,12 +73,12 @@ function makeZone(overrides?: Partial<Zone>): Zone {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 describe('Engine Constants', () => {
-  it('SCHEMA_VERSION is 2.4.1', () => {
-    expect(SCHEMA_VERSION).toBe('2.4.1');
+  it('SCHEMA_VERSION is 2.6.0', () => {
+    expect(SCHEMA_VERSION).toBe('2.6.0');
   });
 
-  it('ENGINE_VERSION is 0.10.0', () => {
-    expect(ENGINE_VERSION).toBe('0.10.0');
+  it('ENGINE_VERSION is 0.11.0', () => {
+    expect(ENGINE_VERSION).toBe('0.11.0');
   });
 });
 

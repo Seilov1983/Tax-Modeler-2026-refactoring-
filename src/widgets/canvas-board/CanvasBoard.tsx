@@ -50,8 +50,11 @@ import { spawnCoordinatesAtom } from '@features/canvas/model/spawn-coordinates-a
 import { notificationAtom } from '@features/canvas/model/notification-atom';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
 import { AICopilotChat } from '@features/ai-copilot/ui/AICopilotChat';
+import { CanvasFilterPanel } from './CanvasFilterPanel';
 import { ProjectHeader } from '@features/project-management';
 import { isSidebarOpenAtom, sidebarContextAtom } from '@features/master-data-sidebar';
+import { activeTabAtom } from '@features/canvas/model/project-atom';
+import { ReportsBuilder } from '@widgets/reports-builder';
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
 import type { JurisdictionCode, CurrencyCode, Zone, NodeDTO } from '@shared/types';
 import type Konva from 'konva';
@@ -210,6 +213,7 @@ function GridBackground({ width, height }: { width: number; height: number }) {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export function CanvasBoard() {
+  const activeTab = useAtomValue(activeTabAtom);
   const zones = useAtomValue(zonesAtom);
   const nodeAtoms = useAtomValue(nodeAtomsAtom);
   const nodes = useAtomValue(nodesAtom);
@@ -714,6 +718,16 @@ export function CanvasBoard() {
 
   // (menu styles moved inline to Apple Liquid Glass redesign below)
 
+  // ─── Reports tab: render ReportsBuilder instead of Canvas ────────────
+  if (activeTab === 'reports') {
+    return (
+      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+        <ProjectHeader />
+        <ReportsBuilder />
+      </div>
+    );
+  }
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <ProjectHeader />
@@ -836,6 +850,7 @@ export function CanvasBoard() {
         </Stage>
 
         {/* HTML overlays positioned on top of Konva Stage */}
+        <CanvasFilterPanel />
         <GlobalSummaryWidget />
         <CanvasControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={resetViewport} />
         <Minimap onNavigate={panTo} viewportRef={containerRef} />

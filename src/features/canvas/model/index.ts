@@ -10,3 +10,5 @@ export { contextMenuAtom } from './context-menu-atom';
 export type { ContextMenuTarget } from './context-menu-atom';
 export { dragOverFeedbackAtom } from './drag-over-feedback-atom';
 export type { DragOverFeedback } from './drag-over-feedback-atom';
+export { canvasFilterAtom } from './canvas-filter-atom';
+export type { CanvasFilter } from './canvas-filter-atom';

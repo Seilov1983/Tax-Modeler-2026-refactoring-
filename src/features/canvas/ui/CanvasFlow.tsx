@@ -10,12 +10,13 @@
  * Hit area: 12px invisible stroke for easy clicking.
  */
 
-import { useAtom } from 'jotai';
-import { memo, useCallback } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
+import { memo, useCallback, useMemo } from 'react';
 import { Group, Shape, Text, Rect, Line } from 'react-konva';
 import type { FlowDTO, NodeDTO } from '@shared/types';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
+import { canvasFilterAtom } from '../model/canvas-filter-atom';
 
 // ─── Bezier path builder (reused for draft connections) ─────────────────────
 
@@ -36,7 +37,16 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowPr
   const fromNode = nodes.find((n) => n.id === flow.fromId);
   const toNode = nodes.find((n) => n.id === flow.toId);
   const [selection, setSelection] = useAtom(selectionAtom);
+  const canvasFilter = useAtomValue(canvasFilterAtom);
   const isSelected = selection?.type === 'flow' && selection.id === flow.id;
+
+  // ─── Ghosting: declarative match against active flow type filters ──
+  const isGhosted = useMemo(() => {
+    if (!canvasFilter.isActive) return false;
+    const { flowTypes } = canvasFilter;
+    if (flowTypes.length === 0) return false;
+    return !flowTypes.includes(flow.flowType);
+  }, [canvasFilter, flow.flowType]);
 
   const handleClick = useCallback(
     (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -63,7 +73,7 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowPr
   const label = `${flow.flowType}${flow.grossAmount > 0 ? ' ' + flow.grossAmount.toLocaleString('ru-RU') : ''}`;
 
   return (
-    <Group onClick={handleClick} onTap={handleClick}>
+    <Group onClick={handleClick} onTap={handleClick} opacity={isGhosted ? 0.15 : 1} listening={!isGhosted}>
       {/* Invisible wider hit area (12px) */}
       <Shape
         sceneFunc={(ctx, shape) => {

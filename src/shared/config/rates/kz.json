@@ -1,0 +1,89 @@
+{
+  "$schema": "temporal-rates",
+  "$jurisdiction": "KZ",
+  "$description": "Kazakhstan temporal tax rates — Law-as-Code. All rates carry validFrom/validTo for Time Machine resolution.",
+
+  "macroConstants": {
+    "mrpValue": [
+      { "validFrom": "2025-01-01", "validTo": "2025-12-31", "value": 3932 },
+      { "validFrom": "2026-01-01", "validTo": null, "value": 4325 }
+    ],
+    "mciValue": [
+      { "validFrom": "2025-01-01", "validTo": "2025-12-31", "value": 3932 },
+      { "validFrom": "2026-01-01", "validTo": null, "value": 4325 }
+    ],
+    "minWage": [
+      { "validFrom": "2025-01-01", "validTo": "2025-12-31", "value": 85000 },
+      { "validFrom": "2026-01-01", "validTo": null, "value": 85000 }
+    ]
+  },
+
+  "vatRates": [
+    { "validFrom": "2024-01-01", "validTo": "2025-12-31", "value": 0.12 },
+    { "validFrom": "2026-01-01", "validTo": null, "value": 0.16 }
+  ],
+
+  "citRates": [
+    { "validFrom": "2024-01-01", "validTo": null, "value": 0.20 }
+  ],
+
+  "whtDividends": {
+    "progressive": [
+      {
+        "validFrom": "2026-01-01",
+        "validTo": null,
+        "brackets": [
+          { "upToMRP": 230000, "rate": 0.05 },
+          { "upToMRP": null, "rate": 0.15 }
+        ]
+      }
+    ],
+    "flat": [
+      { "validFrom": "2024-01-01", "validTo": "2025-12-31", "value": 0.15 }
+    ]
+  },
+
+  "whtInterest": [
+    { "validFrom": "2024-01-01", "validTo": null, "value": 0.10 }
+  ],
+
+  "whtRoyalties": [
+    { "validFrom": "2024-01-01", "validTo": null, "value": 0.15 }
+  ],
+
+  "whtServices": [
+    { "validFrom": "2024-01-01", "validTo": null, "value": 0.20 }
+  ],
+
+  "cashLimitMRP": [
+    { "validFrom": "2026-01-01", "validTo": null, "threshold": 1000 }
+  ],
+
+  "cfcRules": [
+    {
+      "validFrom": "2026-01-01",
+      "validTo": null,
+      "ownershipThreshold": 0.25,
+      "etrThreshold": 0.10,
+      "incomeExemptionMRP": 195
+    }
+  ],
+
+  "specialZones": {
+    "AIFC": {
+      "citRate": [{ "validFrom": "2018-01-01", "validTo": "2066-01-01", "value": 0.0 }],
+      "vatRate": [{ "validFrom": "2018-01-01", "validTo": "2066-01-01", "value": 0.0 }],
+      "conditions": ["hasSubstance", "cigaValidation", "separateAccounting"],
+      "lawRef": "KZ_AIFC_ACT_2026"
+    },
+    "ASTANA_HUB": {
+      "citReduction": [{ "validFrom": "2018-01-01", "validTo": null, "value": 1.0 }],
+      "nexusFraction": {
+        "formula": "K = (rUp + rOut1) * 1.3 / (rUp + rOut1 + rOut2 + rAcq)",
+        "appliesTo": "isIPIncome",
+        "cappedAt": 1.0
+      },
+      "lawRef": "KZ_ASTANA_HUB_2026"
+    }
+  }
+}
