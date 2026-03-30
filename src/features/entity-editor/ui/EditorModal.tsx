@@ -40,9 +40,9 @@ import {
 
 // ─── Liquid Glass utility classes (localized — no globals.css pollution) ──────
 
-const GLASS_INPUT = 'bg-white/50 border-white/40 text-slate-900 placeholder:text-slate-500 focus-visible:ring-blue-500 focus-visible:border-transparent';
-const GLASS_SELECT = 'bg-white/50 border-white/40 text-slate-900';
-const GLASS_LABEL = 'text-slate-800 font-medium';
+const GLASS_INPUT = 'bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus-visible:ring-2 focus-visible:ring-slate-500/30 focus-visible:border-slate-500/50 transition-all rounded-xl hover:bg-black/[0.07] dark:hover:bg-white/10 h-10 px-3 shadow-inner';
+const GLASS_SELECT = 'bg-black/5 border border-black/10 text-slate-900 dark:bg-white/5 dark:border-white/10 dark:text-slate-100 hover:bg-black/[0.07] dark:hover:bg-white/10 transition-all rounded-xl h-10 shadow-inner';
+const GLASS_LABEL = 'text-[12px] font-bold text-slate-500 tracking-wider uppercase mb-1.5 block ml-1';
 
 // ─── Form types ──────────────────────────────────────────────────────────────
 
@@ -367,10 +367,15 @@ function NodeEditor({
         updateOwnership={updateOwnership}
       />
 
-      <div className="mt-4 rounded-xl bg-black/[0.03] p-3 text-[11px] text-gray-500">
-        ID: {node.id}<br />Type: {node.type}<br />Frozen: {node.frozen ? 'Yes' : 'No'}
-        {node.computedEtr != null && <><br />Computed ETR: {(node.computedEtr * 100).toFixed(2)}%</>}
-        {node.computedCitKZT != null && <><br />Computed CIT (KZT): {node.computedCitKZT.toLocaleString('ru-RU')}</>}
+      <div className="mt-6 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/50 p-4 shadow-sm backdrop-blur-md">
+        <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Technical Data</h4>
+        <div className="text-[12px] text-slate-800 dark:text-slate-200 space-y-1 font-mono">
+          <p><span className="text-slate-500 dark:text-slate-400">ID:</span> {node.id}</p>
+          <p><span className="text-slate-500 dark:text-slate-400">Type:</span> {node.type}</p>
+          <p><span className="text-slate-500 dark:text-slate-400">Frozen:</span> {node.frozen ? 'Yes' : 'No'}</p>
+          {node.computedEtr != null && <p><span className="text-slate-500 dark:text-slate-400">Computed ETR:</span> {(node.computedEtr * 100).toFixed(2)}%</p>}
+          {node.computedCitKZT != null && <p><span className="text-slate-500 dark:text-slate-400">Computed CIT (KZT):</span> {node.computedCitKZT.toLocaleString('ru-RU')}</p>}
+        </div>
       </div>
     </>
   );
@@ -412,7 +417,7 @@ function OwnershipEditor({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="mb-3.5">
+    <div className="mb-4">
       <Label className={GLASS_LABEL}>{label}</Label>
       {children}
     </div>
@@ -552,7 +557,7 @@ export function EditorModal() {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent
-        className="no-canvas-events sm:max-w-[425px]"
+        className="no-canvas-events sm:max-w-[425px] !bg-white/70 dark:!bg-slate-900/70 backdrop-blur-3xl border border-black/10 dark:border-white/10 shadow-2xl"
         onPointerDown={(e) => e.stopPropagation()}
       >
         <DialogHeader className="px-0 pt-0 pb-4">
@@ -595,15 +600,15 @@ export function EditorModal() {
         </div>
 
         {/* Footer */}
-        <DialogFooter className="px-0 pt-4">
-          <Button variant="destructive" onClick={handleDelete} data-testid="btn-delete-entity">
+        <DialogFooter className="px-0 pt-6 mt-6 border-t border-slate-100 dark:border-slate-800">
+          <Button variant="outline" onClick={handleDelete} data-testid="btn-delete-entity" className="bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 border-red-500/20 shadow-none hover:text-red-700 dark:hover:text-red-300 transition-colors">
             {tr('delete')}
           </Button>
           <div className="flex-1" />
-          <Button variant="secondary" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} className="bg-white/50 hover:bg-white/80 dark:bg-black/20 dark:hover:bg-white/10 border-black/5 dark:border-white/10">
             {tr('cancel')}
           </Button>
-          <Button onClick={handleSave} data-testid="btn-save-entity">
+          <Button onClick={handleSave} data-testid="btn-save-entity" className="px-8 bg-slate-900 hover:bg-slate-800 text-white dark:bg-indigo-500 dark:text-white dark:hover:bg-indigo-600 shadow-md transition-all">
             {tr('save')}
           </Button>
         </DialogFooter>

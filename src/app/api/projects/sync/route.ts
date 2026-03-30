@@ -58,9 +58,23 @@ export async function POST(req: NextRequest) {
         });
         return NextResponse.json({ id: updated.id, synced: true });
       }
+    } else {
+      // No projectId — find user's most recent project to prevent orphaned records
+      const mostRecent = await prisma.project.findFirst({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+      });
+      if (mostRecent) {
+        const updated = await prisma.project.update({
+          where: { id: mostRecent.id },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          data: { name, schemaVersion, graphJSON: graphJSON as any },
+        });
+        return NextResponse.json({ id: updated.id, synced: true });
+      }
     }
 
-    // Create new
+    // Create new (only when truly no existing project for this user)
     const created = await prisma.project.create({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       data: { name, userId, schemaVersion, graphJSON: graphJSON as any },

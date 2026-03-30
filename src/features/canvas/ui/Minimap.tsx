@@ -98,60 +98,39 @@ export const Minimap = memo(function Minimap({ onNavigate, viewportRef }: Minima
   return (
     <div
       ref={minimapRef}
-      className="exclude-from-export"
+      className="exclude-from-export absolute bottom-12 right-4 bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-xl shadow-black/5 dark:shadow-white/5 rounded-2xl overflow-hidden z-40 cursor-crosshair transition-all hover:shadow-2xl"
       data-testid="canvas-minimap"
       onClick={handleClick}
       style={{
-        position: 'absolute',
-        bottom: 52,
-        right: 16,
         width: MINIMAP_W,
         height: MINIMAP_H,
-        background: 'rgba(255, 255, 255, 0.72)',
-        backdropFilter: 'blur(40px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-        border: '1px solid rgba(255, 255, 255, 0.25)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
-        borderRadius: '14px',
-        overflow: 'hidden',
-        zIndex: 40,
-        cursor: 'crosshair',
       }}
     >
       {/* Node dots */}
       {nodes.map((node) => (
         <div
           key={node.id}
+          className={`absolute rounded-[2px] opacity-70 ${
+            node.type === 'company' ? 'bg-indigo-500' : 
+            node.type === 'person' ? 'bg-emerald-500' : 'bg-slate-400'
+          }`}
           style={{
-            position: 'absolute',
             left: toMapX(node.x),
             top: toMapY(node.y),
             width: Math.max(node.w * mapScale, 3),
             height: Math.max(node.h * mapScale, 2),
-            background:
-              node.type === 'company'
-                ? '#007aff'
-                : node.type === 'person'
-                  ? '#30d158'
-                  : '#98989d',
-            borderRadius: '2px',
-            opacity: 0.7,
           }}
         />
       ))}
 
       {/* Viewport indicator */}
       <div
+        className="absolute border-[1.5px] border-indigo-500 bg-indigo-500/10 rounded-[3px] pointer-events-none"
         style={{
-          position: 'absolute',
           left: toMapX(visibleX),
           top: toMapY(visibleY),
           width: visibleW * mapScale,
           height: visibleH * mapScale,
-          border: '1.5px solid #007aff',
-          background: 'rgba(0, 122, 255, 0.08)',
-          borderRadius: '3px',
-          pointerEvents: 'none',
         }}
       />
     </div>

@@ -74,9 +74,9 @@ function riskSeverity(type: string): 'HIGH' | 'MEDIUM' | 'LOW' {
 }
 
 const SEVERITY_COLORS = {
-  HIGH: { bg: '#fef2f2', border: '#fecaca', text: '#dc2626' },
-  MEDIUM: { bg: '#fffbeb', border: '#fde68a', text: '#d97706' },
-  LOW: { bg: '#f0fdf4', border: '#bbf7d0', text: '#16a34a' },
+  HIGH: { bg: 'bg-red-50 dark:bg-red-950/30', border: 'border-red-200 dark:border-red-900/50', text: 'text-red-700 dark:text-red-400' },
+  MEDIUM: { bg: 'bg-amber-50 dark:bg-amber-950/30', border: 'border-amber-200 dark:border-amber-900/50', text: 'text-amber-700 dark:text-amber-400' },
+  LOW: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', border: 'border-emerald-200 dark:border-emerald-900/50', text: 'text-emerald-700 dark:text-emerald-400' },
 };
 
 function SummaryContent() {
@@ -108,115 +108,82 @@ function SummaryContent() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+    <div className="flex flex-col gap-4">
       {/* Global ETR */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px' }}>
-        <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 500 }}>Global ETR</span>
-        <span style={{ fontSize: '24px', fontWeight: 700, color: s.globalEtr > 25 ? '#dc2626' : s.globalEtr > 15 ? '#d97706' : '#16a34a' }}>
-          {s.globalEtr.toFixed(2)}%
+      <div className="flex justify-between items-end pb-4 border-b border-black/5 dark:border-white/5">
+        <span className="text-[12px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Global ETR</span>
+        <span className={`text-[32px] leading-none font-black tracking-tight ${s.globalEtr > 25 ? 'text-red-500' : s.globalEtr > 15 ? 'text-amber-500' : 'text-emerald-500'}`}>
+          {s.globalEtr.toFixed(2)}<span className="text-xl ml-0.5">%</span>
         </span>
       </div>
 
       {/* Metrics grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-        <div>
-          <span style={{ display: 'block', fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>Total Income</span>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: '#111827' }}>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-black/5 dark:bg-white/5 rounded-xl p-3 shadow-inner">
+          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Total Income</span>
+          <span className="text-[14px] font-bold text-slate-700 dark:text-slate-200">
             {ccy} {fmtMoney(s.totalIncome)}
           </span>
         </div>
-        <div>
-          <span style={{ display: 'block', fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>Tax Burden</span>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: '#dc2626' }}>
+        <div className="bg-red-500/10 dark:bg-red-900/20 rounded-xl p-3 shadow-inner">
+          <span className="block text-[10px] font-bold text-red-500/80 dark:text-red-400/80 uppercase tracking-widest mb-1">Tax Burden</span>
+          <span className="text-[14px] font-bold text-red-600 dark:text-red-400">
             {ccy} {fmtMoney(s.totalTax)}
           </span>
         </div>
-        <div>
-          <span style={{ display: 'block', fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>CIT</span>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>
+        <div className="bg-black/5 dark:bg-white/5 rounded-xl p-3 shadow-inner">
+          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">CIT</span>
+          <span className="text-[14px] font-bold text-slate-700 dark:text-slate-200">
             {ccy} {fmtMoney(s.totalCit)}
           </span>
         </div>
-        <div>
-          <span style={{ display: 'block', fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>WHT</span>
-          <span style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>
+        <div className="bg-black/5 dark:bg-white/5 rounded-xl p-3 shadow-inner">
+          <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">WHT</span>
+          <span className="text-[14px] font-bold text-slate-700 dark:text-slate-200">
             {ccy} {fmtMoney(s.totalWht)}
           </span>
         </div>
       </div>
 
       {/* Structure summary */}
-      <div style={{ fontSize: '11px', color: '#9ca3af', display: 'flex', gap: '12px', borderTop: '1px solid #f3f4f6', paddingTop: '6px' }}>
-        <span>{s.nodeCount} companies</span>
-        <span>{s.flowCount} flows</span>
+      <div className="flex gap-4 pt-1 pb-1 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+        <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-indigo-400/50"></span> {s.nodeCount} companies</div>
+        <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400/50"></span> {s.flowCount} flows</div>
       </div>
 
       {/* Risk indicator — clickable to open popover */}
       {s.totalRisks > 0 && (
-        <div style={{ position: 'relative' }}>
+        <div className="relative">
           <div
             onClick={togglePopover}
-            style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              borderTop: '1px solid #fef3c7', paddingTop: '8px', fontSize: '13px',
-              cursor: 'pointer',
-            }}
+            className="flex justify-between items-center bg-amber-500/10 dark:bg-amber-900/20 hover:bg-amber-500/20 dark:hover:bg-amber-900/30 transition-colors p-3 rounded-xl cursor-pointer mt-1 border border-amber-200/50 dark:border-amber-900/50"
           >
-            <span style={{ color: '#b45309', fontWeight: 600 }}>Active Risks</span>
-            <span style={{
-              background: '#fef3c7', color: '#92400e', padding: '2px 10px',
-              borderRadius: '12px', fontWeight: 700, fontSize: '12px',
-            }}>
+            <span className="text-amber-700 dark:text-amber-400 font-bold text-[12px] uppercase tracking-wider">Active Risks</span>
+            <span className="bg-amber-500 text-white dark:bg-amber-600 px-2.5 py-0.5 rounded-full font-bold text-[12px] shadow-sm">
               {s.totalRisks}
             </span>
           </div>
 
           {/* Risk Popover — Liquid Glass */}
           {riskPopoverOpen && riskEntries.length > 0 && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: '8px',
-                width: '320px',
-                maxHeight: '300px',
-                overflowY: 'auto',
-                background: 'rgba(255, 255, 255, 0.85)',
-                backdropFilter: 'blur(40px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-                borderRadius: '14px',
-                border: '1px solid rgba(0, 0, 0, 0.08)',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
-                padding: '12px',
-                zIndex: 50,
-              }}
-            >
-              <div style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
+            <div className="absolute top-full right-0 mt-2 w-[340px] max-h-[300px] overflow-y-auto bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl p-4 z-50">
+              <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">
                 Risk Details
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div className="flex flex-col gap-2">
                 {riskEntries.map((entry, i) => {
                   const sc = SEVERITY_COLORS[entry.severity];
                   return (
                     <div
                       key={i}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: '8px',
-                        padding: '8px 10px',
-                        borderRadius: '10px',
-                        background: sc.bg,
-                        border: `1px solid ${sc.border}`,
-                      }}
+                      className={`flex items-start gap-3 p-3 rounded-xl border ${sc.bg} ${sc.border}`}
                     >
-                      <span style={{ fontSize: '14px', flexShrink: 0, lineHeight: 1.2 }}>{entry.icon}</span>
-                      <div style={{ flex: 1 }}>
-                        <span style={{ fontSize: '10px', fontWeight: 700, color: sc.text, textTransform: 'uppercase' }}>
+                      <span className="text-[16px] shrink-0 mt-0.5">{entry.icon}</span>
+                      <div className="flex-1">
+                        <span className={`text-[9px] font-black uppercase tracking-widest ${sc.text}`}>
                           {entry.severity}
                         </span>
-                        <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#374151', lineHeight: 1.4 }}>
+                        <p className="mt-0.5 text-[12px] text-slate-700 dark:text-slate-300 font-medium leading-snug">
                           {entry.text}
                         </p>
                       </div>
@@ -236,26 +203,12 @@ export function GlobalSummaryWidget() {
   return (
     <div
       data-testid="global-summary"
-      style={{
-        position: 'absolute',
-        top: '16px',
-        right: '16px',
-        width: '260px',
-        background: '#fff',
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
-        borderRadius: '10px',
-        padding: '14px',
-        zIndex: 40,
-      }}
+      className="absolute top-3 right-5 w-[280px] bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-xl shadow-black/5 dark:shadow-white/5 rounded-2xl p-5 z-40 transition-all hover:shadow-2xl hover:-translate-y-0.5 duration-300"
     >
-      <h3 style={{
-        fontSize: '10px', fontWeight: 700, color: '#9ca3af',
-        textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px',
-      }}>
+      <h3 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">
         Executive Summary
       </h3>
-      <Suspense fallback={<div style={{ fontSize: '12px', color: '#9ca3af' }}>Calculating...</div>}>
+      <Suspense fallback={<div className="text-[12px] font-semibold text-slate-400 dark:text-slate-500 animate-pulse">Calculating summary...</div>}>
         <SummaryContent />
       </Suspense>
     </div>

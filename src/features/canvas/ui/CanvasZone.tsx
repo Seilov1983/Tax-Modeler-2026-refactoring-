@@ -118,9 +118,17 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
   // ─── Entrance animation — subtle scale-in
   const [hasAnimated] = useState(() => ({ value: false }));
   const entranceSpring = useSpring({
-    from: hasAnimated.value ? { scaleX: 1, scaleY: 1, opacity: 1 } : { scaleX: 0.9, scaleY: 0.9, opacity: 0 },
-    to: { scaleX: 1, scaleY: 1, opacity: 1 },
+    from: hasAnimated.value ? { s: 1, o: isGhosted ? 0.15 : 1 } : { s: 0.9, o: 0 },
+    to: { s: 1, o: isGhosted ? 0.15 : 1 },
     config: { tension: 250, friction: 22 },
+    onChange: (e) => {
+      if (groupRef.current) {
+        groupRef.current.scaleX(e.value.s);
+        groupRef.current.scaleY(e.value.s);
+        groupRef.current.opacity(e.value.o);
+        groupRef.current.getLayer()?.batchDraw();
+      }
+    },
     onRest: () => { hasAnimated.value = true; },
   });
 
@@ -393,9 +401,9 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
       onDragStart={handleDragStart}
       onDragMove={handleDragMove}
       onDragEnd={handleDragEnd}
-      scaleX={entranceSpring.scaleX.get()}
-      scaleY={entranceSpring.scaleY.get()}
-      opacity={isGhosted ? 0.15 : entranceSpring.opacity.get()}
+      scaleX={hasAnimated.value ? 1 : 0.9}
+      scaleY={hasAnimated.value ? 1 : 0.9}
+      opacity={hasAnimated.value ? (isGhosted ? 0.15 : 1) : 0}
       listening={!isGhosted}
     >
       {/* Zone background fill — onPointerDown selects zone + stops bubble to Stage */}
@@ -517,11 +525,11 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
             return newBox;
           }}
           onTransformEnd={handleTransformEnd}
-          borderStroke="#969696"
+          borderStroke="rgba(150, 150, 150, 0.4)"
           borderStrokeWidth={1.5}
           borderDash={[6, 3]}
           anchorFill="#ffffff"
-          anchorStroke="#969696"
+          anchorStroke="rgba(150, 150, 150, 0.4)"
           anchorStrokeWidth={1.5}
           anchorSize={12}
           anchorCornerRadius={6}

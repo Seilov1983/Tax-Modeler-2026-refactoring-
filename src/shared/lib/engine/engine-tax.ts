@@ -7,11 +7,15 @@
  */
 
 import { deepMerge, bankersRound2, numOrNull, isoDate } from './utils';
-import { convert, getZone, getNode, buildComputationGraph } from './engine-core';
+import { convert, getZone, getNode, buildComputationGraph, defaultMasterData } from './engine-core';
 import zoneRulesData from '@shared/config/zone-rules.json';
-import kzRatesData from '@shared/config/rates/kz.json';
-import cyDefensiveData from '@shared/config/rates/cy_defensive_measures.json';
-import uaeRatesData from '@shared/config/rates/uae.json';
+import kzRatesRaw from './masterData/rates_kz.json';
+import cyRatesRaw from './masterData/rates_cy.json';
+import uaeRatesRaw from './masterData/rates_ae.json';
+import {
+  parseKZRates, parseCYRates, parseUAERates,
+  type KZRates, type CYRates, type UAERates,
+} from './schema-master-data';
 import type {
   Project, Zone, FlowDTO, NodeDTO, CITConfig, FlowType,
   PayrollResult, PayrollBreakdownItem, WHTResult, WHTExemptionRule,
@@ -42,11 +46,11 @@ interface ZoneRules {
 
 const zoneRules: ZoneRules = zoneRulesData as unknown as ZoneRules;
 
-// ─── Temporal Rate Data (Modular JSON) ──────────────────────────────────────
+// ─── Zod-Validated Temporal Rate Data ───────────────────────────────────────
 
-const kzRates = kzRatesData as Record<string, unknown>;
-const cyDefensive = cyDefensiveData as Record<string, unknown>;
-const uaeRates = uaeRatesData as Record<string, unknown>;
+const kzRates: KZRates = parseKZRates(kzRatesRaw);
+const cyRates: CYRates = parseCYRates(cyRatesRaw);
+const uaeRates: UAERates = parseUAERates(uaeRatesRaw);
 
 // ─── Temporal Resolution Engine ─────────────────────────────────────────────
 
@@ -87,8 +91,7 @@ export function resolveTemporalWHTBrackets(
  * Resolve the MRP (Monthly Calculation Index) value for a given date.
  */
 export function resolveMRP(date: string): number {
-  const mc = kzRates.macroConstants as Record<string, TemporalRate[]>;
-  const v = resolveTemporalRate(mc?.mrpValue ?? [], date);
+  const v = resolveTemporalRate((kzRates.macroConstants.mrpValue ?? []) as TemporalRate[], date);
   return v ?? 4325; // fallback to 2026 default
 }
 
@@ -98,7 +101,91 @@ export function resolveMRP(date: string): number {
  */
 export function resolveKZVatRate(date: string): number {
   const v = resolveTemporalRate(kzRates.vatRates as TemporalRate[], date);
-  return v ?? 0.16;
+  return v ?? 0.16; // fallback to 2026 rate
+}
+
+// ─── getEffectiveRate (Temporal Lookup Utility) ─────────────────────────────
+
+/**
+ * Temporal lookup utility: given a jurisdiction code and rate category,
+ * resolves the effective rate for the specified flow date from the
+ * Zod-validated JSON dictionaries.
+ *
+ * @param jurisdiction - The jurisdiction code (e.g., 'KZ', 'CY', 'UAE')
+ * @param category - Rate category (e.g., 'cit', 'vat', 'whtDividends', 'whtInterest', 'whtRoyalties', 'whtServices')
+ * @param flowDate - ISO date string for temporal resolution
+ * @returns The resolved rate value, or null if no matching window found
+ */
+export function getEffectiveRate(
+  jurisdiction: string,
+  category: string,
+  flowDate: string,
+): number | null {
+  const rateArrayFor = (j: string, cat: string): TemporalRate[] | null => {
+    if (j === 'KZ') {
+      if (cat === 'cit') return kzRates.citRates as TemporalRate[];
+      if (cat === 'vat') return kzRates.vatRates as TemporalRate[];
+      if (cat === 'whtInterest') return kzRates.whtInterest as TemporalRate[];
+      if (cat === 'whtRoyalties') return kzRates.whtRoyalties as TemporalRate[];
+      if (cat === 'whtServices') return kzRates.whtServices as TemporalRate[];
+      if (cat === 'whtDividends') return kzRates.whtDividends.flat as TemporalRate[];
+    }
+    if (j === 'CY') {
+      if (cat === 'cit') return cyRates.citRates as TemporalRate[];
+      if (cat === 'vat') return (cyRates.vatRates ?? []) as TemporalRate[];
+      if (cat === 'whtDividends') return (cyRates.whtDividends ?? []) as TemporalRate[];
+      if (cat === 'whtInterest') return (cyRates.whtInterest ?? []) as TemporalRate[];
+      if (cat === 'whtRoyalties') return (cyRates.whtRoyalties ?? []) as TemporalRate[];
+      if (cat === 'whtServices') return (cyRates.whtServices ?? []) as TemporalRate[];
+    }
+    if (j === 'UAE') {
+      if (cat === 'cit') return uaeRates.citRates as TemporalRate[];
+      if (cat === 'vat') return (uaeRates.vatRates ?? []) as TemporalRate[];
+    }
+    return null;
+  };
+
+  // Try temporal resolution first (KZ/CY/UAE have rate files)
+  const rates = rateArrayFor(jurisdiction, category);
+  if (rates) {
+    const resolved = resolveTemporalRate(rates, flowDate);
+    if (resolved !== null) return resolved;
+  }
+
+  // Fallback: static master data for all jurisdictions (HK, SG, UK, US, BVI, CAY, SEY,
+  // or when temporal window doesn't cover the requested date)
+  return _staticMasterDataRate(jurisdiction, category);
+}
+
+/** Resolve a rate from the static defaultMasterData dictionary. */
+function _staticMasterDataRate(jurisdiction: string, category: string): number | null {
+  const md = defaultMasterData();
+  const jData = md[jurisdiction as JurisdictionCode] as Record<string, unknown> | undefined;
+  if (!jData) return null;
+
+  if (category === 'cit') {
+    if (jData.cit && typeof jData.cit === 'object') {
+      const cit = jData.cit as CITConfig;
+      if (cit.mode === 'flat') return cit.rate ?? null;
+      if (cit.mode === 'qfzp') return cit.qualifyingRate ?? null;
+      if (cit.mode === 'brackets') {
+        const last = cit.brackets?.[cit.brackets.length - 1];
+        return last?.rate ?? null;
+      }
+      return cit.mainRate ?? null;
+    }
+    return (jData.citRateStandard as number) ?? null;
+  }
+  if (category === 'vat') return (jData.vatRateStandard as number) ?? null;
+
+  const wht = jData.wht as Record<string, number> | undefined;
+  if (!wht) return null;
+  if (category === 'whtDividends') return wht.dividends ?? null;
+  if (category === 'whtInterest') return wht.interest ?? null;
+  if (category === 'whtRoyalties') return wht.royalties ?? null;
+  if (category === 'whtServices') return wht.services ?? null;
+
+  return null;
 }
 
 // ─── Progressive WHT (KZ Dividends) ─────────────────────────────────────────
@@ -111,8 +198,9 @@ export function computeProgressiveWHTDividends(
   grossAmount: number,
   date: string,
 ): { whtAmount: number; effectiveRate: number } {
-  const whtDiv = (kzRates.whtDividends as Record<string, unknown>)?.progressive;
-  const brackets = resolveTemporalWHTBrackets(whtDiv as TemporalWHTBrackets[], date);
+  const brackets = resolveTemporalWHTBrackets(
+    kzRates.whtDividends.progressive as TemporalWHTBrackets[], date,
+  );
 
   if (!brackets || brackets.length === 0) {
     // Fallback to flat 15%
@@ -192,7 +280,7 @@ interface CYDefensiveMeasure {
  * Resolve active Cyprus defensive measures for a given date.
  */
 function resolveCYDefensiveMeasures(date: string): CYDefensiveMeasure | null {
-  const measures = cyDefensive.defensiveMeasures as CYDefensiveMeasure[];
+  const measures = (cyRates.defensiveMeasures ?? []) as CYDefensiveMeasure[];
   if (!measures || !Array.isArray(measures)) return null;
   const d = date.slice(0, 10);
   for (const m of measures) {
@@ -257,11 +345,18 @@ export function defaultZoneTax(p: Project, zone: Zone) {
   // Apply zone-specific overrides from declarative JSON (replaces all hardcoded if-statements)
   const override = zoneRules.zoneOverrides[zone.code];
   if (override) {
-    const ov = override.taxOverride;
-    if (ov.vatRate !== undefined) base.vatRate = ov.vatRate as number;
-    if (ov.cit) base.cit = ov.cit as CITConfig;
-    if (ov.wht) base.wht = deepMerge(base.wht, ov.wht as Record<string, number>);
-    if (ov.payroll) base.payroll = deepMerge(base.payroll, ov.payroll as Record<string, unknown>);
+    // Validate temporal applicability: skip override if project date precedes effectiveFrom
+    const fxDate = (p.fx?.fxDate || '2026-01-01').slice(0, 10);
+    const from = override.effectiveFrom?.slice(0, 10);
+    const isActive = !from || fxDate >= from;
+
+    if (isActive) {
+      const ov = override.taxOverride;
+      if (ov.vatRate !== undefined) base.vatRate = ov.vatRate as number;
+      if (ov.cit) base.cit = ov.cit as CITConfig;
+      if (ov.wht) base.wht = deepMerge(base.wht, ov.wht as Record<string, number>);
+      if (ov.payroll) base.payroll = deepMerge(base.payroll, ov.payroll as Record<string, unknown>);
+    }
   }
 
   return base;
@@ -429,37 +524,154 @@ export function computeWht(p: Project, flow: FlowDTO, overrideRatePercent?: numb
   };
 }
 
-// ─── Effective ETR (data-driven AIFC rule) ───────────────────────────────────
+// ─── Effective ETR (data-driven AIFC rule + Astana Hub) ──────────────────────
 
 export function effectiveEtrForCompany(p: Project, co: NodeDTO): number {
-  const v = Number(co?.etr);
-  if (isFinite(v) && v >= 0) {
-    const z0 = getZone(p, co?.zoneId);
-    const aifc = co?.complianceData?.aifc;
-
-    // AIFC: 0% CIT valid until 2066-01-01, strictly conditional on hasSubstance + CIGA + separate accounting
-    const aifcRule = zoneRules.aifcPresenceRule;
-    if (z0 && z0.code === aifcRule.zoneCode && aifc && aifc.usesCITBenefit) {
-      // CIGA validation: entity must have CIGA in zone
-      if (!aifc.cigaInZone) {
-        return Math.max(v, aifcRule.fallbackCitRate);
+  // Resolve ETR from master data / zone tax first (the "computed" rate).
+  const z = getZone(p, co?.zoneId);
+  let zoneCitRate = 0;
+  if (z) {
+    // ── Astana Hub: 100% CIT reduction for non-IP income (Chapter 82 NK RK 2026) ──
+    // IP income uses Nexus fraction K to scale the exemption.
+    if (z.code === 'KZ_HUB') {
+      if (co?.isIPIncome && co.nexusParams) {
+        const K = computeNexusFraction(co.nexusParams);
+        // Effective rate: baseCIT * (1 - K)
+        const kzBaseCit = getEffectiveRate('KZ', 'cit', p.fx?.fxDate || '2026-01-01') ?? 0.20;
+        return kzBaseCit * (1 - K);
       }
-      // Substance + separate accounting gate for 0% benefit
-      if (!co.hasSubstance || !co.hasSeparateAccounting) {
-        return Math.max(v, aifcRule.fallbackCitRate);
-      }
+      // Non-IP income at Astana Hub → 0% CIT
+      return 0;
     }
 
-    return v;
+    const tx = effectiveZoneTax(p, z);
+    const cit = tx?.cit as CITConfig | undefined;
+    if (cit?.mode) {
+      // Extract scalar CIT rate from any of the 6 supported CIT modes
+      if (cit.mode === 'flat')          zoneCitRate = Number(cit.rate || 0);
+      else if (cit.mode === 'qfzp')     zoneCitRate = Number(cit.qualifyingRate || 0);
+      else if (cit.mode === 'brackets') {
+        const last = cit.brackets?.[cit.brackets.length - 1];
+        zoneCitRate = last ? Number(last.rate || 0) : 0;
+      } else {
+        // threshold, twoTier, smallProfits → use mainRate
+        zoneCitRate = Number(cit.mainRate || 0);
+      }
+    } else {
+      // No CIT config resolved — fall back to flat citRateStandard
+      const md = (p.masterData?.[z.jurisdiction] ?? {}) as Record<string, unknown>;
+      zoneCitRate = numOrNull(md.citRateStandard) ?? 0;
+    }
   }
 
-  const z = getZone(p, co?.zoneId);
-  if (!z) return 0;
-  const tx = effectiveZoneTax(p, z);
-  if (tx?.cit?.mode === 'flat') return Number((tx.cit as CITConfig).rate || 0);
-  const md = (p.masterData?.[z.jurisdiction] ?? {}) as Record<string, unknown>;
-  const cit = numOrNull(md.citRateStandard);
-  return cit == null ? 0 : cit;
+  // If the node has an explicit non-zero manual ETR override, use it.
+  // etr === 0 is treated as "not set" (the default), falling through to zone/master data.
+  const v = Number(co?.etr);
+  const hasManualOverride = isFinite(v) && v > 0;
+  const baseRate = hasManualOverride ? v : zoneCitRate;
+
+  // AIFC: 0% CIT valid until 2066-01-01, strictly conditional on hasSubstance + CIGA + separate accounting
+  const aifc = co?.complianceData?.aifc;
+  const aifcRule = zoneRules.aifcPresenceRule;
+  if (z && z.code === aifcRule.zoneCode && aifc && aifc.usesCITBenefit) {
+    if (!aifc.cigaInZone) {
+      return Math.max(baseRate, aifcRule.fallbackCitRate);
+    }
+    if (!co.hasSubstance || !co.hasSeparateAccounting) {
+      return Math.max(baseRate, aifcRule.fallbackCitRate);
+    }
+  }
+
+  return baseRate;
+}
+
+// ─── KZ Cash Discipline (1000 MRP CIT deduction exclusion) ──────────────────
+
+/**
+ * Compute total non-deductible cash amounts for a KZ company.
+ * If a transaction between VAT payers uses paymentMethod === 'cash' and the
+ * cash amount exceeds 1000 MRP, the entire cash amount is excluded from
+ * CIT deductions (added back to taxable income).
+ *
+ * @returns Total non-deductible amount in the company's functional currency.
+ */
+export function computeCashDisciplineExclusion(
+  project: Project,
+  nodeId: string,
+  flowDate: string,
+): number {
+  const node = getNode(project, nodeId);
+  if (!node) return 0;
+  const zone = getZone(project, node.zoneId);
+  if (!zone || zone.jurisdiction !== 'KZ') return 0;
+
+  const mrp = resolveMRP(flowDate);
+  const threshold = 1000 * mrp;
+  let totalExcluded = 0;
+
+  for (const flow of project.flows) {
+    if (flow.fromId !== nodeId) continue;
+    if (flow.paymentMethod !== 'cash') continue;
+
+    // Both payer and payee must be VAT payers (company nodes in a zone)
+    const payee = getNode(project, flow.toId);
+    if (!payee || payee.type !== 'company') continue;
+    const payeeZone = getZone(project, payee.zoneId);
+    if (!payeeZone) continue;
+
+    const cashAmt = Number(flow.cashComponentAmount || flow.grossAmount || 0);
+    const cashFunctional = convert(project, cashAmt, flow.cashComponentCurrency || flow.currency, zone.currency);
+
+    if (cashFunctional > threshold) {
+      totalExcluded += cashFunctional;
+    }
+  }
+
+  return bankersRound2(totalExcluded);
+}
+
+// ─── CY Deduction Denial (Interest/Royalties to LTJ) ────────────────────────
+
+/**
+ * Compute total non-deductible amounts for a CY company due to defensive measures.
+ * Interest and royalty payments to entities in Low Tax Jurisdictions (LTJ) are
+ * excluded from CIT deductions.
+ *
+ * @returns Total non-deductible amount in the company's functional currency.
+ */
+export function computeCYDeductionDenial(
+  project: Project,
+  nodeId: string,
+  flowDate: string,
+): number {
+  const node = getNode(project, nodeId);
+  if (!node) return 0;
+  const zone = getZone(project, node.zoneId);
+  if (!zone || zone.jurisdiction !== 'CY') return 0;
+
+  const measures = resolveCYDefensiveMeasures(flowDate);
+  if (!measures) return 0;
+
+  const deniedFlowTypes = measures.deductionDenial.flowTypes;
+  let totalDenied = 0;
+
+  for (const flow of project.flows) {
+    if (flow.fromId !== nodeId) continue;
+    if (!deniedFlowTypes.includes(flow.flowType)) continue;
+
+    const payee = getNode(project, flow.toId);
+    if (!payee) continue;
+    const payeeZone = getZone(project, payee.zoneId);
+    if (!payeeZone) continue;
+
+    if (measures.lowTaxJurisdictions.includes(payeeZone.jurisdiction)) {
+      const gross = Number(flow.grossAmount || 0);
+      const grossFunctional = convert(project, gross, flow.currency, zone.currency);
+      totalDenied += grossFunctional;
+    }
+  }
+
+  return bankersRound2(totalDenied);
 }
 
 // ─── Consolidated Group Tax Computation (LEGAL LAYER) ────────────────────────
@@ -497,26 +709,38 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
     const zone = node.zoneId ? project.zones.find((z) => z.id === node.zoneId) ?? null : null;
     const jurisdiction = zone?.jurisdiction ?? null;
     const currency: CurrencyCode = zone?.currency ?? baseCurrency;
+    const fxDate = project.fx.fxDate || '2026-01-01';
+
+    // ── CIT deduction adjustments (cash discipline + CY deduction denial) ──
+    const cashExclusion = computeCashDisciplineExclusion(project, node.id, fxDate);
+    const cyDenial = computeCYDeductionDenial(project, node.id, fxDate);
+    const adjustedIncome = income + cashExclusion + cyDenial;
 
     let citAmount: number;
 
     // ── Astana Hub: 100% CIT reduction (non-IP) or Nexus fraction (IP) ──
     if (zone && zone.code === 'KZ_HUB') {
-      citAmount = computeAstanaHubCIT(income, node, 0.20); // KZ base CIT rate as fallback
+      const kzBaseCit = getEffectiveRate('KZ', 'cit', fxDate) ?? 0.20;
+      citAmount = computeAstanaHubCIT(adjustedIncome, node, kzBaseCit);
     } else {
       // Use the full CIT computation engine (handles all 6 CIT modes)
-      citAmount = computeCITAmount(income, cn.effectiveTax.cit);
+      citAmount = computeCITAmount(adjustedIncome, cn.effectiveTax.cit);
     }
+
+    // Resolve lawRef for the applicable zone override
+    const zoneOverride = zone ? zoneRules.zoneOverrides[zone.code] : null;
+    const citLawRef = zoneOverride?.lawRef ?? null;
 
     citLiabilities.push({
       nodeId: node.id,
       nodeName: node.name,
       jurisdiction: jurisdiction as JurisdictionCode | null,
       zoneId: node.zoneId,
-      taxableIncome: income,
-      citRate: cn.effectiveTax.citRateEffective,
+      taxableIncome: adjustedIncome,
+      citRate: zone?.code === 'KZ_HUB' ? 0 : cn.effectiveTax.citRateEffective,
       citAmount,
       currency,
+      lawRef: citLawRef,
     });
   }
 
@@ -566,6 +790,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
           whtRatePercent: bankersRound2(penaltyRate * 100),
           whtAmountOriginal: whtOriginal,
           whtAmountBase: whtBase,
+          lawRef: measures.lawRef,
         });
         continue;
       }
@@ -573,8 +798,9 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
 
     // ── KZ Progressive WHT on Dividends (5% up to 230k MRP, 15% excess) ─────
     if (payerZone?.jurisdiction === 'KZ' && ft === 'Dividends') {
-      const whtDiv = (kzRates.whtDividends as Record<string, unknown>)?.progressive;
-      const brackets = resolveTemporalWHTBrackets(whtDiv as TemporalWHTBrackets[], flowDate);
+      const brackets = resolveTemporalWHTBrackets(
+        kzRates.whtDividends.progressive as TemporalWHTBrackets[], flowDate,
+      );
       if (brackets && brackets.length > 0) {
         const { whtAmount, effectiveRate } = computeProgressiveWHTDividends(gross, flowDate);
         if (whtAmount > 0) {
@@ -589,6 +815,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
             whtRatePercent: bankersRound2(effectiveRate * 100),
             whtAmountOriginal: whtAmount,
             whtAmountBase: whtBase,
+            lawRef: 'KZ_NK_2026_PROGRESSIVE_WHT',
           });
         }
         continue;
@@ -596,30 +823,11 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
     }
 
     // ── Standard WHT computation (all other cases) ───────────────────────────
-    // Look up the WHT rate for this flow type from the payer's effective tax config
-    const whtRates = payer.effectiveTax.wht;
-    let domesticRate = 0;
-    if (ft === 'Dividends') domesticRate = Number(whtRates.dividends || 0);
-    else if (ft === 'Interest') domesticRate = Number(whtRates.interest || 0);
-    else if (ft === 'Royalties') domesticRate = Number(whtRates.royalties || 0);
-    else if (ft === 'Services') domesticRate = Number(whtRates.services || 0);
-    // Salary and Goods/Equipment: no WHT (handled by payroll or customs)
+    const whtRes = computeWht(project, flow);
+    const whtAmtOrig = whtRes.amountOriginal ?? 0;
+    if (whtAmtOrig <= 0) continue;
 
-    // DTT override: if a treaty applies and a custom rate is set, use it
-    // Otherwise use the flow's explicit whtRate, or fall back to domestic rate
-    // whtRates from master data are fractional (0.15 = 15%), flow.whtRate is percentage (15)
-    const ratePercent = flow.applyDTT && flow.customWhtRate != null
-      ? Number(flow.customWhtRate)
-      : Number(flow.whtRate || 0) > 0
-        ? Number(flow.whtRate)
-        : domesticRate * 100;
-
-    if (ratePercent <= 0) continue;
-
-    const whtOriginal = bankersRound2(gross * (ratePercent / 100));
-    const whtBase = bankersRound2(
-      convert(project, whtOriginal, flow.currency, baseCurrency),
-    );
+    const whtBase = bankersRound2(convert(project, whtAmtOrig, flow.currency, baseCurrency));
 
     whtLiabilities.push({
       flowId: flow.id,
@@ -628,9 +836,10 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
       toNodeId: flow.toId,
       grossAmount: gross,
       originalCurrency: flow.currency,
-      whtRatePercent: ratePercent,
-      whtAmountOriginal: whtOriginal,
+      whtRatePercent: Math.round((whtAmtOrig / gross) * 10000) / 100,
+      whtAmountOriginal: whtAmtOrig,
       whtAmountBase: whtBase,
+      lawRef: whtRes.appliedLawRef ?? (payerZone ? `DOMESTIC_WHT_${payerZone.jurisdiction}` : null),
     });
   }
 

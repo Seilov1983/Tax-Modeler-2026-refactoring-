@@ -71,78 +71,41 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
 
   return (
     <div
-      style={{
-        position: 'absolute',
-        top: '16px',
-        left: '16px',
-        background: 'rgba(255, 255, 255, 0.72)',
-        backdropFilter: 'blur(40px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-        border: '1px solid rgba(255, 255, 255, 0.25)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
-        borderRadius: '20px',
-        padding: '10px',
-        zIndex: 40,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px',
-      }}
+      className="absolute top-3 left-4 bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-xl shadow-black/5 dark:shadow-white/5 rounded-[20px] p-2.5 z-40 flex flex-col gap-1 w-[120px]"
     >
-      <div style={{ fontSize: '10px', color: '#86868b', fontWeight: 600, textAlign: 'center', marginBottom: '2px', letterSpacing: '0.05em' }}>
+      <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold text-center mb-1 uppercase tracking-widest">
         TOOLS
       </div>
-      <button onClick={handleAddCompany} data-testid="btn-add-company" style={btnStyle}>
+      <button 
+        onClick={handleAddCompany} 
+        data-testid="btn-add-company" 
+        className="w-full text-left px-3 py-2 text-[13px] font-semibold rounded-xl transition-all active:scale-95 bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 hover:bg-blue-500/20 dark:hover:bg-blue-500/30"
+      >
         + Company
       </button>
-      <button onClick={handleAddPerson} style={{ ...btnStyle, background: 'rgba(48, 209, 88, 0.08)', color: '#30d158' }}>
+      <button 
+        onClick={handleAddPerson} 
+        className="w-full text-left px-3 py-2 text-[13px] font-semibold rounded-xl transition-all active:scale-95 bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 hover:bg-emerald-500/20 dark:hover:bg-emerald-500/30"
+      >
         + Person
       </button>
-      <div style={{ position: 'relative' }}>
+      <div className="relative w-full">
         <button
           onClick={() => setShowZoneMenu((v) => !v)}
           data-testid="btn-add-zone"
-          style={{ ...btnStyle, background: 'rgba(255, 159, 10, 0.08)', color: '#ff9f0a', width: '100%' }}
+          className="w-full text-left px-3 py-2 text-[13px] font-semibold rounded-xl transition-all active:scale-95 bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 hover:bg-amber-500/20 dark:hover:bg-amber-500/30"
         >
           + Zone
         </button>
         {showZoneMenu && (
           <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: '100%',
-              marginLeft: '6px',
-              background: 'rgba(255, 255, 255, 0.85)',
-              backdropFilter: 'blur(40px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-              border: '1px solid rgba(255, 255, 255, 0.25)',
-              borderRadius: '16px',
-              boxShadow: '0 12px 40px rgba(0,0,0,0.1), 0 4px 12px rgba(0,0,0,0.06)',
-              padding: '6px',
-              minWidth: '170px',
-              zIndex: 50,
-            }}
+            className="absolute top-0 left-full ml-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl p-2 min-w-[180px] z-50 flex flex-col gap-0.5"
           >
             {ZONE_PRESETS.map((preset) => (
               <button
                 key={preset.code}
                 onClick={() => handleAddZone(preset)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 12px',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  border: 'none',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  borderRadius: '10px',
-                  color: '#1d1d1f',
-                  transition: 'background 0.15s',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(0,0,0,0.04)')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                className="block w-full text-left px-3 py-2 text-[13px] font-medium border-none bg-transparent cursor-pointer rounded-xl text-slate-800 dark:text-slate-200 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
               >
                 {preset.name}
               </button>
@@ -150,27 +113,15 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
           </div>
         )}
       </div>
-      <hr style={{ border: 'none', borderTop: '1px solid rgba(0,0,0,0.05)', margin: '4px 0' }} />
+      <div className="w-full h-[1px] bg-black/5 dark:bg-white/5 my-1" />
       <button
         onClick={() => autoLayout()}
         data-testid="btn-auto-layout"
         title="Arrange nodes into a hierarchy (Dagre)"
-        style={{ ...btnStyle, background: 'rgba(99, 102, 241, 0.08)', color: '#6366f1', width: '100%' }}
+        className="w-full text-left px-3 py-2 text-[13px] font-semibold rounded-xl transition-all active:scale-95 bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 hover:bg-indigo-500/20 dark:hover:bg-indigo-500/30"
       >
         Auto-Arrange
       </button>
     </div>
   );
 }
-
-const btnStyle: React.CSSProperties = {
-  padding: '8px 14px',
-  background: 'rgba(0, 122, 255, 0.08)',
-  color: '#007aff',
-  fontSize: '13px',
-  fontWeight: 500,
-  border: 'none',
-  borderRadius: '10px',
-  cursor: 'pointer',
-  transition: 'background 0.15s, transform 0.1s',
-};

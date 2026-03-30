@@ -14,10 +14,10 @@ function AuditLogTable() {
 
   if (!entries || entries.length === 0) {
     return (
-      <div style={{ padding: '16px', fontSize: '13px', color: '#6b7280' }}>
+      <div className="p-6 text-[13px] font-medium text-slate-500 dark:text-slate-400">
         No tax entries recorded yet.
         {pipelineSteps.length > 0 && (
-          <div style={{ marginTop: '8px', fontSize: '11px', color: '#9ca3af' }}>
+          <div className="mt-2 text-[11px] font-mono text-slate-400 dark:text-slate-500">
             Pipeline ran {pipelineSteps.length} step(s): {pipelineSteps.map((s) => s.name).join(' → ')}
           </div>
         )}
@@ -26,115 +26,84 @@ function AuditLogTable() {
   }
 
   return (
-    <div style={{ overflow: 'auto', maxHeight: '220px' }}>
-      <table style={{ width: '100%', fontSize: '12px', textAlign: 'left', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ background: '#f3f4f6', position: 'sticky', top: 0 }}>
-            <th style={thStyle}>Tax Type</th>
-            <th style={thStyle}>Payer</th>
-            <th style={thStyle}>Zone</th>
-            <th style={thStyle}>Amount ({baseCurrency})</th>
-            <th style={thStyle}>Amount (Func.)</th>
-            <th style={thStyle}>Amount (Orig.)</th>
-            <th style={thStyle}>FX Date</th>
-            <th style={thStyle}>Status</th>
+    <table className="w-full text-left border-collapse">
+      <thead className="bg-black/5 dark:bg-white/5 sticky top-0 backdrop-blur-md z-10">
+        <tr>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap">Tax Type</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap">Payer</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap">Zone</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-right">Amount ({baseCurrency})</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-right">Amount (Func.)</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-right">Amount (Orig.)</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-center">FX Date</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-center">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {entries.map((tx: LedgerRow, idx: number) => (
+          <tr key={tx.id || idx} className="border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+            <td className="px-4 py-2 text-[12px] whitespace-nowrap font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20">{tx.taxType}</td>
+            <td className="px-4 py-2 text-[12px] font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">{tx.payerId}</td>
+            <td className="px-4 py-2 text-[12px] text-slate-500 dark:text-slate-400 whitespace-nowrap">{tx.zoneId}</td>
+            <td className="px-4 py-2 text-[13px] font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap text-right font-mono">
+              {formatAmount(tx.amountBase, baseCurrency)}
+            </td>
+            <td className="px-4 py-2 text-[12px] text-slate-600 dark:text-slate-400 whitespace-nowrap text-right font-mono">
+              {formatAmount(tx.amountFunctional, tx.functionalCurrency)}
+            </td>
+            <td className="px-4 py-2 text-[12px] text-slate-400 dark:text-slate-500 whitespace-nowrap text-right font-mono">
+              {formatAmount(tx.amountOriginal, tx.originalCurrency)}
+            </td>
+            <td className="px-4 py-2 text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap text-center">{tx.fxDate}</td>
+            <td className="px-4 py-2 whitespace-nowrap text-center">
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+                tx.status === 'pending' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
+                tx.status === 'paid' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
+                'bg-slate-500/10 text-slate-600 dark:text-slate-400'
+              }`}>
+                {tx.status}
+              </span>
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          {entries.map((tx: LedgerRow, idx: number) => (
-            <tr key={tx.id || idx} style={{ borderBottom: '1px solid #e5e7eb' }}>
-              <td style={tdStyle}><code>{tx.taxType}</code></td>
-              <td style={tdStyle}>{tx.payerId}</td>
-              <td style={tdStyle}>{tx.zoneId}</td>
-              <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
-                {formatAmount(tx.amountBase, baseCurrency)}
-              </td>
-              <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'monospace' }}>
-                {formatAmount(tx.amountFunctional, tx.functionalCurrency)}
-              </td>
-              <td style={{ ...tdStyle, textAlign: 'right', fontFamily: 'monospace' }}>
-                {formatAmount(tx.amountOriginal, tx.originalCurrency)}
-              </td>
-              <td style={tdStyle}>{tx.fxDate}</td>
-              <td style={tdStyle}>
-                <span style={{
-                  padding: '1px 6px',
-                  borderRadius: '4px',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  background: tx.status === 'pending' ? '#fef3c7' : tx.status === 'paid' ? '#d1fae5' : '#f3f4f6',
-                  color: tx.status === 'pending' ? '#92400e' : tx.status === 'paid' ? '#065f46' : '#374151',
-                }}>
-                  {tx.status}
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        ))}
+      </tbody>
+    </table>
   );
 }
-
-const thStyle: React.CSSProperties = {
-  padding: '6px 8px',
-  borderBottom: '2px solid #d1d5db',
-  fontWeight: 600,
-  whiteSpace: 'nowrap',
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '4px 8px',
-  whiteSpace: 'nowrap',
-};
 
 export function AuditLogPanel() {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <div style={{
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      width: '100%',
-      background: '#fff',
-      borderTop: '1px solid #d1d5db',
-      boxShadow: '0 -2px 8px rgba(0,0,0,0.08)',
-      transition: 'height 0.3s ease',
-      zIndex: 50,
-      height: isOpen ? '288px' : '40px',
-      overflow: 'hidden',
-    }}>
+    <div 
+      className={`absolute bottom-0 left-0 w-full transition-all duration-300 ease-in-out z-50 overflow-hidden flex flex-col ${isOpen ? 'h-[288px]' : 'h-[40px]'}`}
+    >
+      <div className="w-full absolute inset-0 bg-white/70 dark:bg-slate-950/80 backdrop-blur-2xl border-t border-black/5 dark:border-white/5 shadow-[0_-4px_24px_rgba(0,0,0,0.04)] pointer-events-none -z-10" />
+
       <div
         onClick={() => setIsOpen(!isOpen)}
-        style={{
-          width: '100%',
-          height: '40px',
-          background: '#f9fafb',
-          borderBottom: '1px solid #e5e7eb',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 16px',
-          cursor: 'pointer',
-          userSelect: 'none',
-        }}
+        className="w-full h-[40px] shrink-0 flex items-center justify-between px-6 cursor-pointer border-b border-black/5 dark:border-white/5 bg-transparent hover:bg-black/5 dark:hover:bg-white/5 transition-colors select-none"
       >
-        <span style={{ fontWeight: 600, fontSize: '13px', color: '#374151' }}>
-          Audit Log & Accounting
-        </span>
-        <span style={{ fontSize: '11px', color: '#6b7280' }}>
-          {isOpen ? '\u25BC Close' : '\u25B2 Open'}
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-[12px] uppercase tracking-widest text-slate-600 dark:text-slate-300">
+            Audit Log & Accounting
+          </span>
+          <span className="bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 px-2 py-0.5 rounded-full text-[10px] font-bold">LIVE</span>
+        </div>
+        <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+          {isOpen ? '▼ Close' : '▲ Open'}
         </span>
       </div>
 
       {isOpen && (
         <Suspense fallback={
-          <div style={{ padding: '16px', fontSize: '13px', color: '#6b7280' }}>
+          <div className="p-4 text-[13px] font-semibold text-slate-400 dark:text-slate-500 animate-pulse">
             Generating ledger...
           </div>
         }>
-          <AuditLogTable />
+          <div className="flex-1 overflow-auto w-full relative">
+            <AuditLogTable />
+          </div>
         </Suspense>
       )}
     </div>

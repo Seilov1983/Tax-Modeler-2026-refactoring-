@@ -12,22 +12,15 @@
 
 import Konva from 'konva';
 import { uid } from '@shared/lib/engine/utils';
+import { saveFile, dataUrlToBlob } from '@shared/lib/download';
 import type { Project } from '@shared/types';
 
 // ─── Legacy: download project as JSON via <a> fallback ──────────────────────
 
-export function downloadProjectJson(project: Project, filename = 'tax-structure.json'): void {
+export async function downloadProjectJson(project: Project, filename = 'tax-structure.json'): Promise<void> {
   const json = JSON.stringify(project, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  await saveFile(blob, filename);
 }
 
 // ─── Export JSON via File System Access API ──────────────────────────────────
@@ -39,7 +32,7 @@ export function downloadProjectJson(project: Project, filename = 'tax-structure.
  */
 export async function exportProjectJson(project: Project): Promise<void> {
   const json = JSON.stringify(project, null, 2);
-  const sanitizedName = project.title.replace(/[^a-zA-Z0-9_\-\s]/g, '').trim() || 'project';
+  const sanitizedName = project.title.replace(/[<>:"/\\|?*]/g, '').trim() || 'project';
   const suggestedName = `${sanitizedName}.json`;
 
   // Try File System Access API (Chrome, Edge, Opera)
@@ -66,8 +59,8 @@ export async function exportProjectJson(project: Project): Promise<void> {
     }
   }
 
-  // Fallback: standard <a download>
-  downloadProjectJson(project, suggestedName);
+  // Fallback: standard download
+  await downloadProjectJson(project, suggestedName);
 }
 
 // ─── Duplicate Project (Save As — Internal Clone) ───────────────────────────
@@ -109,33 +102,37 @@ export function importProjectJson(file: File): Promise<Project> {
 
 // ─── Export canvas to PNG (native Konva — no DOM-to-image overhead) ─────────
 
-export function exportCanvasToPng(
+export async function exportCanvasToPng(
   elementId: string,
   filename = 'structure.png',
-): void {
+): Promise<void> {
+  console.log('[PNG] Starting export, elementId:', elementId, 'filename:', filename);
+
   const container = document.getElementById(elementId);
   if (!container) {
-    console.error(`exportCanvasToPng: element #${elementId} not found`);
-    return;
+    console.error('[PNG] Container element not found:', elementId);
+    throw new Error(`Canvas element #${elementId} not found`);
   }
+  console.log('[PNG] Container found:', container.tagName, container.id);
 
   // Find the Konva Stage whose container lives inside our wrapper
+  console.log('[PNG] Available Konva stages:', Konva.stages.length);
   const stage = Konva.stages.find(
     (s) => container.contains(s.container()),
   );
 
   if (!stage) {
-    console.error('exportCanvasToPng: no Konva Stage found inside #' + elementId);
-    return;
+    console.error('[PNG] No Konva stage found inside container. Stages:', Konva.stages.map(s => s.container().id));
+    throw new Error('No Konva Stage found inside #' + elementId);
   }
+  console.log('[PNG] Stage found, size:', stage.width(), 'x', stage.height());
 
-  try {
-    const dataUrl = stage.toDataURL({ pixelRatio: 2 });
-    const link = document.createElement('a');
-    link.download = filename;
-    link.href = dataUrl;
-    link.click();
-  } catch (err) {
-    console.error('Failed to export image', err);
-  }
+  const dataUrl = stage.toDataURL({ pixelRatio: 2 });
+  console.log('[PNG] Data URL generated, length:', dataUrl.length);
+
+  const blob = dataUrlToBlob(dataUrl);
+  console.log('[PNG] Blob created, size:', blob.size, 'type:', blob.type);
+
+  await saveFile(blob, filename);
+  console.log('[PNG] saveFile completed for:', filename);
 }

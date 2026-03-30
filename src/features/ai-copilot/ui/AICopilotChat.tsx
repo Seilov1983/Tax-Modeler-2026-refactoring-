@@ -62,6 +62,10 @@ function getToolParts(msg: UIMessage): ToolPart[] {
 }
 
 const TOOL_LABELS: Record<string, { active: string; done: string }> = {
+  get_canvas_structure: {
+    active: '\uD83D\uDD0D \u0410\u043D\u0430\u043B\u0438\u0437 \u0441\u0442\u0440\u0443\u043A\u0442\u0443\u0440\u044B \u043A\u0430\u043D\u0432\u0430\u0441\u0430...',
+    done: '\u2705 \u0421\u0442\u0440\u0443\u043A\u0442\u0443\u0440\u0430 \u043F\u043E\u043B\u0443\u0447\u0435\u043D\u0430',
+  },
   calculate_tax_flow: {
     active: '\u{1F9EE} \u0421\u0438\u043C\u0443\u043B\u044F\u0446\u0438\u044F \u043D\u0430\u043B\u043E\u0433\u043E\u0432\u044B\u0445 \u043F\u043E\u0442\u043E\u043A\u043E\u0432...',
     done: '\u2705 \u0420\u0430\u0441\u0447\u0451\u0442 \u0437\u0430\u0432\u0435\u0440\u0448\u0451\u043D',
@@ -183,34 +187,7 @@ export function AICopilotChat() {
       <button
         onClick={() => setIsOpen(true)}
         title="Ask AI Copilot"
-        style={{
-          position: 'fixed',
-          bottom: '24px',
-          right: '24px',
-          zIndex: 50,
-          width: '48px',
-          height: '48px',
-          borderRadius: '50%',
-          background: 'rgba(255, 255, 255, 0.70)',
-          backdropFilter: 'blur(40px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-          border: '1px solid rgba(255, 255, 255, 0.50)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#007aff',
-          transition: 'transform 0.15s, box-shadow 0.15s',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'scale(1.08)';
-          e.currentTarget.style.boxShadow = '0 12px 40px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.08)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)';
-        }}
+        className="fixed bottom-12 right-6 z-50 w-12 h-12 rounded-full bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] flex items-center justify-center text-indigo-500 cursor-pointer transition-all hover:scale-105 hover:shadow-[0_12px_40px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] active:scale-95"
       >
         <Sparkles size={22} />
       </button>
@@ -219,74 +196,30 @@ export function AICopilotChat() {
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        bottom: '24px',
-        right: '24px',
-        zIndex: 50,
-        width: '380px',
-        height: '520px',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'rgba(255, 255, 255, 0.70)',
-        backdropFilter: 'blur(40px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-        borderRadius: '20px',
-        border: '1px solid rgba(255, 255, 255, 0.50)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
-        fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif",
-        overflow: 'hidden',
-      }}
+      className="fixed bottom-12 right-6 z-50 w-[380px] h-[520px] flex flex-col bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-2xl rounded-[20px] overflow-hidden"
       onPointerDown={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '14px 16px',
-          borderBottom: '1px solid rgba(0,0,0,0.06)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Sparkles size={16} style={{ color: '#007aff' }} />
-          <span style={{ fontSize: '14px', fontWeight: 600, color: '#1d1d1f' }}>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-black/5 dark:border-white/5 bg-white/40 dark:bg-black/40">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-indigo-500" />
+          <span className="text-[14px] font-bold text-slate-800 dark:text-slate-200">
             AI Tax Advisor
           </span>
           {canvasHash && (
             <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: '11px',
-                padding: '2px 8px',
-                borderRadius: '9999px',
-                background: 'rgba(52, 199, 89, 0.12)',
-                border: '1px solid rgba(52, 199, 89, 0.3)',
-                color: '#34c759',
-                boxShadow: '0 0 8px rgba(52, 199, 89, 0.25)',
-              }}
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold shadow-[0_0_8px_rgba(16,185,129,0.15)]"
               title="AI has real-time access to your canvas structure"
             >
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#34c759', boxShadow: '0 0 4px #34c759' }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.8)]" />
               Canvas synced ({canvasHash.slice(0, 7)})
             </span>
           )}
         </div>
         <button
           onClick={() => setIsOpen(false)}
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            color: '#86868b',
-            padding: '4px',
-            display: 'flex',
-            borderRadius: '6px',
-          }}
+          className="bg-transparent border-none cursor-pointer text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-md transition-colors"
         >
           <X size={16} />
         </button>
@@ -295,20 +228,13 @@ export function AICopilotChat() {
       {/* Messages */}
       <div
         ref={scrollRef}
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '12px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-        }}
+        className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3"
       >
         {messages.length === 0 && !isError && (
-          <div style={{ textAlign: 'center', color: '#86868b', fontSize: '13px', marginTop: '40px' }}>
-            <MessageSquare size={28} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
-            <p style={{ margin: 0, fontWeight: 500 }}>Ask about your tax structure</p>
-            <p style={{ margin: '6px 0 0', fontSize: '12px', lineHeight: 1.4 }}>
+          <div className="text-center text-slate-400 mt-10 text-[13px]">
+            <MessageSquare size={28} className="mx-auto mb-3 opacity-40" />
+            <p className="m-0 font-bold text-slate-500">Ask about your tax structure</p>
+            <p className="mt-2 text-[12px] leading-relaxed">
               I can analyze ETR, CFC risks, WHT optimization, and Pillar 2 exposure for your current model.
             </p>
           </div>
@@ -328,18 +254,11 @@ export function AICopilotChat() {
             >
               {text && (
                 <div
-                  style={{
-                    padding: '10px 14px',
-                    borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                    background: msg.role === 'user'
-                      ? '#007aff'
-                      : 'rgba(0, 0, 0, 0.04)',
-                    color: msg.role === 'user' ? '#fff' : '#1d1d1f',
-                    fontSize: '13px',
-                    lineHeight: 1.5,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
+                  className={`px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap break-words ${
+                    msg.role === 'user' 
+                      ? 'rounded-[16px_16px_4px_16px] bg-indigo-500 text-white shadow-md shadow-indigo-500/20' 
+                      : 'rounded-[16px_16px_16px_4px] bg-black/5 dark:bg-white/5 text-slate-800 dark:text-slate-200'
+                  }`}
                 >
                   {text}
                 </div>
@@ -373,78 +292,56 @@ export function AICopilotChat() {
                   return (
                     <div
                       key={part.toolCallId}
-                      style={{
-                        marginTop: '8px',
-                        padding: '10px 12px',
-                        borderRadius: '12px',
-                        background: 'rgba(59, 130, 246, 0.06)',
-                        border: '1px solid rgba(59, 130, 246, 0.15)',
-                        fontSize: '12px',
-                        lineHeight: 1.6,
-                      }}
+                      className="mt-2 px-3 py-2.5 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-500/10 text-[12px] leading-relaxed"
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                        <Check size={14} style={{ color: '#22c55e' }} />
-                        <span style={{ fontWeight: 600, color: '#1d1d1f' }}>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Check size={14} className="text-emerald-500" />
+                        <span className="font-bold text-slate-800 dark:text-slate-200">
                           {toolDoneLabel(part)}
                         </span>
                       </div>
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: '1fr 1fr',
-                        gap: '4px 12px',
-                        color: '#374151',
-                      }}>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-slate-700 dark:text-slate-300">
                         {output.grossAmount != null && (
                           <>
-                            <span style={{ color: '#6b7280' }}>Gross:</span>
-                            <span style={{ fontWeight: 600 }}>{fmtToolAmount(output.grossAmount)}</span>
+                            <span className="text-slate-500 dark:text-slate-400">Gross:</span>
+                            <span className="font-bold font-mono">{fmtToolAmount(output.grossAmount)}</span>
                           </>
                         )}
                         {output.whtAmount != null && (
                           <>
-                            <span style={{ color: '#6b7280' }}>WHT:</span>
-                            <span style={{ fontWeight: 600, color: '#dc2626' }}>-{fmtToolAmount(output.whtAmount)}</span>
+                            <span className="text-slate-500 dark:text-slate-400">WHT:</span>
+                            <span className="font-bold font-mono text-red-500">-{fmtToolAmount(output.whtAmount)}</span>
                           </>
                         )}
                         {output.citImpact != null && (
                           <>
-                            <span style={{ color: '#6b7280' }}>CIT:</span>
-                            <span style={{ fontWeight: 600, color: '#dc2626' }}>-{fmtToolAmount(output.citImpact)}</span>
+                            <span className="text-slate-500 dark:text-slate-400">CIT:</span>
+                            <span className="font-bold font-mono text-red-500">-{fmtToolAmount(output.citImpact)}</span>
                           </>
                         )}
                         {output.netAfterTax != null && (
                           <>
-                            <span style={{ color: '#6b7280' }}>Net:</span>
-                            <span style={{ fontWeight: 600, color: '#16a34a' }}>{fmtToolAmount(output.netAfterTax)}</span>
+                            <span className="text-slate-500 dark:text-slate-400">Net:</span>
+                            <span className="font-bold font-mono text-emerald-500">{fmtToolAmount(output.netAfterTax)}</span>
                           </>
                         )}
                         {output.effectiveTaxRate != null && (
                           <>
-                            <span style={{ color: '#6b7280' }}>ETR:</span>
-                            <span style={{ fontWeight: 600 }}>{String(output.effectiveTaxRate)}%</span>
+                            <span className="text-slate-500 dark:text-slate-400">ETR:</span>
+                            <span className="font-bold">{String(output.effectiveTaxRate)}%</span>
                           </>
                         )}
                         {Boolean(output.dttApplied) && (
                           <>
-                            <span style={{ color: '#6b7280' }}>DTT:</span>
-                            <span style={{ fontWeight: 600, color: '#2563eb' }}>
+                            <span className="text-slate-500 dark:text-slate-400">DTT:</span>
+                            <span className="font-bold text-indigo-500">
                               Applied (-{fmtToolAmount(output.dttBenefit)})
                             </span>
                           </>
                         )}
                       </div>
                       {Boolean(output.pillarTwoFlag) && (
-                        <div style={{
-                          marginTop: '6px',
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          background: 'rgba(245, 158, 11, 0.1)',
-                          border: '1px solid rgba(245, 158, 11, 0.2)',
-                          fontSize: '11px',
-                          color: '#92400e',
-                          fontWeight: 500,
-                        }}>
+                        <div className="mt-1.5 px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-600 dark:text-amber-400 font-medium">
                           {String(output.pillarTwoFlag)}
                         </div>
                       )}
@@ -468,37 +365,16 @@ export function AICopilotChat() {
         })}
 
         {isLoading && messages[messages.length - 1]?.role === 'user' && (
-          <div
-            style={{
-              alignSelf: 'flex-start',
-              padding: '10px 14px',
-              borderRadius: '16px 16px 16px 4px',
-              background: 'rgba(0, 0, 0, 0.04)',
-              fontSize: '13px',
-              color: '#86868b',
-            }}
-          >
+          <div className="self-start px-3.5 py-2.5 rounded-[16px_16px_16px_4px] bg-black/5 dark:bg-white/5 text-[13px] text-slate-500 animate-pulse">
             Thinking...
           </div>
         )}
 
         {/* Error banner — Liquid Glass style */}
         {isError && errorText && (
-          <div
-            style={{
-              alignSelf: 'center',
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '8px',
-              padding: '12px 14px',
-              borderRadius: '14px',
-              background: 'rgba(255, 59, 48, 0.06)',
-              border: '1px solid rgba(255, 59, 48, 0.15)',
-              maxWidth: '95%',
-            }}
-          >
-            <AlertTriangle size={16} style={{ color: '#ff3b30', flexShrink: 0, marginTop: '1px' }} />
-            <span style={{ fontSize: '12px', lineHeight: 1.5, color: '#1d1d1f' }}>
+          <div className="self-center flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 max-w-[95%]">
+            <AlertTriangle size={16} className="text-red-500 shrink-0 mt-[1px]" />
+            <span className="text-[12px] leading-relaxed text-slate-800 dark:text-slate-200">
               {errorText}
             </span>
           </div>
@@ -508,48 +384,25 @@ export function AICopilotChat() {
       {/* Input */}
       <form
         onSubmit={handleFormSubmit}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '12px 16px',
-          borderTop: '1px solid rgba(0,0,0,0.06)',
-        }}
+        className="flex items-center gap-2 p-3 border-t border-black/5 dark:border-white/5 bg-white/40 dark:bg-black/40"
       >
         <input
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           placeholder="Ask about ETR, CFC, WHT..."
-          style={{
-            flex: 1,
-            padding: '10px 14px',
-            fontSize: '13px',
-            border: '1px solid rgba(0,0,0,0.08)',
-            borderRadius: '12px',
-            background: 'rgba(255,255,255,0.6)',
-            outline: 'none',
-            color: '#1d1d1f',
-          }}
+          className="flex-1 px-3.5 py-2 text-[13px] border border-black/5 dark:border-white/10 rounded-xl bg-white/50 dark:bg-slate-900/50 outline-none text-slate-800 dark:text-slate-200 transition-colors focus:border-indigo-500/50 focus:bg-white dark:focus:bg-slate-900"
           disabled={isLoading}
         />
         <button
           type="submit"
           disabled={isLoading || !inputValue.trim()}
-          style={{
-            width: '36px',
-            height: '36px',
-            borderRadius: '50%',
-            background: inputValue.trim() ? '#007aff' : 'rgba(0,0,0,0.04)',
-            border: 'none',
-            cursor: inputValue.trim() ? 'pointer' : 'default',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: inputValue.trim() ? '#fff' : '#86868b',
-            transition: 'background 0.15s',
-          }}
+          className={`w-9 h-9 rounded-full border-none flex items-center justify-center transition-all ${
+            inputValue.trim()
+              ? 'bg-indigo-500 text-white cursor-pointer shadow-md shadow-indigo-500/20 active:scale-95'
+              : 'bg-black/5 dark:bg-white/5 text-slate-400 cursor-default'
+          }`}
         >
-          <Send size={16} />
+          <Send size={16} className={inputValue.trim() ? "ml-[2px]" : ""} />
         </button>
       </form>
     </div>

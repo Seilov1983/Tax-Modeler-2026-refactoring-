@@ -107,9 +107,17 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   // ─── Entrance animation — subtle scale-in bypassing React render cycle
   const [hasAnimated] = useState(() => ({ value: false }));
   const entranceSpring = useSpring({
-    from: hasAnimated.value ? { scaleX: 1, scaleY: 1, opacity: 1 } : { scaleX: 0.8, scaleY: 0.8, opacity: 0 },
-    to: { scaleX: 1, scaleY: 1, opacity: 1 },
+    from: hasAnimated.value ? { s: 1, o: isGhosted ? 0.15 : 1 } : { s: 0.8, o: 0 },
+    to: { s: 1, o: isGhosted ? 0.15 : 1 },
     config: { tension: 300, friction: 20 },
+    onChange: (e) => {
+      if (groupRef.current) {
+        groupRef.current.scaleX(e.value.s);
+        groupRef.current.scaleY(e.value.s);
+        groupRef.current.opacity(e.value.o);
+        groupRef.current.getLayer()?.batchDraw();
+      }
+    },
     onRest: () => { hasAnimated.value = true; },
   });
 
@@ -372,9 +380,9 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       onTap={handleClick}
       onDblClick={handleDblClick}
       onPointerUp={handleNodePointerUp}
-      scaleX={entranceSpring.scaleX.get()}
-      scaleY={entranceSpring.scaleY.get()}
-      opacity={isGhosted ? 0.15 : entranceSpring.opacity.get()}
+      scaleX={hasAnimated.value ? 1 : 0.8}
+      scaleY={hasAnimated.value ? 1 : 0.8}
+      opacity={hasAnimated.value ? (isGhosted ? 0.15 : 1) : 0}
       listening={!isGhosted}
     >
       {/* Node body — uses layout background dimensions; refined red glow if hasError */}
@@ -382,7 +390,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         width={cardLayout.background.width}
         height={cardLayout.background.height}
         fill={colors.bg}
-        stroke={node.hasError ? '#ff3b30' : isSelected ? '#007aff' : node.frozen ? '#ff3b30' : colors.border}
+        stroke={node.hasError ? '#ff3b30' : isSelected ? (isDark ? '#60a5fa' : '#007aff') : node.frozen ? '#ff3b30' : colors.border}
         strokeWidth={node.hasError ? 2 : isSelected ? 2 : node.frozen ? 1.5 : 1}
         cornerRadius={12}
         shadowColor={node.hasError ? '#ff3b30' : node.frozen ? '#ff3b30' : 'rgba(0,0,0,0.06)'}
@@ -483,8 +491,8 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
           x={node.w}
           y={node.h / 2}
           radius={PORT_RADIUS}
-          fill="#007aff"
-          stroke="#ffffff"
+          fill={isDark ? '#60a5fa' : '#007aff'}
+          stroke={isDark ? '#1a1b2e' : '#ffffff'}
           strokeWidth={2}
           onMouseDown={handleFlowPortDown}
           onTouchStart={handleFlowPortDown}
@@ -497,8 +505,8 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
           x={0}
           y={node.h / 2}
           radius={PORT_RADIUS}
-          fill="#ffffff"
-          stroke="#007aff"
+          fill={isDark ? '#1a1b2e' : '#ffffff'}
+          stroke={isDark ? '#60a5fa' : '#007aff'}
           strokeWidth={2}
           listening={true}
         />
@@ -510,8 +518,8 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
           x={node.w / 2}
           y={node.h}
           radius={PORT_RADIUS}
-          fill="#bf5af2"
-          stroke="#ffffff"
+          fill={isDark ? '#c084fc' : '#bf5af2'}
+          stroke={isDark ? '#1a1b2e' : '#ffffff'}
           strokeWidth={2}
           onMouseDown={handleOwnershipPortDown}
           onTouchStart={handleOwnershipPortDown}

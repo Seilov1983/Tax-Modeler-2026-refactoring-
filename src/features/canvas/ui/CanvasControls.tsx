@@ -33,28 +33,13 @@ export const CanvasControls = memo(function CanvasControls({
 
   return (
     <div
-      className="exclude-from-export"
+      className="exclude-from-export absolute bottom-12 left-4 flex items-stretch bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-xl shadow-black/5 dark:shadow-white/5 rounded-2xl overflow-hidden z-40 select-none"
       data-testid="canvas-controls"
-      style={{
-        position: 'absolute',
-        bottom: 52,
-        left: 16,
-        display: 'flex',
-        background: 'rgba(255, 255, 255, 0.72)',
-        backdropFilter: 'blur(40px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-        border: '1px solid rgba(255, 255, 255, 0.25)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
-        borderRadius: '14px',
-        overflow: 'hidden',
-        zIndex: 40,
-        userSelect: 'none',
-      }}
     >
       <button
         onClick={onZoomOut}
         data-testid="btn-zoom-out"
-        style={btnStyle}
+        className="px-4 py-2 bg-transparent border-none text-[18px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 transition-colors active:bg-black/10 dark:active:bg-white/20"
         title="Zoom Out"
       >
         &minus;
@@ -63,20 +48,7 @@ export const CanvasControls = memo(function CanvasControls({
       <div
         onClick={handleReset}
         title="Reset zoom (double-click canvas)"
-        style={{
-          padding: '6px 12px',
-          fontSize: '12px',
-          fontFamily: '-apple-system, BlinkMacSystemFont, monospace',
-          fontWeight: 600,
-          color: '#86868b',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minWidth: '52px',
-          borderLeft: '1px solid rgba(0,0,0,0.05)',
-          borderRight: '1px solid rgba(0,0,0,0.05)',
-        }}
+        className="px-3 py-2 text-[12px] font-mono font-bold text-slate-500 dark:text-slate-400 cursor-pointer flex items-center justify-center min-w-[56px] border-x border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors bg-black/5 dark:bg-white/5"
       >
         {percent}%
       </div>
@@ -84,7 +56,7 @@ export const CanvasControls = memo(function CanvasControls({
       <button
         onClick={onZoomIn}
         data-testid="btn-zoom-in"
-        style={btnStyle}
+        className="px-4 py-2 bg-transparent border-none text-[18px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 transition-colors active:bg-black/10 dark:active:bg-white/20"
         title="Zoom In"
       >
         +
@@ -92,15 +64,3 @@ export const CanvasControls = memo(function CanvasControls({
     </div>
   );
 });
-
-const btnStyle: React.CSSProperties = {
-  padding: '6px 12px',
-  background: 'none',
-  border: 'none',
-  fontSize: '16px',
-  fontWeight: 600,
-  color: '#1d1d1f',
-  cursor: 'pointer',
-  lineHeight: 1,
-  transition: 'background 0.15s',
-};

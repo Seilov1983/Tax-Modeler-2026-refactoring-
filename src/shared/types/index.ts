@@ -503,6 +503,8 @@ export interface EntityCITLiability {
   citAmount: number;
   /** Functional currency of the zone. */
   currency: CurrencyCode;
+  /** Law reference for the CIT regime/override applied. */
+  lawRef?: string | null;
 }
 
 /** Per-flow WHT liability computed by the tax engine. */
@@ -520,6 +522,8 @@ export interface FlowWHTLiability {
   whtAmountOriginal: number;
   /** WHT amount converted to the project's base currency. */
   whtAmountBase: number;
+  /** Law reference for the WHT rate applied. */
+  lawRef?: string | null;
 }
 
 /** Consolidated tax summary for the entire project graph. */

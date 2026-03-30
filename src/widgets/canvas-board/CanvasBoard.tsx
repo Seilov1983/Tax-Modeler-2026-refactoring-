@@ -157,9 +157,9 @@ function NotificationToast() {
   const notification = useAtomValue(notificationAtom);
   if (!notification) return null;
 
-  const bgColor = notification.type === 'error' ? '#fef2f2' : notification.type === 'warning' ? '#fffbeb' : '#eff6ff';
-  const borderColor = notification.type === 'error' ? '#fecaca' : notification.type === 'warning' ? '#fde68a' : '#bfdbfe';
-  const textColor = notification.type === 'error' ? '#dc2626' : notification.type === 'warning' ? '#d97706' : '#2563eb';
+  const bgColor = notification.type === 'error' ? 'var(--badge-error-bg, #fef2f2)' : notification.type === 'warning' ? 'var(--badge-warn-bg)' : 'var(--badge-info-bg)';
+  const borderColor = notification.type === 'error' ? 'var(--badge-error-text, #dc2626)' : notification.type === 'warning' ? 'var(--badge-warn-text)' : 'var(--badge-info-text)';
+  const textColor = notification.type === 'error' ? 'var(--badge-error-text, #dc2626)' : notification.type === 'warning' ? 'var(--badge-warn-text)' : 'var(--badge-info-text)';
 
   return (
     <div
@@ -735,7 +735,7 @@ export function CanvasBoard() {
       <div
         id="canvas-render-area"
         ref={containerRef}
-        style={{ position: 'fixed', top: '48px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
+        style={{ position: 'fixed', top: '54px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
@@ -872,12 +872,12 @@ export function CanvasBoard() {
               left: contextMenu.screenX,
               top: contextMenu.screenY,
               zIndex: 9999,
-              background: 'rgba(255, 255, 255, 0.70)',
+              background: 'var(--glass-bg-heavy)',
               backdropFilter: 'blur(12px) saturate(180%)',
               WebkitBackdropFilter: 'blur(12px) saturate(180%)',
               borderRadius: '16px',
               boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.20)',
+              border: '1px solid var(--glass-border)',
               padding: '6px',
               minWidth: '180px',
               pointerEvents: 'auto',
@@ -896,10 +896,10 @@ export function CanvasBoard() {
                   width: '100%', padding: '10px 14px',
                   background: 'none', border: 'none', cursor: 'pointer',
                   fontSize: '13px', fontWeight: 500, textAlign: 'left',
-                  borderRadius: '10px', color: '#1d1d1f',
+                  borderRadius: '10px', color: 'var(--text-primary)',
                   transition: 'background 0.15s',
                 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.05)'; }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--surface-hover)'; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
               >
                 <span style={{ fontSize: '15px', lineHeight: 1 }}>+</span>
@@ -915,10 +915,10 @@ export function CanvasBoard() {
                   width: '100%', padding: '10px 14px',
                   background: 'none', border: 'none', cursor: 'pointer',
                   fontSize: '13px', fontWeight: 500, textAlign: 'left',
-                  borderRadius: '10px', color: '#1d1d1f',
+                  borderRadius: '10px', color: 'var(--text-primary)',
                   transition: 'background 0.15s',
                 }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.05)'; }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--surface-hover)'; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
               >
                 <span style={{ fontSize: '15px', lineHeight: 1 }}>+</span>
@@ -935,16 +935,16 @@ export function CanvasBoard() {
                     width: '100%', padding: '10px 14px',
                     background: 'none', border: 'none', cursor: 'pointer',
                     fontSize: '13px', fontWeight: 500, textAlign: 'left',
-                    borderRadius: '10px', color: '#1d1d1f',
+                    borderRadius: '10px', color: 'var(--text-primary)',
                     transition: 'background 0.15s',
                   }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.05)'; }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--surface-hover)'; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
                 >
-                  <span style={{ fontSize: '15px', lineHeight: 1, color: '#007aff' }}>+</span>
+                  <span style={{ fontSize: '15px', lineHeight: 1, color: 'var(--color-accent)' }}>+</span>
                   <span>Company</span>
                 </button>
-                <div style={{ height: '1px', background: 'rgba(0, 0, 0, 0.04)', margin: '2px 10px' }} />
+                <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '2px 10px' }} />
                 <button
                   onClick={() => handleContextMenuCreate('person')}
                   style={{
@@ -952,13 +952,13 @@ export function CanvasBoard() {
                     width: '100%', padding: '10px 14px',
                     background: 'none', border: 'none', cursor: 'pointer',
                     fontSize: '13px', fontWeight: 500, textAlign: 'left',
-                    borderRadius: '10px', color: '#1d1d1f',
+                    borderRadius: '10px', color: 'var(--text-primary)',
                     transition: 'background 0.15s',
                   }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.05)'; }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--surface-hover)'; }}
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
                 >
-                  <span style={{ fontSize: '15px', lineHeight: 1, color: '#30d158' }}>+</span>
+                  <span style={{ fontSize: '15px', lineHeight: 1, color: 'var(--color-success-light)' }}>+</span>
                   <span>Person</span>
                 </button>
               </>

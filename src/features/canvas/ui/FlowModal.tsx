@@ -50,9 +50,9 @@ const CURRENCIES: CurrencyCode[] = [
 
 // ─── Liquid Glass utility classes (localized — no globals.css pollution) ──────
 
-const GLASS_INPUT = 'bg-white/50 border-white/40 text-slate-900 placeholder:text-slate-500 focus-visible:ring-blue-500 focus-visible:border-transparent';
-const GLASS_SELECT = 'bg-white/50 border-white/40 text-slate-900';
-const GLASS_LABEL = 'text-slate-800 font-medium';
+const GLASS_INPUT = 'bg-white/50 border-white/40 text-slate-900 placeholder:text-slate-500 focus-visible:ring-blue-500 focus-visible:border-transparent dark:bg-slate-800/50 dark:border-slate-600/40 dark:text-slate-100 dark:placeholder:text-slate-400';
+const GLASS_SELECT = 'bg-white/50 border-white/40 text-slate-900 dark:bg-slate-800/50 dark:border-slate-600/40 dark:text-slate-100';
+const GLASS_LABEL = 'text-slate-800 font-medium dark:text-slate-200';
 
 interface FlowFormData {
   flowType: FlowType;

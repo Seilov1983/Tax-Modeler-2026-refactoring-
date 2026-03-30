@@ -32,20 +32,11 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        padding: '3px 10px',
-        fontSize: '11px',
-        fontWeight: 600,
-        borderRadius: '8px',
-        border: active ? '1px solid #007aff' : '1px solid rgba(0,0,0,0.1)',
-        background: active ? 'rgba(0, 122, 255, 0.12)' : 'rgba(0,0,0,0.03)',
-        color: active ? '#007aff' : '#6b7280',
-        cursor: 'pointer',
-        transition: 'all 0.15s',
-        whiteSpace: 'nowrap',
-      }}
+      className={`inline-flex items-center px-3 py-1 text-[11px] font-bold rounded-lg transition-all whitespace-nowrap border cursor-pointer active:scale-95 ${
+        active 
+          ? 'border-indigo-500 bg-indigo-500/10 text-indigo-600 dark:border-indigo-400 dark:bg-indigo-500/20 dark:text-indigo-400' 
+          : 'border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5 text-slate-500 hover:bg-black/10 dark:hover:bg-white/10'
+      }`}
     >
       {label}
     </button>
@@ -134,38 +125,17 @@ export function CanvasFilterPanel() {
 
   return (
     <div
-      style={{
-        position: 'absolute',
-        bottom: '16px',
-        left: '16px',
-        width: expanded ? '280px' : 'auto',
-        background: 'rgba(255, 255, 255, 0.70)',
-        backdropFilter: 'blur(40px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-        borderRadius: '14px',
-        border: '1px solid rgba(255, 255, 255, 0.50)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
-        padding: expanded ? '12px' : '0',
-        zIndex: 40,
-        fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif",
-      }}
+      className={`absolute bottom-12 left-36 z-40 transition-all ${
+        expanded ? 'w-[280px] p-4 bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-xl rounded-2xl' : 'w-auto'
+      }`}
     >
       {/* Collapsed: just a toggle button */}
       {!expanded && (
         <button
           onClick={() => setExpanded(true)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '8px 14px',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '12px',
-            fontWeight: 600,
-            color: filter.isActive ? '#007aff' : '#6b7280',
-          }}
+          className={`flex items-center gap-2 px-4 py-2 bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-lg rounded-2xl cursor-pointer text-[12px] font-bold transition-all hover:bg-white dark:hover:bg-slate-900 active:scale-95 ${
+            filter.isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500'
+          }`}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
@@ -176,48 +146,33 @@ export function CanvasFilterPanel() {
 
       {/* Expanded panel */}
       {expanded && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div className="flex flex-col gap-4">
           {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <div className="flex justify-between items-center">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
               Visibility Filters
             </span>
             <button
               onClick={() => setExpanded(false)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', color: '#9ca3af', lineHeight: 1 }}
+              className="bg-transparent border-none cursor-pointer text-[14px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
             >
-              {'\u2715'}
+              ✕
             </button>
           </div>
 
           {/* Active toggle */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#374151' }}>Enable Ghosting</span>
+          <div className="flex justify-between items-center py-1">
+            <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200">Enable Ghosting</span>
             <button
               onClick={toggleActive}
-              style={{
-                width: '36px',
-                height: '20px',
-                borderRadius: '10px',
-                border: 'none',
-                cursor: 'pointer',
-                background: filter.isActive ? '#007aff' : '#d1d5db',
-                position: 'relative',
-                transition: 'background 0.2s',
-              }}
+              className={`relative w-9 h-5 rounded-full border-none cursor-pointer transition-colors ${
+                filter.isActive ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-600'
+              }`}
             >
               <div
-                style={{
-                  position: 'absolute',
-                  top: '2px',
-                  left: filter.isActive ? '18px' : '2px',
-                  width: '16px',
-                  height: '16px',
-                  borderRadius: '50%',
-                  background: '#fff',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                  transition: 'left 0.2s',
-                }}
+                className={`absolute top-[2px] w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200 ${
+                  filter.isActive ? 'left-[18px]' : 'left-[2px]'
+                }`}
               />
             </button>
           </div>
@@ -225,10 +180,10 @@ export function CanvasFilterPanel() {
           {/* Management Tags */}
           {allTags.length > 0 && (
             <div>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '4px' }}>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                 Tags
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              <div className="flex flex-wrap gap-1.5">
                 {allTags.map((tag) => (
                   <FilterChip
                     key={tag}
@@ -244,10 +199,10 @@ export function CanvasFilterPanel() {
           {/* Zones */}
           {regimeZones.length > 0 && (
             <div>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '4px' }}>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
                 Zones
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxHeight: '80px', overflowY: 'auto' }}>
+              <div className="flex flex-wrap gap-1.5 max-h-[80px] overflow-y-auto pr-1">
                 {regimeZones.map((z) => (
                   <FilterChip
                     key={z.id}
@@ -262,10 +217,10 @@ export function CanvasFilterPanel() {
 
           {/* Flow Types */}
           <div>
-            <div style={{ fontSize: '10px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '4px' }}>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
               Flow Types
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            <div className="flex flex-wrap gap-1.5">
               {ALL_FLOW_TYPES.map((ft) => (
                 <FilterChip
                   key={ft}
@@ -281,16 +236,7 @@ export function CanvasFilterPanel() {
           {hasFilters && (
             <button
               onClick={clearAll}
-              style={{
-                padding: '6px',
-                fontSize: '11px',
-                fontWeight: 600,
-                color: '#dc2626',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                textAlign: 'center',
-              }}
+              className="p-1 mt-1 text-[11px] font-bold text-red-500 hover:text-red-600 bg-transparent border-none cursor-pointer text-center active:scale-95 transition-all"
             >
               Clear All Filters
             </button>

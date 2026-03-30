@@ -39,6 +39,7 @@ import { SCHEMA_VERSION } from '@shared/lib/engine/engine-core';
 import type { Project } from '@shared/types';
 
 const STORAGE_KEY = 'tsm26_onefile_project_v2';
+const REMOTE_ID_KEY = 'tsm26_remote_project_id';
 
 /** Major version compatibility: accept any schema from the same major (2.x). */
 function isCompatibleSchema(version: string | undefined): boolean {
@@ -96,6 +97,7 @@ function AppContent() {
                   graph.readOnly = false;
                   p = graph;
                   remoteProjectIdRef.current = record.id;
+                  try { localStorage.setItem(REMOTE_ID_KEY, record.id); } catch {}
                 }
               }
             }
@@ -116,6 +118,11 @@ function AppContent() {
               obj.schemaVersion = SCHEMA_VERSION;
               obj.readOnly = false;
               p = obj as Project;
+              // Restore remote project ID so cloud sync upserts correctly after reload
+              const storedRemoteId = localStorage.getItem(REMOTE_ID_KEY);
+              if (storedRemoteId) {
+                remoteProjectIdRef.current = storedRemoteId;
+              }
             }
           }
         } catch { /* use demo */ }

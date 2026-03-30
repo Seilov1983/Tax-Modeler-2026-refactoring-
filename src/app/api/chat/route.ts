@@ -1,5 +1,14 @@
 import { createOpenAI } from '@ai-sdk/openai';
-import { streamText, convertToModelMessages, stepCountIs, jsonSchema, type UIMessage } from 'ai';
+import { streamText, convertToModelMessages, stepCountIs, zodSchema, type UIMessage } from 'ai';
+import { z } from 'zod';
+import {
+  effectiveZoneTax,
+  whtDefaultPercentForFlow,
+  computeCITAmount,
+} from '@shared/lib/engine/engine-tax';
+import { getZone, defaultMasterData, ensureMasterData } from '@shared/lib/engine/engine-core';
+import { bankersRound2 } from '@shared/lib/engine/utils';
+import type { Project, Zone, CITConfig, FlowType } from '@shared/types';
 
 // ─── Ollama (local on-premise LLM) ──────────────────────────────────────────
 // Ollama exposes an OpenAI-compatible API at 127.0.0.1:11434/v1.
@@ -45,24 +54,63 @@ You are an expert EXCLUSIVELY in:
 10. Cite relevant tax frameworks (OECD Model Convention articles, local tax codes) where applicable.
 </instructions>`;
 
-// ─── Tool: calculate_tax_flow ────────────────────────────────────────────────
-// Server-side tool the LLM can invoke for precise tax calculations.
-// Uses the TSM26 math kernel for WHT, CIT, and ETR simulation.
-// Placeholder simulation until the full tax engine API is connected.
+// ─── Zod Schemas for AI Tool Calling ─────────────────────────────────────────
+// Strongly typed with Zod v4, wrapped via zodSchema() for AI SDK v6.
 
-interface TaxFlowParams {
-  fromZoneId: string;
-  toZoneId: string;
-  flowType: 'dividends' | 'royalties' | 'interest' | 'services';
-  amount: number;
-  applyDtt: boolean;
-}
+const GetCanvasStructureParams = z.object({
+  projectId: z.string().describe('Project ID to fetch canvas structure for'),
+});
 
-// AI SDK v6 tool() generics are incompatible with zod v4 at the type level.
-// Plain object definition is runtime-identical (tool() is a passthrough).
-// Using jsonSchema<T>() for parameter validation with explicit execute typing.
+const CalculateTaxFlowParams = z.object({
+  fromZoneId: z.string().describe('Код юрисдикции плательщика (например, KZ, CY_STD, BVI_STD)'),
+  toZoneId: z.string().describe('Код юрисдикции получателя (например, HK, UAE_ML, SG_STD)'),
+  flowType: z.enum(['dividends', 'royalties', 'interest', 'services'])
+    .describe('Тип трансграничной выплаты'),
+  amount: z.number().positive().describe('Сумма транзакции (Gross) в базовой валюте проекта'),
+  applyDtt: z.boolean().describe('Применить ли льготу по СИДН (Double Tax Treaty)'),
+});
+
+type TaxFlowParams = z.infer<typeof CalculateTaxFlowParams>;
+
 // Canvas snapshot stashed per-request for tool access (set in POST handler)
 let _canvasSnapshotForTool = '{}';
+
+/**
+ * Reconstruct a minimal Project from the canvas snapshot so engine
+ * functions can resolve real rates via the masterData → zone chain.
+ */
+function projectFromSnapshot(): Project {
+  const data = JSON.parse(_canvasSnapshotForTool);
+  const p = {
+    zones: data.zones ?? [],
+    nodes: data.nodes ?? [],
+    flows: data.flows ?? [],
+    ownership: data.ownership ?? [],
+    masterData: {},
+    baseCurrency: data.baseCurrency ?? 'USD',
+  } as unknown as Project;
+  ensureMasterData(p);
+  return p;
+}
+
+/**
+ * Find a Zone by id OR by zone code (e.g. "KZ", "CY_STD") falling back
+ * to jurisdiction prefix match. This makes the tool robust to both
+ * exact zone IDs and human-readable jurisdiction codes from the LLM.
+ */
+function resolveZone(p: Project, zoneIdOrCode: string): Zone | null {
+  // 1. Exact id match
+  const exact = getZone(p, zoneIdOrCode);
+  if (exact) return exact;
+  // 2. Match by zone.code
+  const byCode = p.zones.find((z) => z.code === zoneIdOrCode);
+  if (byCode) return byCode;
+  // 3. Match by jurisdiction prefix (e.g. "KZ" matches zone with jurisdiction "KZ")
+  const prefix = zoneIdOrCode.split('_')[0].toUpperCase();
+  return p.zones.find((z) => z.jurisdiction === prefix) ?? null;
+}
+
+// ─── Tool Definitions ────────────────────────────────────────────────────────
 
 const taxTools = {
   get_canvas_structure: {
@@ -70,12 +118,8 @@ const taxTools = {
       'Retrieves the current corporate structure from the TSM26 canvas — ' +
       'nodes (companies, persons), zones (jurisdictions), flows (payments), ' +
       'and ownership edges. Call this to inspect the user\'s structure.',
-    parameters: jsonSchema<Record<string, never>>({
-      type: 'object',
-      properties: {},
-      required: [],
-    }),
-    execute: async () => {
+    parameters: zodSchema(GetCanvasStructureParams),
+    execute: async (_args: z.infer<typeof GetCanvasStructureParams>) => {
       try {
         const data = JSON.parse(_canvasSnapshotForTool);
         return {
@@ -96,62 +140,67 @@ const taxTools = {
       'Вызывает математическое ядро TSM26 для расчёта WHT, CIT и ETR при симуляции выплаты. ' +
       'Call this whenever the user asks about specific tax calculations, flow simulations, ' +
       'or rate lookups between jurisdictions.',
-    parameters: jsonSchema<TaxFlowParams>({
-      type: 'object',
-      properties: {
-        fromZoneId: {
-          type: 'string',
-          description: 'Код юрисдикции плательщика (например, KZ, CY, BVI_STANDARD)',
-        },
-        toZoneId: {
-          type: 'string',
-          description: 'Код юрисдикции получателя (например, HK, UAE, SG)',
-        },
-        flowType: {
-          type: 'string',
-          enum: ['dividends', 'royalties', 'interest', 'services'],
-          description: 'Тип трансграничной выплаты',
-        },
-        amount: {
-          type: 'number',
-          description: 'Сумма транзакции (Gross) в базовой валюте проекта',
-        },
-        applyDtt: {
-          type: 'boolean',
-          description: 'Применить ли льготу по СИДН (Double Tax Treaty)',
-        },
-      },
-      required: ['fromZoneId', 'toZoneId', 'flowType', 'amount', 'applyDtt'],
-    }),
+    parameters: zodSchema(CalculateTaxFlowParams),
     execute: async (args: TaxFlowParams) => {
-      // ── WHT Rate Matrix (simplified simulation) ──────────────────────
-      const whtRates: Record<string, number> = {
-        dividends: 0.15,
-        interest: 0.10,
-        royalties: 0.10,
-        services: 0.0,
-      };
-      const baseWhtRate = whtRates[args.flowType] ?? 0;
-      const effectiveWhtRate = args.applyDtt ? Math.max(baseWhtRate * 0.5, 0.05) : baseWhtRate;
+      // ── Build a Project with real master data for engine resolution ──
+      const p = projectFromSnapshot();
 
-      // ── CIT Rate Lookup (by jurisdiction code) ───────────────────────
-      const citRates: Record<string, number> = {
-        KZ: 0.20, CY: 0.125, HK: 0.0825, SG: 0.17,
-        UK: 0.25, US: 0.21, UAE: 0.0, BVI: 0.0,
-        CAY: 0.0, SEY: 0.015,
-      };
-      // Normalize zone IDs: "CY_STANDARD" → "CY"
-      const toJurisdiction = args.toZoneId.split('_')[0].toUpperCase();
-      const fromJurisdiction = args.fromZoneId.split('_')[0].toUpperCase();
-      const citRate = citRates[toJurisdiction] ?? 0.20;
+      const fromZone = resolveZone(p, args.fromZoneId);
+      const toZone = resolveZone(p, args.toZoneId);
+      const fromJurisdiction = fromZone?.jurisdiction ?? args.fromZoneId.split('_')[0].toUpperCase();
+      const toJurisdiction = toZone?.jurisdiction ?? args.toZoneId.split('_')[0].toUpperCase();
 
-      const whtAmount = Math.round(args.amount * effectiveWhtRate * 100) / 100;
-      const netAfterWht = args.amount - whtAmount;
-      const citImpact = Math.round(netAfterWht * citRate * 100) / 100;
-      const netAfterTax = Math.round((netAfterWht - citImpact) * 100) / 100;
-      const totalTax = Math.round((whtAmount + citImpact) * 100) / 100;
+      // ── WHT: resolve from payer zone's effective tax config ─────────
+      // Map tool enum to engine FlowType casing
+      const flowTypeMap: Record<string, FlowType> = {
+        dividends: 'Dividends', royalties: 'Royalties',
+        interest: 'Interest', services: 'Services',
+      };
+      const engineFlowType = flowTypeMap[args.flowType] ?? 'Services';
+
+      let whtRatePercent = 0;
+      if (fromZone) {
+        const payerTax = effectiveZoneTax(p, fromZone);
+        whtRatePercent = whtDefaultPercentForFlow(payerTax, engineFlowType);
+      } else {
+        // Fallback: use default master data for jurisdiction
+        const md = defaultMasterData();
+        const jMd = (md as Record<string, Record<string, unknown>>)[fromJurisdiction];
+        const wht = (jMd?.wht ?? {}) as Record<string, number>;
+        whtRatePercent = (wht[args.flowType] ?? 0) * 100;
+      }
+
+      const baseWhtRate = whtRatePercent / 100;
+      const effectiveWhtRate = args.applyDtt
+        ? Math.max(baseWhtRate * 0.5, baseWhtRate > 0 ? 0.05 : 0)
+        : baseWhtRate;
+
+      // ── CIT: resolve from payee zone's effective tax config ─────────
+      let citRate = 0;
+      let citAmount = 0;
+      if (toZone) {
+        const payeeTax = effectiveZoneTax(p, toZone);
+        const citConfig = payeeTax.cit as CITConfig;
+        const netForCit = args.amount - bankersRound2(args.amount * effectiveWhtRate);
+        citAmount = bankersRound2(computeCITAmount(netForCit, citConfig));
+        citRate = netForCit > 0 ? citAmount / netForCit : 0;
+      } else {
+        const md = defaultMasterData();
+        const jMd = (md as Record<string, Record<string, unknown>>)[toJurisdiction];
+        const citConfig = (jMd?.cit as CITConfig) ??
+          { mode: 'flat' as const, rate: Number(jMd?.citRateStandard ?? 0.20) };
+        const netForCit = args.amount - bankersRound2(args.amount * effectiveWhtRate);
+        citAmount = bankersRound2(computeCITAmount(netForCit, citConfig));
+        citRate = netForCit > 0 ? citAmount / netForCit : 0;
+      }
+
+      // ── Final aggregation ──────────────────────────────────────────
+      const whtAmount = bankersRound2(args.amount * effectiveWhtRate);
+      const netAfterWht = bankersRound2(args.amount - whtAmount);
+      const netAfterTax = bankersRound2(netAfterWht - citAmount);
+      const totalTax = bankersRound2(whtAmount + citAmount);
       const effectiveTaxRate = args.amount > 0
-        ? Math.round((totalTax / args.amount) * 10000) / 100
+        ? bankersRound2((totalTax / args.amount) * 100)
         : 0;
 
       return {
@@ -166,10 +215,10 @@ const taxTools = {
         whtAmount,
         dttApplied: args.applyDtt,
         dttBenefit: args.applyDtt
-          ? Math.round(args.amount * (baseWhtRate - effectiveWhtRate) * 100) / 100
+          ? bankersRound2(args.amount * (baseWhtRate - effectiveWhtRate))
           : 0,
-        citRate,
-        citImpact,
+        citRate: bankersRound2(citRate * 100) / 100,
+        citImpact: citAmount,
         netAfterWht,
         netAfterTax,
         totalTaxBurden: totalTax,
@@ -177,7 +226,7 @@ const taxTools = {
         pillarTwoFlag: effectiveTaxRate < 15
           ? 'WARNING: ETR below 15% GloBE minimum — top-up tax risk'
           : null,
-        note: 'Simulation via TSM26 math kernel — statutory rates, simplified DTT model',
+        note: 'Simulation via TSM26 math kernel — master data rate resolution + Law-as-Code overrides',
       };
     },
   },

@@ -855,6 +855,8 @@ import {
   computeAstanaHubCIT,
   isLowTaxJurisdiction,
   areInSameTaxGroup,
+  computeCashDisciplineExclusion,
+  computeCYDeductionDenial,
 } from '../engine-tax';
 import type { TemporalRate, TemporalWHTBrackets, NexusFractionParams } from '@shared/types';
 
@@ -1407,5 +1409,371 @@ describe('Cash Discipline — 1000 MRP threshold', () => {
     const result = checkCashLimit(p, flow);
     expect(result.applicable).toBe(true);
     expect(result.exceeded).toBe(true);
+  });
+});
+
+// ─── Track 2: KZ Cash Discipline (1000 MRP CIT deduction exclusion) ─────────
+
+describe('KZ Cash Discipline — 1000 MRP threshold', () => {
+  const zKz = makeZone({ id: 'z_kz', jurisdiction: 'KZ', code: 'KZ_MAIN', currency: 'KZT' });
+
+  it('excludes cash payments exceeding 1000 MRP from CIT deductions', () => {
+    const payer = makeNode('KZ Payer', 'company', 100, 100);
+    payer.zoneId = 'z_kz';
+    payer.annualIncome = 10_000_000;
+
+    const payee = makeNode('KZ Payee', 'company', 300, 100);
+    payee.zoneId = 'z_kz';
+
+    // 1000 MRP in 2026 = 1000 * 4325 = 4,325,000 KZT
+    // Cash flow of 5,000,000 KZT exceeds the threshold
+    const cashFlow = makeFlow({
+      fromId: payer.id,
+      toId: payee.id,
+      flowType: 'Services',
+      paymentMethod: 'cash',
+      cashComponentAmount: 5_000_000,
+      cashComponentCurrency: 'KZT',
+      currency: 'KZT',
+      grossAmount: 5_000_000,
+    });
+
+    const p = makeProject({
+      zones: [zKz],
+      nodes: [payer, payee],
+      flows: [cashFlow],
+    } as Partial<Project>);
+
+    const exclusion = computeCashDisciplineExclusion(p, payer.id, '2026-06-01');
+    expect(exclusion).toBe(5_000_000);
+  });
+
+  it('does NOT exclude cash payments below 1000 MRP', () => {
+    const payer = makeNode('KZ Payer', 'company', 100, 100);
+    payer.zoneId = 'z_kz';
+    payer.annualIncome = 10_000_000;
+
+    const payee = makeNode('KZ Payee', 'company', 300, 100);
+    payee.zoneId = 'z_kz';
+
+    // Cash flow of 4,000,000 KZT is BELOW 4,325,000 threshold
+    const cashFlow = makeFlow({
+      fromId: payer.id,
+      toId: payee.id,
+      flowType: 'Services',
+      paymentMethod: 'cash',
+      cashComponentAmount: 4_000_000,
+      cashComponentCurrency: 'KZT',
+      currency: 'KZT',
+      grossAmount: 4_000_000,
+    });
+
+    const p = makeProject({
+      zones: [zKz],
+      nodes: [payer, payee],
+      flows: [cashFlow],
+    } as Partial<Project>);
+
+    const exclusion = computeCashDisciplineExclusion(p, payer.id, '2026-06-01');
+    expect(exclusion).toBe(0);
+  });
+
+  it('increases CIT when cash exclusion applies in computeGroupTax', () => {
+    const zKz2 = makeZone({ id: 'z_kz2', jurisdiction: 'KZ', code: 'KZ_MAIN', currency: 'KZT' });
+    const payer = makeNode('KZ Payer', 'company', 100, 100);
+    payer.zoneId = 'z_kz2';
+    payer.annualIncome = 10_000_000;
+
+    const payee = makeNode('KZ Payee', 'company', 300, 100);
+    payee.zoneId = 'z_kz2';
+    payee.annualIncome = 0;
+
+    // Cash flow above 1000 MRP threshold (5M > 4.325M)
+    const cashFlow = makeFlow({
+      fromId: payer.id,
+      toId: payee.id,
+      flowType: 'Services',
+      paymentMethod: 'cash',
+      cashComponentAmount: 5_000_000,
+      cashComponentCurrency: 'KZT',
+      currency: 'KZT',
+      grossAmount: 5_000_000,
+    });
+
+    // Without cash flow
+    const pNoCash = makeProject({
+      baseCurrency: 'KZT',
+      zones: [zKz2],
+      nodes: [
+        { ...payer, id: 'n_a1' },
+        { ...payee, id: 'n_a2' },
+      ],
+      flows: [],
+    } as Partial<Project>);
+
+    // With cash flow
+    const pWithCash = makeProject({
+      baseCurrency: 'KZT',
+      zones: [zKz2],
+      nodes: [
+        { ...payer, id: 'n_b1' },
+        { ...payee, id: 'n_b2' },
+      ],
+      flows: [{ ...cashFlow, fromId: 'n_b1', toId: 'n_b2' }],
+    } as Partial<Project>);
+
+    const resultNoCash = computeGroupTax(pNoCash);
+    const resultWithCash = computeGroupTax(pWithCash);
+
+    // CIT should be higher with cash exclusion (non-deductible adds to taxable base)
+    expect(resultWithCash.totalCITBase).toBeGreaterThan(resultNoCash.totalCITBase);
+  });
+
+  it('uses temporal MRP lookup (2026 MRP = 4325)', () => {
+    const mrp2026 = resolveMRP('2026-06-01');
+    expect(mrp2026).toBe(4325);
+
+    const mrp2025 = resolveMRP('2025-06-01');
+    expect(mrp2025).toBe(3932);
+  });
+});
+
+// ─── Track 2: KZ Progressive WHT Dividends (230k MRP) ──────────────────────
+
+describe('KZ Progressive WHT Dividends — 230k MRP brackets', () => {
+  it('applies 5% WHT for amounts under 230,000 MRP threshold', () => {
+    // 230,000 MRP in 2026 = 230,000 * 4325 = 994,750,000 KZT
+    const result = computeProgressiveWHTDividends(500_000_000, '2026-06-01');
+    // 500M * 5% = 25M (entirely in the 5% bracket)
+    expect(result.whtAmount).toBe(25_000_000);
+    expect(result.effectiveRate).toBeCloseTo(0.05, 4);
+  });
+
+  it('applies progressive 5%/15% for amounts exceeding 230,000 MRP', () => {
+    // Threshold: 230,000 * 4325 = 994,750,000 KZT
+    // Amount: 1,500,000,000 KZT
+    // First 994,750,000 * 5% = 49,737,500
+    // Excess 505,250,000 * 15% = 75,787,500
+    // Total WHT = 125,525,000
+    const result = computeProgressiveWHTDividends(1_500_000_000, '2026-06-01');
+    expect(result.whtAmount).toBe(125_525_000);
+    expect(result.effectiveRate).toBeCloseTo(125_525_000 / 1_500_000_000, 4);
+  });
+
+  it('applies 5% for amount exactly at 230,000 MRP boundary', () => {
+    const mrp = 4325;
+    const exactThreshold = 230_000 * mrp; // 994,750,000
+    const result = computeProgressiveWHTDividends(exactThreshold, '2026-06-01');
+    expect(result.whtAmount).toBe(bankersRound2(exactThreshold * 0.05));
+    expect(result.effectiveRate).toBeCloseTo(0.05, 4);
+  });
+
+  it('falls back to flat 15% for pre-2026 dates (no progressive brackets)', () => {
+    const result = computeProgressiveWHTDividends(1_000_000, '2025-06-01');
+    expect(result.whtAmount).toBe(150_000);
+    expect(result.effectiveRate).toBe(0.15);
+  });
+
+  it('returns 0 WHT for zero amount', () => {
+    const result = computeProgressiveWHTDividends(0, '2026-06-01');
+    expect(result.whtAmount).toBe(0);
+    expect(result.effectiveRate).toBe(0);
+  });
+});
+
+// ─── Track 2: Cyprus 17% Penalty WHT to LTJ ────────────────────────────────
+
+describe('Cyprus Defensive Measures — 17% penalty WHT on dividends to LTJ', () => {
+  it('applies 17% penalty WHT when CY pays dividends to BVI entity', () => {
+    const zCy = makeZone({ id: 'z_cy', jurisdiction: 'CY', code: 'CY_STD', currency: 'EUR' });
+    const zBvi = makeZone({ id: 'z_bvi', jurisdiction: 'BVI', code: 'BVI_STD', currency: 'USD', x: 900 });
+
+    const cyCompany = makeNode('CY Company', 'company', 100, 100);
+    cyCompany.zoneId = 'z_cy';
+    cyCompany.annualIncome = 1_000_000;
+
+    const bviCompany = makeNode('BVI Company', 'company', 950, 100);
+    bviCompany.zoneId = 'z_bvi';
+    bviCompany.annualIncome = 0;
+
+    const dividendFlow = makeFlow({
+      fromId: cyCompany.id,
+      toId: bviCompany.id,
+      flowType: 'Dividends',
+      currency: 'EUR',
+      grossAmount: 100_000,
+      flowDate: '2026-06-15T00:00:00Z',
+      whtRate: 0,
+    });
+
+    const p = makeProject({
+      baseCurrency: 'EUR',
+      zones: [zCy, zBvi],
+      nodes: [cyCompany, bviCompany],
+      flows: [dividendFlow],
+    } as Partial<Project>);
+
+    const result = computeGroupTax(p);
+    const whtEntry = result.whtLiabilities.find((w) => w.flowId === dividendFlow.id);
+
+    expect(whtEntry).toBeDefined();
+    expect(whtEntry!.whtRatePercent).toBe(17);
+    expect(whtEntry!.whtAmountOriginal).toBe(bankersRound2(100_000 * 0.17));
+  });
+
+  it('does NOT apply 17% penalty for dividends to non-LTJ jurisdiction', () => {
+    const zCy = makeZone({ id: 'z_cy', jurisdiction: 'CY', code: 'CY_STD', currency: 'EUR' });
+    const zUk = makeZone({ id: 'z_uk', jurisdiction: 'UK', code: 'UK_STD', currency: 'GBP', x: 900 });
+
+    const cyCompany = makeNode('CY Company', 'company', 100, 100);
+    cyCompany.zoneId = 'z_cy';
+    cyCompany.annualIncome = 1_000_000;
+
+    const ukCompany = makeNode('UK Company', 'company', 950, 100);
+    ukCompany.zoneId = 'z_uk';
+    ukCompany.annualIncome = 0;
+
+    const dividendFlow = makeFlow({
+      fromId: cyCompany.id,
+      toId: ukCompany.id,
+      flowType: 'Dividends',
+      currency: 'EUR',
+      grossAmount: 100_000,
+      flowDate: '2026-06-15T00:00:00Z',
+      whtRate: 0,
+    });
+
+    const p = makeProject({
+      baseCurrency: 'EUR',
+      zones: [zCy, zUk],
+      nodes: [cyCompany, ukCompany],
+      flows: [dividendFlow],
+    } as Partial<Project>);
+
+    const result = computeGroupTax(p);
+    const whtEntry = result.whtLiabilities.find((w) => w.flowId === dividendFlow.id);
+
+    // CY has 0% WHT on dividends to non-LTJ; no penalty applies
+    expect(whtEntry).toBeUndefined();
+  });
+
+  it('applies CY deduction denial for interest payments to LTJ', () => {
+    const zCy = makeZone({ id: 'z_cy', jurisdiction: 'CY', code: 'CY_STD', currency: 'EUR' });
+    const zBvi = makeZone({ id: 'z_bvi', jurisdiction: 'BVI', code: 'BVI_STD', currency: 'USD', x: 900 });
+
+    const cyCompany = makeNode('CY Company', 'company', 100, 100);
+    cyCompany.zoneId = 'z_cy';
+    cyCompany.annualIncome = 1_000_000;
+
+    const bviCompany = makeNode('BVI Company', 'company', 950, 100);
+    bviCompany.zoneId = 'z_bvi';
+
+    const interestFlow = makeFlow({
+      fromId: cyCompany.id,
+      toId: bviCompany.id,
+      flowType: 'Interest',
+      currency: 'EUR',
+      grossAmount: 200_000,
+      flowDate: '2026-06-15T00:00:00Z',
+    });
+
+    const p = makeProject({
+      baseCurrency: 'EUR',
+      zones: [zCy, zBvi],
+      nodes: [cyCompany, bviCompany],
+      flows: [interestFlow],
+    } as Partial<Project>);
+
+    const denial = computeCYDeductionDenial(p, cyCompany.id, '2026-06-15');
+    // 200,000 EUR interest to BVI (LTJ) → non-deductible
+    expect(denial).toBe(200_000);
+  });
+
+  it('does NOT deny deductions for interest to non-LTJ', () => {
+    const zCy = makeZone({ id: 'z_cy', jurisdiction: 'CY', code: 'CY_STD', currency: 'EUR' });
+    const zUk = makeZone({ id: 'z_uk', jurisdiction: 'UK', code: 'UK_STD', currency: 'GBP', x: 900 });
+
+    const cyCompany = makeNode('CY Company', 'company', 100, 100);
+    cyCompany.zoneId = 'z_cy';
+
+    const ukCompany = makeNode('UK Company', 'company', 950, 100);
+    ukCompany.zoneId = 'z_uk';
+
+    const interestFlow = makeFlow({
+      fromId: cyCompany.id,
+      toId: ukCompany.id,
+      flowType: 'Interest',
+      currency: 'EUR',
+      grossAmount: 200_000,
+      flowDate: '2026-06-15T00:00:00Z',
+    });
+
+    const p = makeProject({
+      baseCurrency: 'EUR',
+      zones: [zCy, zUk],
+      nodes: [cyCompany, ukCompany],
+      flows: [interestFlow],
+    } as Partial<Project>);
+
+    const denial = computeCYDeductionDenial(p, cyCompany.id, '2026-06-15');
+    expect(denial).toBe(0);
+  });
+
+  it('increases CIT for CY company when deduction denial applies via computeGroupTax', () => {
+    const zCy = makeZone({ id: 'z_cy', jurisdiction: 'CY', code: 'CY_STD', currency: 'EUR' });
+    const zBvi = makeZone({ id: 'z_bvi', jurisdiction: 'BVI', code: 'BVI_STD', currency: 'USD', x: 900 });
+
+    const cyCompany = makeNode('CY Company', 'company', 100, 100);
+    cyCompany.zoneId = 'z_cy';
+    cyCompany.annualIncome = 1_000_000;
+
+    const bviCompany = makeNode('BVI Company', 'company', 950, 100);
+    bviCompany.zoneId = 'z_bvi';
+    bviCompany.annualIncome = 0;
+
+    const royaltyFlow = makeFlow({
+      fromId: cyCompany.id,
+      toId: bviCompany.id,
+      flowType: 'Royalties',
+      currency: 'EUR',
+      grossAmount: 300_000,
+      flowDate: '2026-06-15T00:00:00Z',
+      whtRate: 0,
+    });
+
+    // Without denied flow
+    const pNoFlow = makeProject({
+      baseCurrency: 'EUR',
+      zones: [zCy, zBvi],
+      nodes: [
+        { ...cyCompany, id: 'n_c1' },
+        { ...bviCompany, id: 'n_c2' },
+      ],
+      flows: [],
+    } as Partial<Project>);
+
+    // With denied flow
+    const pWithFlow = makeProject({
+      baseCurrency: 'EUR',
+      zones: [zCy, zBvi],
+      nodes: [
+        { ...cyCompany, id: 'n_d1' },
+        { ...bviCompany, id: 'n_d2' },
+      ],
+      flows: [{ ...royaltyFlow, fromId: 'n_d1', toId: 'n_d2' }],
+    } as Partial<Project>);
+
+    const resultNoFlow = computeGroupTax(pNoFlow);
+    const resultWithFlow = computeGroupTax(pWithFlow);
+
+    // CY CIT on 1M EUR = 150,000 EUR without denial
+    // CY CIT on (1M + 300k denial) EUR = 195,000 EUR with denial
+    const citNoFlow = resultNoFlow.citLiabilities.find((c) => c.nodeId === 'n_c1');
+    const citWithFlow = resultWithFlow.citLiabilities.find((c) => c.nodeId === 'n_d1');
+
+    expect(citWithFlow!.citAmount).toBeGreaterThan(citNoFlow!.citAmount);
+    // Verify exact amounts: 1M * 15% = 150k vs (1M + 300k) * 15% = 195k
+    expect(citNoFlow!.citAmount).toBe(150_000);
+    expect(citWithFlow!.citAmount).toBe(195_000);
   });
 });

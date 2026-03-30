@@ -14,12 +14,14 @@ export interface AppSettings {
   theme: ThemeMode;
   canvasSnapToGrid: boolean;
   language: Language;
+  baseCurrency: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   canvasSnapToGrid: true,
   language: 'en',
+  baseCurrency: 'USD',
 };
 
 export const settingsAtom = atomWithStorage<AppSettings>(

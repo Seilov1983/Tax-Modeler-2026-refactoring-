@@ -11,6 +11,7 @@
 
 import { computeGroupTax } from './engine-tax';
 import { recomputeRisks } from './engine-risks';
+import { saveFile } from '../download';
 import type {
   Project, Zone, NodeDTO, FlowDTO, OwnershipEdge, RiskFlag,
   GroupTaxSummary,
@@ -261,10 +262,10 @@ export function exportStructureBook(
   lines.push('## Entity CIT Schedule');
   lines.push('');
   if (taxSummary.citLiabilities.length > 0) {
-    lines.push('| Entity | Jurisdiction | Taxable Income | CIT Rate | CIT Amount | Currency |');
-    lines.push('|---|---|---|---|---|---|');
+    lines.push('| Entity | Jurisdiction | Taxable Income | CIT Rate | CIT Amount | Law Reference | Currency |');
+    lines.push('|---|---|---|---|---|---|---|');
     for (const cit of taxSummary.citLiabilities) {
-      lines.push(`| ${cit.nodeName} | ${cit.jurisdiction ?? 'N/A'} | ${formatCurrency(cit.taxableIncome, cit.currency)} | ${formatPercent(cit.citRate)} | ${formatCurrency(cit.citAmount, cit.currency)} | ${cit.currency} |`);
+      lines.push(`| ${cit.nodeName} | ${cit.jurisdiction ?? 'N/A'} | ${formatCurrency(cit.taxableIncome, cit.currency)} | ${formatPercent(cit.citRate)} | ${formatCurrency(cit.citAmount, cit.currency)} | ${cit.lawRef ?? '-'} | ${cit.currency} |`);
     }
   } else {
     lines.push('*No company entities in the structure.*');
@@ -278,11 +279,8 @@ export function exportStructureBook(
   if (project.flows.length > 0) {
     // Build a lookup for WHT liabilities from the tax summary
     const whtByFlowId = new Map<string, { ratePercent: number; amount: number }>();
-    for (const wht of taxSummary.whtLiabilities) {
-      whtByFlowId.set(wht.flowId, { ratePercent: wht.whtRatePercent, amount: wht.whtAmountOriginal });
-    }
-    lines.push('| Flow Type | From | To | Gross Amount | WHT Rate | WHT Amount |');
-    lines.push('|---|---|---|---|---|---|');
+    lines.push('| Flow Type | From | To | Gross Amount | WHT Rate | WHT Amount | Law Reference |');
+    lines.push('|---|---|---|---|---|---|---|');
     for (const flow of project.flows) {
       const gross = Number(flow.grossAmount || 0);
       if (gross <= 0) continue;
@@ -291,7 +289,11 @@ export function exportStructureBook(
       const whtEntry = whtByFlowId.get(flow.id);
       const ratePercent = whtEntry?.ratePercent ?? 0;
       const whtAmount = whtEntry?.amount ?? 0;
-      lines.push(`| ${flow.flowType} | ${fromName} | ${toName} | ${formatCurrency(gross, flow.currency)} | ${ratePercent.toFixed(2)}% | ${formatCurrency(whtAmount, flow.currency)} |`);
+      
+      // Look up LawRef from the whtLiabilities in the snapshot
+      const liabilityEntry = taxSummary.whtLiabilities.find(w => w.flowId === flow.id);
+      
+      lines.push(`| ${flow.flowType} | ${fromName} | ${toName} | ${formatCurrency(gross, flow.currency)} | ${ratePercent.toFixed(2)}% | ${formatCurrency(whtAmount, flow.currency)} | ${liabilityEntry?.lawRef ?? '-'} |`);
     }
   } else {
     lines.push('*No flows in the structure.*');
@@ -359,17 +361,10 @@ export function exportStructureBook(
 // ─── Browser Download Trigger ───────────────────────────────────────────────
 
 /**
- * Trigger a file download in the browser using Blob + temporary <a> tag.
- * This is the only DOM-touching function in this module.
+ * Save Markdown content as a file.
+ * Uses the cross-platform download utility (Electron native dialog / browser <a>).
  */
-export function downloadMarkdown(content: string, filename: string): void {
+export async function downloadMarkdown(content: string, filename: string): Promise<void> {
   const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  await saveFile(blob, filename);
 }

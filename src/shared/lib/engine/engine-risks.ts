@@ -5,7 +5,7 @@
 
 import { uid, bankersRound2, numOrNull, isoDate, nowIso } from './utils';
 import { getZone, getNode, listPersons, listCompanies, convert } from './engine-core';
-import { effectiveZoneTax, whtDefaultPercentForFlow, effectiveEtrForCompany } from './engine-tax';
+import { effectiveZoneTax, whtDefaultPercentForFlow, effectiveEtrForCompany, resolveMRP } from './engine-tax';
 import type { Project, NodeDTO, FlowDTO, Zone, FlowType } from '@shared/types';
 
 // ─── Frozen Threshold ────────────────────────────────────────────────────────
@@ -127,17 +127,28 @@ export function recomputeRisks(p: Project): void {
     }
   }
 
+  // ── CFC_RISK: indirect control ≥25% in foreign entity where ETR <10% ────
+  // Income exemption: CFC income < 195 MRP (from Zod-validated kzRates)
   const kz = (p.masterData as Record<string, Record<string, unknown>>).KZ || {};
-  const mc = kz.macroConstants as Record<string, number> | undefined;
   const thr = kz.thresholds as Record<string, number> | undefined;
-  const mci = numOrNull(mc?.mciValue || kz.mciValue);
-  const incomeMult = numOrNull(thr?.cfcIncomeMci || kz.cfcIncomeMci);
-  const etrThr = numOrNull(thr?.cfcEtrThreshold || kz.cfcEtrThreshold);
-  const ownThr = numOrNull(thr?.cfcOwnershipThreshold || kz.cfcOwnershipThreshold);
-  const cfcEnabled = mci != null && incomeMult != null && etrThr != null && ownThr != null;
+  const etrThr = numOrNull(thr?.cfcEtrThreshold || kz.cfcEtrThreshold) ?? 0.10;
+  const ownThr = numOrNull(thr?.cfcOwnershipThreshold || kz.cfcOwnershipThreshold) ?? 0.25;
+  const cfcIncomeExemptionMRP = 195;
+  const fxDate = p.fx?.fxDate || '2026-01-01';
+  const mrpValue = resolveMRP(fxDate);
+  const cfcIncomeThrKZT = cfcIncomeExemptionMRP * mrpValue;
 
-  if (cfcEnabled) {
-    const incomeThrKZT = incomeMult! * mci!;
+  {
+    // Pre-compute net inflow per node from flows (for entities with no annualIncome set)
+    const netInflowMap = new Map<string, number>();
+    for (const f of p.flows) {
+      const gross = Number(f.grossAmount || 0);
+      if (gross <= 0) continue;
+      const grossKZT = convert(p, gross, f.currency, 'KZT');
+      netInflowMap.set(f.toId, (netInflowMap.get(f.toId) ?? 0) + grossKZT);
+      netInflowMap.set(f.fromId, (netInflowMap.get(f.fromId) ?? 0) - grossKZT);
+    }
+
     const persons = listPersons(p).filter((per) => (per.citizenship || []).includes('KZ'));
     persons.forEach((per) => {
       const control = computeControlFromPerson(p, per.id);
@@ -145,14 +156,19 @@ export function recomputeRisks(p: Project): void {
         const z = getZone(p, co.zoneId);
         if (!z || z.jurisdiction === 'KZ') return;
         const cf = control.get(co.id) || 0;
-        if (cf < ownThr!) return;
-        const incomeKZT = Number(co.annualIncome || 0);
-        if (incomeKZT <= incomeThrKZT) return;
+        if (cf < ownThr) return;
+        // Use annualIncome if set; otherwise derive from flow net inflows (converted to KZT)
+        let incomeKZT = Number(co.annualIncome || 0);
+        if (incomeKZT <= 0) {
+          incomeKZT = Math.max(0, netInflowMap.get(co.id) ?? 0);
+        }
+        // 195 MRP income exemption — entity under threshold is exempt from CFC rules
+        if (incomeKZT <= cfcIncomeThrKZT) return;
         const etr = effectiveEtrForCompany(p, co);
-        if (etr >= etrThr!) return;
+        if (etr >= etrThr) return;
         // Safe Harbor: real economic substance exempts from CFC rules
         if (co.hasSubstance) return;
-        co.riskFlags.push({ type: 'CFC_RISK', byPersonId: per.id, control: cf, incomeKZT, etr, lawRef: 'KZ_CFC_MVP' });
+        co.riskFlags.push({ type: 'CFC_RISK', byPersonId: per.id, control: cf, incomeKZT, etr, incomeThrMRP: cfcIncomeExemptionMRP, mrpValue, lawRef: 'KZ_CFC_MVP' });
         // hasSubstance === false → flag substance breach on the CFC entity
         co.riskFlags.push({ type: 'SUBSTANCE_BREACH', byPersonId: per.id, lawRef: 'KZ_CFC_SUBSTANCE', message: 'CFC entity lacks economic substance.' });
       });
@@ -173,8 +189,9 @@ export function recomputeRisks(p: Project): void {
       }
     }
 
-    // Generic offshore substance check: any node in offshore jurisdiction without hasSubstance
-    if (offshoreSubstanceJurisdictions.includes(z.jurisdiction) && co.hasSubstance === false) {
+    // Generic offshore substance check: any node in offshore jurisdiction without proven substance
+    // Default assumption: companies in offshore jurisdictions lack substance unless explicitly set
+    if (offshoreSubstanceJurisdictions.includes(z.jurisdiction) && !co.hasSubstance) {
       // Avoid duplicate BVI_SUBSTANCE_BREACH — only flag if not already flagged by BVI-specific check
       const alreadyFlagged = co.riskFlags.some(
         (r) => r.type === 'SUBSTANCE_BREACH' && (r.lawRef === 'APP_G_G1_BVI_SUBSTANCE' || r.lawRef === 'KZ_CFC_SUBSTANCE'),
@@ -244,13 +261,10 @@ export function checkCashLimit(p: Project, flow: FlowDTO) {
   const payer = getNode(p, flow.fromId);
   if (!payer || !cashLimitApplicable(p, flow)) return { applicable: false };
   const z = getZone(p, payer.zoneId)!;
-  const m = (p.masterData as Record<string, Record<string, unknown>>).KZ || {};
-  const mc = m.macroConstants as Record<string, number> | undefined;
-  const th = m.thresholds as Record<string, number> | undefined;
-  const mci = numOrNull(mc?.mciValue || m.mciValue);
-  const mult = numOrNull(th?.cashLimitMci || m.cashLimitMci);
-  if (mci == null || mult == null) return { applicable: false };
-  const threshold = mult * mci;
+  // Use MRP from Zod-validated temporal data for 1000 MRP cash limit
+  const flowDate = flow.flowDate || p.fx?.fxDate || '2026-01-01';
+  const mrp = resolveMRP(flowDate);
+  const threshold = 1000 * mrp;
   const cashAmt = Number(flow.cashComponentAmount || 0);
   const cashCcy = flow.cashComponentCurrency || flow.currency;
   const cashFunctional = convert(p, cashAmt, cashCcy, z.currency);

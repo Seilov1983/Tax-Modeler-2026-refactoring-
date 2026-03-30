@@ -9,6 +9,7 @@ import type { Project } from '@shared/types';
 const SYNC_DEBOUNCE_MS = 1500;
 const SYNC_ENDPOINT = '/api/projects/sync';
 const STORAGE_KEY = 'tsm26_onefile_project_v2';
+const REMOTE_ID_KEY = 'tsm26_remote_project_id';
 
 /**
  * useDebouncedCloudSync — watches Jotai projectAtom and syncs to the database.
@@ -52,7 +53,10 @@ export function useDebouncedCloudSync(isHydrated: boolean) {
 
       if (res.ok) {
         const data = await res.json();
-        if (data.id) remoteProjectIdRef.current = data.id;
+        if (data.id) {
+          remoteProjectIdRef.current = data.id;
+          try { localStorage.setItem(REMOTE_ID_KEY, data.id); } catch {}
+        }
       } else if (res.status === 503) {
         isOfflineModeRef.current = true;
         console.info('[CloudSync] API 503 — offline mode activated.');

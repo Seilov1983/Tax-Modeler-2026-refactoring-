@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "notebooklm": {
+      "command": "/Users/mac/.local/bin/notebooklm-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}

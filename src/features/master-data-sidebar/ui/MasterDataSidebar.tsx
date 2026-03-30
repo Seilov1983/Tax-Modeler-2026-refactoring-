@@ -68,18 +68,19 @@ function fuzzyMatch(query: string, text: string): boolean {
 
 function createGhostElement(label: string, subtitle: string): HTMLElement {
   const el = document.createElement('div');
+  const isDark = document.documentElement.classList.contains('dark');
   el.style.cssText = `
     position: fixed; top: -1000px; left: -1000px; z-index: 99999;
     padding: 10px 16px; border-radius: 16px;
-    background: rgba(255,255,255,0.80); backdrop-filter: blur(20px);
-    border: 1px solid rgba(255,255,255,0.3);
+    background: ${isDark ? 'rgba(30,30,30,0.90)' : 'rgba(255,255,255,0.80)'}; backdrop-filter: blur(20px);
+    border: 1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.3)'};
     box-shadow: 0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
     pointer-events: none; white-space: nowrap;
   `;
   el.innerHTML = `
-    <div style="font-size:13px;font-weight:600;color:#1d1d1f;">${label}</div>
-    <div style="font-size:11px;color:#86868b;margin-top:2px;">${subtitle}</div>
+    <div style="font-size:13px;font-weight:600;color:${isDark ? '#f5f5f7' : '#1d1d1f'};">${label}</div>
+    <div style="font-size:11px;color:${isDark ? '#a1a1a6' : '#86868b'};margin-top:2px;">${subtitle}</div>
   `;
   document.body.appendChild(el);
   return el;
@@ -310,10 +311,10 @@ export function MasterDataSidebar() {
         height: '100%',
         width: '420px',
         zIndex: 40,
-        background: 'rgba(255, 255, 255, 0.70)',
+        background: 'var(--glass-bg)',
         backdropFilter: 'blur(12px) saturate(180%)',
         WebkitBackdropFilter: 'blur(12px) saturate(180%)',
-        borderRight: '1px solid rgba(0, 0, 0, 0.06)',
+        borderRight: '1px solid var(--border-subtle)',
         display: 'flex',
         flexDirection: 'column',
         fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif",
@@ -323,13 +324,13 @@ export function MasterDataSidebar() {
       {/* ─── Header ─────────────────────────────────────────────── */}
       <div style={{ padding: '16px 20px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.02em' }}>
+          <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
             {t('masterData', lang)}
           </h2>
           <button
             onClick={() => setIsOpen(false)}
             style={{
-              background: 'rgba(0, 0, 0, 0.04)',
+              background: 'var(--surface-secondary)',
               border: 'none',
               borderRadius: '8px',
               width: '28px',
@@ -339,17 +340,17 @@ export function MasterDataSidebar() {
               justifyContent: 'center',
               cursor: 'pointer',
               fontSize: '14px',
-              color: '#86868b',
+              color: 'var(--text-label)',
               transition: 'background 0.15s',
             }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.08)'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.04)'; }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--surface-hover)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--surface-secondary)'; }}
             title={t('closeSidebar', lang)}
           >
             {'\u2715'}
           </button>
         </div>
-        <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#86868b' }}>
+        <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-label)' }}>
           {t('dragHint', lang)}
         </p>
       </div>
@@ -365,7 +366,7 @@ export function MasterDataSidebar() {
             position: 'absolute',
             left: '12px',
             fontSize: '13px',
-            color: '#86868b',
+            color: 'var(--text-label)',
             pointerEvents: 'none',
             lineHeight: 1,
           }}>
@@ -380,19 +381,19 @@ export function MasterDataSidebar() {
               width: '100%',
               padding: '9px 12px 9px 34px',
               fontSize: '13px',
-              border: '1px solid rgba(0, 0, 0, 0.06)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: '12px',
-              background: 'rgba(0, 0, 0, 0.03)',
+              background: 'var(--surface-secondary)',
               outline: 'none',
-              color: '#1d1d1f',
+              color: 'var(--text-primary)',
               transition: 'border-color 0.2s, box-shadow 0.2s',
             }}
             onFocus={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(0,0,0,0.12)';
-              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0,0,0,0.04)';
+              e.currentTarget.style.borderColor = 'var(--color-accent)';
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(0,122,255,0.15)';
             }}
             onBlur={(e) => {
-              e.currentTarget.style.borderColor = 'rgba(0,0,0,0.06)';
+              e.currentTarget.style.borderColor = 'var(--border-subtle)';
               e.currentTarget.style.boxShadow = 'none';
             }}
           />
@@ -402,13 +403,13 @@ export function MasterDataSidebar() {
       {/* ─── Entities Section (sticky) ─────────────────────────── */}
       <div style={{
         padding: '8px 12px',
-        borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+        borderBottom: '1px solid var(--border-subtle)',
         flexShrink: 0,
       }}>
         <div style={{
           fontSize: '11px',
           fontWeight: 600,
-          color: '#86868b',
+          color: 'var(--text-label)',
           textTransform: 'uppercase',
           letterSpacing: '0.04em',
           padding: '4px 12px 8px',
@@ -434,14 +435,14 @@ export function MasterDataSidebar() {
                 userSelect: 'none',
                 transition: 'background 0.15s',
               }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(0, 0, 0, 0.04)'; }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--surface-hover)'; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
             >
               <span style={{ fontSize: '16px', lineHeight: 1, flexShrink: 0 }}>{icon}</span>
-              <span style={{ fontSize: '13px', fontWeight: 500, color: '#1d1d1f', flex: 1 }}>{label}</span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', flex: 1 }}>{label}</span>
               <span style={{
                 fontSize: '10px',
-                color: '#c7c7cc',
+                color: 'var(--text-tertiary)',
                 letterSpacing: '1px',
                 width: '12px',
                 flexShrink: 0,
@@ -456,7 +457,7 @@ export function MasterDataSidebar() {
       {/* ─── Scrollable list ───────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 16px' }}>
         {filteredData.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#86868b', fontSize: '13px' }}>
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-label)', fontSize: '13px' }}>
             {t('noMatching', lang)}
           </div>
         )}
@@ -485,13 +486,13 @@ export function MasterDataSidebar() {
       {/* Edit Master Data toggle */}
       <div style={{
         padding: '12px 20px',
-        borderTop: '1px solid rgba(0, 0, 0, 0.06)',
+        borderTop: '1px solid var(--border-subtle)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexShrink: 0,
       }}>
-        <span style={{ fontSize: '13px', fontWeight: 500, color: '#1d1d1f' }}>
+        <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
           {t('editMasterData', lang)}
         </span>
         <button
@@ -508,7 +509,7 @@ export function MasterDataSidebar() {
             cursor: 'pointer',
             padding: 0,
             flexShrink: 0,
-            background: isEditMode ? '#007aff' : 'rgba(0, 0, 0, 0.12)',
+            background: isEditMode ? 'var(--color-accent)' : 'var(--border-primary)',
             transition: 'background 0.2s',
             boxShadow: 'inset 0 1px 3px rgba(0, 0, 0, 0.06)',
           }}
@@ -605,7 +606,7 @@ function CountryRow({
           gap: '8px',
           padding: '10px 12px',
           borderRadius: '14px',
-          background: isHovered ? 'rgba(0, 0, 0, 0.04)' : 'transparent',
+          background: isHovered ? 'var(--surface-hover)' : 'transparent',
           cursor: isOnCanvas ? 'default' : isEditMode ? 'pointer' : 'grab',
           userSelect: 'none',
           transition: 'background 0.15s',
@@ -627,7 +628,7 @@ function CountryRow({
           ) : (
             <span style={{
               fontSize: '10px',
-              color: '#c7c7cc',
+              color: 'var(--text-tertiary)',
               letterSpacing: '1px',
               width: '12px',
               flexShrink: 0,
@@ -643,7 +644,7 @@ function CountryRow({
         <animated.span style={{
           ...chevronSpring,
           fontSize: '9px',
-          color: '#86868b',
+          color: 'var(--text-label)',
           flexShrink: 0,
           display: 'inline-block',
           width: '10px',
@@ -662,7 +663,7 @@ function CountryRow({
           flex: 1,
           fontSize: '14px',
           fontWeight: 600,
-          color: '#1d1d1f',
+          color: 'var(--text-primary)',
           letterSpacing: '-0.01em',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -686,8 +687,8 @@ function CountryRow({
         {/* Currency badge */}
         <span style={{
           ...badgeBase,
-          background: 'rgba(0, 0, 0, 0.04)',
-          color: '#86868b',
+          background: 'var(--surface-secondary)',
+          color: 'var(--text-label)',
         }}>
           {country.baseCurrency}
         </span>
@@ -794,8 +795,8 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, on
           padding: '7px 12px',
           marginBottom: '2px',
           borderRadius: '10px',
-          borderLeft: '2px solid rgba(0, 0, 0, 0.06)',
-          background: isHovered ? 'rgba(0, 0, 0, 0.03)' : 'transparent',
+          borderLeft: '2px solid var(--border-subtle)',
+          background: isHovered ? 'var(--surface-hover)' : 'transparent',
           cursor: isOnCanvas ? 'default' : isEditMode ? 'pointer' : 'grab',
           userSelect: 'none',
           transition: 'background 0.15s',
@@ -817,7 +818,7 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, on
           ) : (
             <span style={{
               fontSize: '9px',
-              color: '#c7c7cc',
+              color: 'var(--text-tertiary)',
               letterSpacing: '1px',
               width: '10px',
               flexShrink: 0,
@@ -857,7 +858,7 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, on
           flex: 1,
           fontSize: '13px',
           fontWeight: 400,
-          color: '#3a3a3c',
+          color: 'var(--text-secondary)',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -876,7 +877,7 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, on
             WHT {regime.wht}%
           </span>
         ) : (
-          <span style={{ ...badgeBase, background: 'rgba(0,0,0,0.04)', color: '#86868b' }}>
+          <span style={{ ...badgeBase, background: 'var(--surface-secondary)', color: 'var(--text-label)' }}>
             WHT {'\u221e'}
           </span>
         )}
@@ -927,17 +928,17 @@ function CopilotTooltip({ x, y, text }: { x: number; y: number; text: string }) 
         width: '260px',
         padding: '14px 16px',
         borderRadius: '16px',
-        background: 'rgba(255, 255, 255, 0.82)',
+        background: 'var(--glass-bg-heavy)',
         backdropFilter: 'blur(20px) saturate(180%)',
         WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        border: '1px solid rgba(255, 255, 255, 0.3)',
+        border: '1px solid var(--glass-border)',
         boxShadow: '0 12px 40px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.06)',
         pointerEvents: 'none',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
         <span style={{ fontSize: '12px' }}>{'\u2728'}</span>
-        <span style={{ fontSize: '11px', fontWeight: 600, color: '#86868b', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-label)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
           Strategy Copilot
         </span>
       </div>
@@ -945,7 +946,7 @@ function CopilotTooltip({ x, y, text }: { x: number; y: number; text: string }) 
         margin: 0,
         fontSize: '12px',
         lineHeight: 1.5,
-        color: '#3a3a3c',
+        color: 'var(--text-secondary)',
         fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif",
       }}>
         {text}
