@@ -10,6 +10,7 @@
  */
 
 import { useMemo, useCallback } from 'react';
+import { useTranslation, localizedName } from '@shared/lib/i18n';
 
 // ─── Inline Types ────────────────────────────────────────────────────────────
 
@@ -41,16 +42,7 @@ const OPTIONAL_COLUMNS: ReadonlyArray<{ id: string; label: string }> = [
   { id: 'tags', label: 'Management Tags' },
 ];
 
-const COLUMN_LABELS: Record<ColumnId, string> = {
-  date: 'Date',
-  flowType: 'Flow Type',
-  from: 'From',
-  to: 'To',
-  gross: 'Gross',
-  net: 'Net',
-  wht: 'WHT',
-  compliance: 'Compliance Status',
-};
+// To keep it simple, COLUMN_LABELS will be translated dynamically in the render loop
 
 // ─── Tailwind Classes ────────────────────────────────────────────────────────
 const twPanel = "flex flex-col gap-4 px-5 py-4 bg-white/70 dark:bg-slate-900/70 backdrop-blur-3xl border-b border-black/10 dark:border-white/10 font-sans";
@@ -92,6 +84,7 @@ export function FilterPanel(props: {
     onDateToChange,
     onOptionalColumnsChange,
   } = props;
+  const { t, lang } = useTranslation();
 
   const handleAddTag = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -149,20 +142,20 @@ export function FilterPanel(props: {
   return (
     <div className={twPanel}>
       <div className="text-[13px] font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-        <span className="text-indigo-500">❖</span> Query Builder
+        <span className="text-indigo-500">❖</span> {t('queryBuilder')}
       </div>
 
       <div className={twRow}>
         {/* Management Tags filter */}
         <div className={twField}>
-          <span className={twLabel}>Management Tags</span>
+          <span className={twLabel}>{t('managementTags')}</span>
           <select
             className={twSelect}
             onChange={handleAddTag}
             defaultValue=""
           >
             <option value="" disabled>
-              + Add tag...
+              {t('addTag')}
             </option>
             {availableTags
               .filter((t) => !selectedTags.includes(t))
@@ -188,40 +181,44 @@ export function FilterPanel(props: {
 
         {/* Zone filter */}
         <div className={twField}>
-          <span className={twLabel}>Jurisdiction / Zone</span>
+          <span className={twLabel}>{t('jurisdictionZone')}</span>
           <select
             className={twSelect}
             onChange={handleAddZone}
             defaultValue=""
           >
             <option value="" disabled>
-              + Add zone...
+              {t('addZone2')}
             </option>
             {availableZones
               .filter((z) => !selectedZoneIds.includes(z.id))
               .map((z) => (
                 <option key={z.id} value={z.id}>
-                  {z.name} ({z.jurisdiction})
+                  {localizedName(z.name, lang)} ({z.jurisdiction})
                 </option>
               ))}
           </select>
           {selectedZoneIds.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
-              {selectedZoneIds.map((id) => (
+              {selectedZoneIds.map((id) => {
+                const zMap = availableZones.find(z => z.id === id);
+                const displayName = zMap ? `${localizedName(zMap.name, lang)} (${zMap.jurisdiction})` : id;
+                return (
                 <span key={id} className={`${twChip} bg-emerald-500/10 text-emerald-700 dark:text-emerald-300`}>
-                  {zoneNameMap.get(id) ?? id}
+                  {displayName}
                   <span className={twChipIcon} onClick={() => handleRemoveZone(id)}>
                     ✕
                   </span>
                 </span>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
         {/* Date range */}
         <div className={twField}>
-          <span className={twLabel}>Date From</span>
+          <span className={twLabel}>{t('dateFrom')}</span>
           <input
             type="date"
             className={twInput}
@@ -230,7 +227,7 @@ export function FilterPanel(props: {
           />
         </div>
         <div className={twField}>
-          <span className={twLabel}>Date To</span>
+          <span className={twLabel}>{t('dateTo')}</span>
           <input
             type="date"
             className={twInput}
@@ -243,17 +240,20 @@ export function FilterPanel(props: {
       {/* Column Selector */}
       <div>
         <span className={twLabel}>
-          Columns
+          {t('columns')}
         </span>
         <div className="flex flex-wrap gap-2 mt-1">
-          {MANDATORY_COLUMNS.map((col) => (
-            <span
-              key={col}
-              className={`${twChip} bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 font-bold px-3`}
-            >
-              {COLUMN_LABELS[col]}
-            </span>
-          ))}
+          {MANDATORY_COLUMNS.map((col) => {
+            const colKey = 'col' + col.charAt(0).toUpperCase() + col.slice(1);
+            return (
+              <span
+                key={col}
+                className={`${twChip} bg-slate-200/50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 font-bold px-3`}
+              >
+                {t(colKey as any)}
+              </span>
+            );
+          })}
           {OPTIONAL_COLUMNS.map((col) => {
             const active = visibleOptionalColumns.includes(col.id);
             return (
@@ -267,7 +267,7 @@ export function FilterPanel(props: {
                 onClick={() => handleToggleOptionalColumn(col.id)}
               >
                 {active ? '✓ ' : '+ '}
-                {col.label}
+                {t(('col' + col.id.charAt(0).toUpperCase() + col.id.slice(1)) as any) || col.label}
               </span>
             );
           })}
@@ -277,5 +277,5 @@ export function FilterPanel(props: {
   );
 }
 
-export { MANDATORY_COLUMNS, OPTIONAL_COLUMNS, COLUMN_LABELS };
+export { MANDATORY_COLUMNS, OPTIONAL_COLUMNS };
 export type { ColumnId };

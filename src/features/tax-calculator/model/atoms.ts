@@ -117,6 +117,7 @@ const EMPTY_SUMMARY: GroupTaxSummary = {
   citLiabilities: [],
   whtLiabilities: [],
   totalCITBase: 0,
+  totalTopUpTaxBase: 0,
   totalWHTBase: 0,
   totalTaxBase: 0,
   totalIncomeBase: 0,

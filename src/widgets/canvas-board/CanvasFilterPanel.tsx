@@ -13,6 +13,7 @@ import { canvasFilterAtom } from '@features/canvas/model/canvas-filter-atom';
 import { zonesAtom } from '@entities/zone';
 import { nodesAtom } from '@entities/node';
 import type { FlowType } from '@shared/types';
+import { useTranslation, localizedName } from '@shared/lib/i18n';
 
 const ALL_FLOW_TYPES: FlowType[] = [
   'Services', 'Dividends', 'Royalties', 'Interest', 'Salary', 'Goods', 'Equipment',
@@ -50,6 +51,7 @@ export function CanvasFilterPanel() {
   const zones = useAtomValue(zonesAtom);
   const nodes = useAtomValue(nodesAtom);
   const [expanded, setExpanded] = useState(false);
+  const { t, lang } = useTranslation();
 
   // Collect unique management tags from all nodes
   const allTags = useMemo(() => {
@@ -140,7 +142,7 @@ export function CanvasFilterPanel() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
           </svg>
-          Filters{filter.isActive && hasFilters ? ' (ON)' : ''}
+          {t('filters')}{filter.isActive && hasFilters ? ` (${t('on')})` : ''}
         </button>
       )}
 
@@ -150,7 +152,7 @@ export function CanvasFilterPanel() {
           {/* Header */}
           <div className="flex justify-between items-center">
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-              Visibility Filters
+              {t('visibilityFilters')}
             </span>
             <button
               onClick={() => setExpanded(false)}
@@ -162,7 +164,7 @@ export function CanvasFilterPanel() {
 
           {/* Active toggle */}
           <div className="flex justify-between items-center py-1">
-            <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200">Enable Ghosting</span>
+            <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200">{t('enableGhosting')}</span>
             <button
               onClick={toggleActive}
               className={`relative w-9 h-5 rounded-full border-none cursor-pointer transition-colors ${
@@ -181,7 +183,7 @@ export function CanvasFilterPanel() {
           {allTags.length > 0 && (
             <div>
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                Tags
+                {t('tags')}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {allTags.map((tag) => (
@@ -200,13 +202,13 @@ export function CanvasFilterPanel() {
           {regimeZones.length > 0 && (
             <div>
               <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-                Zones
+                {t('zones')}
               </div>
               <div className="flex flex-wrap gap-1.5 max-h-[80px] overflow-y-auto pr-1">
                 {regimeZones.map((z) => (
                   <FilterChip
                     key={z.id}
-                    label={`${z.jurisdiction} / ${z.name}`}
+                    label={`${z.jurisdiction} / ${localizedName(z.name, lang)}`}
                     active={filter.zoneIds.includes(z.id)}
                     onClick={() => toggleZone(z.id)}
                   />
@@ -218,13 +220,13 @@ export function CanvasFilterPanel() {
           {/* Flow Types */}
           <div>
             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
-              Flow Types
+              {t('flowTypes')}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {ALL_FLOW_TYPES.map((ft) => (
                 <FilterChip
                   key={ft}
-                  label={ft}
+                  label={t(ft.toLowerCase() as any)}
                   active={filter.flowTypes.includes(ft)}
                   onClick={() => toggleFlowType(ft)}
                 />
@@ -238,7 +240,7 @@ export function CanvasFilterPanel() {
               onClick={clearAll}
               className="p-1 mt-1 text-[11px] font-bold text-red-500 hover:text-red-600 bg-transparent border-none cursor-pointer text-center active:scale-95 transition-all"
             >
-              Clear All Filters
+              {t('clearAllFilters')}
             </button>
           )}
         </div>

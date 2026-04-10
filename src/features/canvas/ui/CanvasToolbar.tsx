@@ -5,6 +5,7 @@ import { useCallback, useState, type RefObject } from 'react';
 import { addNodeAtom, addZoneAtom, autoLayoutAtom } from '../model/graph-actions-atom';
 import type { ViewportState } from './useCanvasViewport';
 import type { JurisdictionCode, CurrencyCode } from '@shared/types';
+import { useTranslation, localizedName } from '@shared/lib/i18n';
 
 interface CanvasToolbarProps {
   viewportRef: RefObject<HTMLDivElement | null>;
@@ -31,6 +32,7 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
   const addZone = useSetAtom(addZoneAtom);
   const autoLayout = useSetAtom(autoLayoutAtom);
   const [showZoneMenu, setShowZoneMenu] = useState(false);
+  const { t, lang } = useTranslation();
 
   const spawnCenter = useCallback((): { x: number; y: number } => {
     const vp = viewportRef.current;
@@ -74,20 +76,20 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
       className="absolute top-3 left-4 bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-xl shadow-black/5 dark:shadow-white/5 rounded-[20px] p-2.5 z-40 flex flex-col gap-1 w-[120px]"
     >
       <div className="text-[10px] text-slate-400 dark:text-slate-500 font-bold text-center mb-1 uppercase tracking-widest">
-        TOOLS
+        {t('tools')}
       </div>
       <button 
         onClick={handleAddCompany} 
         data-testid="btn-add-company" 
         className="w-full text-left px-3 py-2 text-[13px] font-semibold rounded-xl transition-all active:scale-95 bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 hover:bg-blue-500/20 dark:hover:bg-blue-500/30"
       >
-        + Company
+        {t('addCompany')}
       </button>
       <button 
         onClick={handleAddPerson} 
         className="w-full text-left px-3 py-2 text-[13px] font-semibold rounded-xl transition-all active:scale-95 bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 hover:bg-emerald-500/20 dark:hover:bg-emerald-500/30"
       >
-        + Person
+        {t('addPerson')}
       </button>
       <div className="relative w-full">
         <button
@@ -95,7 +97,7 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
           data-testid="btn-add-zone"
           className="w-full text-left px-3 py-2 text-[13px] font-semibold rounded-xl transition-all active:scale-95 bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 hover:bg-amber-500/20 dark:hover:bg-amber-500/30"
         >
-          + Zone
+          {t('addZone')}
         </button>
         {showZoneMenu && (
           <div
@@ -107,7 +109,7 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
                 onClick={() => handleAddZone(preset)}
                 className="block w-full text-left px-3 py-2 text-[13px] font-medium border-none bg-transparent cursor-pointer rounded-xl text-slate-800 dark:text-slate-200 transition-colors hover:bg-black/5 dark:hover:bg-white/10"
               >
-                {preset.name}
+                {localizedName(preset.name, lang)}
               </button>
             ))}
           </div>
@@ -117,10 +119,10 @@ export function CanvasToolbar({ viewportRef, viewportStateRef }: CanvasToolbarPr
       <button
         onClick={() => autoLayout()}
         data-testid="btn-auto-layout"
-        title="Arrange nodes into a hierarchy (Dagre)"
+        title={t('layoutHint')}
         className="w-full text-left px-3 py-2 text-[13px] font-semibold rounded-xl transition-all active:scale-95 bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 hover:bg-indigo-500/20 dark:hover:bg-indigo-500/30"
       >
-        Auto-Arrange
+        {t('autoArrange')}
       </button>
     </div>
   );

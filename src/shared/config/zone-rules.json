@@ -43,6 +43,15 @@
       "lawRef": "UAE_CT_LAW_2023_NONQFZP",
       "effectiveFrom": "2024-06-01",
       "effectiveTo": null
+    },
+    "HK_OFFSHORE": {
+      "jurisdiction": "HK",
+      "taxOverride": {
+        "cit": { "mode": "flat", "rate": 0.00, "currency": "HKD" }
+      },
+      "lawRef": "HK_IRO_S14_OFFSHORE_CLAIM",
+      "effectiveFrom": "1997-07-01",
+      "effectiveTo": null
     }
   },
 
@@ -50,8 +59,7 @@
     {
       "id": "KZ_SERVICES_GOODS_EQUIPMENT_EXEMPT",
       "match": {
-        "flowTypes": ["Goods", "Equipment", "Services"],
-        "sameJurisdiction": true
+        "flowTypes": ["Goods", "Equipment", "Services"]
       },
       "effect": {
         "rate": 0,

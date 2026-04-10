@@ -16,7 +16,8 @@ import { selectionAtom, nodeEditingAtom } from '../model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { deleteNodesAtom, deleteOwnershipAtom, updateNodeAtom, updateOwnershipAtom } from '@features/canvas/model/graph-actions-atom';
 import { useTranslation, localizedName, t } from '@shared/lib/i18n';
-import type { NodeDTO, OwnershipEdge, NodeType, Zone } from '@shared/types';
+import type { NodeDTO, OwnershipEdge, NodeType, Zone, Project } from '@shared/types';
+import { computeNexusFractionFromFlows } from '@shared/lib/engine/engine-tax';
 import {
   Dialog,
   DialogContent,
@@ -43,6 +44,7 @@ import {
 const GLASS_INPUT = 'bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus-visible:ring-2 focus-visible:ring-slate-500/30 focus-visible:border-slate-500/50 transition-all rounded-xl hover:bg-black/[0.07] dark:hover:bg-white/10 h-10 px-3 shadow-inner';
 const GLASS_SELECT = 'bg-black/5 border border-black/10 text-slate-900 dark:bg-white/5 dark:border-white/10 dark:text-slate-100 hover:bg-black/[0.07] dark:hover:bg-white/10 transition-all rounded-xl h-10 shadow-inner';
 const GLASS_LABEL = 'text-[12px] font-bold text-slate-500 tracking-wider uppercase mb-1.5 block ml-1';
+const GLASS_PANEL = 'rounded-2xl bg-white/40 border border-white/40 backdrop-blur-md shadow-sm dark:bg-slate-800/40 dark:border-slate-700/40';
 
 // ─── Form types ──────────────────────────────────────────────────────────────
 
@@ -54,7 +56,17 @@ interface NodeFormValues {
   citizenship: string;
   passiveIncomeShare: number;
   hasSubstance: boolean;
+  headcount: number;
+  operationalExpenses: number;
+  payrollCosts: number;
+  isIPIncome: boolean;
+  hasSeparateAccounting: boolean;
+  cigaInZone: boolean;
+  legalForm: string;
 }
+
+/** Zone codes that require substance metrics when hasSubstance is toggled on. */
+const SUBSTANCE_ZONE_CODES = new Set(['KZ_HUB', 'KZ_AIFC']);
 
 interface OwnershipFormValues {
   percent: number;
@@ -86,6 +98,7 @@ function ShareholdersSection({
   nodes: NodeDTO[];
   updateOwnership: (payload: { id: string; data: Partial<OwnershipEdge> }) => void;
 }) {
+  const { t } = useTranslation();
   const incomingEdges = ownership.filter((o) => o.toId === nodeId);
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
@@ -162,7 +175,7 @@ function ShareholdersSection({
 
   return (
     <div className="mt-4">
-      <Label className={GLASS_LABEL}>Shareholders</Label>
+      <Label className={GLASS_LABEL}>{t('shareholders')}</Label>
       <div className="mt-1.5 space-y-2">
         {shares.map((sh) => (
           <div key={sh.edgeId}>
@@ -188,14 +201,14 @@ function ShareholdersSection({
                   onClick={() => handleRedistributeProportionally(sh.edgeId)}
                   className="rounded-lg bg-blue-500/10 px-2.5 py-1 text-[11px] font-medium text-blue-600 hover:bg-blue-500/20 transition-colors"
                 >
-                  Redistribute proportionally
+                  {t('redistributeProportionally')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowRedistribute(null)}
                   className="rounded-lg bg-slate-500/10 px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-500/20 transition-colors"
                 >
-                  Manual
+                  {t('manual')}
                 </button>
               </div>
             )}
@@ -211,18 +224,18 @@ function ShareholdersSection({
             ? 'bg-amber-500/10 text-amber-600'
             : 'bg-emerald-500/10 text-emerald-600'
       }`}>
-        <span>Total</span>
+        <span>{t('total')}</span>
         <span>{total.toFixed(2)}%</span>
       </div>
 
       {isOver100 && (
         <p className="mt-1 text-[11px] text-red-500 font-medium">
-          Total exceeds 100%. Adjust shares before saving.
+          {t('totalExceeds100')}
         </p>
       )}
       {isUnder100 && (
         <p className="mt-1 text-[11px] text-amber-500 font-medium">
-          Warning: less than 100% allocated.
+          {t('warningUnder100')}
         </p>
       )}
 
@@ -235,7 +248,7 @@ function ShareholdersSection({
         onClick={handleSaveShares}
         className="mt-2 w-full text-[12px]"
       >
-        Save shares
+        {t('saveShares')}
       </Button>
     </div>
   );
@@ -247,31 +260,44 @@ function NodeEditor({
   node,
   control,
   register,
+  watch,
+  errors,
   projectZones,
-  lang: nodeLang,
   ownership,
   allNodes,
+  project,
   updateOwnership,
 }: {
   node: NodeDTO;
   control: ReturnType<typeof useForm<NodeFormValues>>['control'];
   register: ReturnType<typeof useForm<NodeFormValues>>['register'];
+  watch: ReturnType<typeof useForm<NodeFormValues>>['watch'];
+  errors: ReturnType<typeof useForm<NodeFormValues>>['formState']['errors'];
   projectZones: Zone[];
-  lang: import('@shared/lib/i18n').Language;
   ownership: OwnershipEdge[];
   allNodes: NodeDTO[];
+  project: Project;
   updateOwnership: (payload: { id: string; data: Partial<OwnershipEdge> }) => void;
 }) {
+  const { t, lang } = useTranslation();
   const zone = projectZones.find((z) => z.id === node.zoneId);
-  const watchType = node.type;
+  const watchType = watch('type');
+  const watchSubstance = watch('hasSubstance');
+  const watchIPIncome = watch('isIPIncome');
+  // Support both internal project codes and localized display names for robustness
+  const zCode = zone?.code || '';
+  const isSubstanceZone = zCode === 'KZ_HUB' || zCode === 'KZ_AIFC' || zCode.includes('Hub');
+
+  // Real-time Nexus calculation for indicator
+  const nexusFraction = watchIPIncome ? computeNexusFractionFromFlows(project, node) : null;
 
   return (
     <>
-      <Field label={t('name', nodeLang)}>
+      <Field label={t('name')}>
         <Input type="text" className={GLASS_INPUT} {...register('name')} />
       </Field>
 
-      <Field label="Type">
+      <Field label={t('type')}>
         <Controller
           name="type"
           control={control}
@@ -281,8 +307,8 @@ function NodeEditor({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="company">Company</SelectItem>
-                <SelectItem value="person">Person</SelectItem>
+                <SelectItem value="company">{t('company')}</SelectItem>
+                <SelectItem value="person">{t('person')}</SelectItem>
                 <SelectItem value="txa">TXA</SelectItem>
               </SelectContent>
             </Select>
@@ -291,15 +317,15 @@ function NodeEditor({
       </Field>
 
       {/* Spatial location — read-only badge (zone assignment is automatic via drag) */}
-      <Field label={t('locatedIn', nodeLang)}>
+      <Field label={t('locatedIn')}>
         <Badge variant={zone ? 'default' : 'destructive'} className="w-full justify-start px-3 py-2 text-[13px] font-medium">
           {zone
-            ? `${localizedName(zone.name, nodeLang)} (${zone.jurisdiction} \u00b7 ${zone.currency})`
-            : t('noZone', nodeLang)}
+            ? `${localizedName(zone.name, lang)} (${zone.jurisdiction} \u00b7 ${zone.currency})`
+            : t('noZone')}
         </Badge>
       </Field>
 
-      <Field label={t('annualIncome', nodeLang)}>
+      <Field label={t('annualIncome')}>
         <Input
           type="number"
           step="any"
@@ -309,7 +335,7 @@ function NodeEditor({
       </Field>
 
       {watchType === 'company' && (
-        <Field label={t('etrManual', nodeLang)}>
+        <Field label={t('etrManual')}>
           <Input
             type="number"
             step="0.01"
@@ -322,14 +348,14 @@ function NodeEditor({
       )}
 
       {watchType === 'person' && node.citizenship && (
-        <Field label={t('citizenship', nodeLang)}>
+        <Field label={t('citizenship')}>
           <Input type="text" className={GLASS_INPUT} {...register('citizenship')} />
         </Field>
       )}
 
       {watchType === 'company' && (
         <>
-          <Field label={t('passiveIncomeShare', nodeLang)}>
+          <Field label={t('passiveIncomeShare')}>
             <Input
               type="number"
               step="1"
@@ -339,27 +365,143 @@ function NodeEditor({
               {...register('passiveIncomeShare', { valueAsNumber: true })}
             />
           </Field>
-          <Field label={t('hasSubstance', nodeLang)}>
+ 
+          {/* Compliance toggles — always visible for Astana Hub / AIFC companies */}
+          {isSubstanceZone && (
+            <div className="ml-1 mb-4 space-y-3 rounded-xl border border-amber-400/30 bg-amber-50/50 dark:bg-amber-900/10 p-3">
+              <Field label={t('isIPIncome')}>
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[12px] font-medium text-slate-700 dark:text-slate-300">
+                      {t('isIPIncome')}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Controller
+                        name="isIPIncome"
+                        control={control}
+                        render={({ field }) => (
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        )}
+                      />
+                    </div>
+                  </div>
+                  {nexusFraction !== null && (
+                    <div className="flex flex-col items-end">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{t('nexusFraction')}</span>
+                      <Badge variant="outline" className="bg-blue-500/10 border-blue-500/20 text-blue-600 font-mono">
+                        {(nexusFraction * 100).toFixed(1)}%
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+              </Field>
+
+              <Field label={t('hasSubstance')}>
+                <Controller
+                  name="hasSubstance"
+                  control={control}
+                  render={({ field }) => (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-slate-600 dark:text-slate-400">{t('hasSubstance')}</span>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </div>
+                  )}
+                />
+              </Field>
+
+              {watchSubstance && (
+                <>
+                  <Field label={t('headcount')}>
+                    <Input 
+                      type="number" 
+                      {...register('headcount', { valueAsNumber: true })} 
+                      className={GLASS_INPUT} 
+                    />
+                  </Field>
+                  <Field label={t('operationalExpenses')}>
+                    <Input 
+                      type="number" 
+                      {...register('operationalExpenses', { valueAsNumber: true })} 
+                      className={GLASS_INPUT} 
+                    />
+                  </Field>
+                  <Field label={t('payrollCosts')}>
+                    <Input 
+                      type="number" 
+                      {...register('payrollCosts', { valueAsNumber: true })} 
+                      className={GLASS_INPUT} 
+                    />
+                  </Field>
+                </>
+              )}
+            </div>
+          )}
+
+          <Field label={t('legalForm')}>
             <Controller
-              name="hasSubstance"
+              name="legalForm"
               control={control}
               render={({ field }) => (
-                <div className="flex items-center gap-2 py-1">
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                  <span className="text-sm text-slate-600">
-                    {field.value ? t('yes', nodeLang) : t('no', nodeLang)}
-                  </span>
-                </div>
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger className={GLASS_SELECT}>
+                    <SelectValue placeholder={t('selectLegalForm')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LLC">{t('llc')}</SelectItem>
+                    <SelectItem value="JSC">{t('jsc')}</SelectItem>
+                    <SelectItem value="Branch">{t('branch')}</SelectItem>
+                    <SelectItem value="Representative">{t('representative')}</SelectItem>
+                    <SelectItem value="Partnership">{t('partnership')}</SelectItem>
+                    <SelectItem value="Trust">{t('trust')}</SelectItem>
+                    <SelectItem value="Foundation">{t('foundation')}</SelectItem>
+                    <SelectItem value="Other">{t('other')}</SelectItem>
+                  </SelectContent>
+                </Select>
               )}
             />
           </Field>
+ 
+          <div className="mt-8 space-y-4 border-t border-slate-200 pt-6 dark:border-slate-800">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t('taxRiskSummary')}</h3>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className={GLASS_PANEL + ' p-3'}>
+                <span className="text-[10px] text-slate-500 block mb-1">{t('effectiveETR')}</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-xl font-mono font-bold">{(node.etr * 100).toFixed(1)}%</span>
+                  {node.etr < 0.15 && (
+                    <Badge variant="outline" className="text-[9px] bg-red-500/10 text-red-600 border-red-500/20">
+                      {t('pillar2Risk')}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              
+              <div className={GLASS_PANEL + ' p-3'}>
+                <span className="text-[10px] text-slate-500 block mb-1">{t('jurisdiction')}</span>
+                <span className="text-sm font-semibold">{zone ? localizedName(zone.name, lang) : t('noZone')}</span>
+              </div>
+            </div>
+
+            {node.riskFlags && node.riskFlags.length > 0 && (
+              <div className="space-y-2">
+                {node.riskFlags.map((flag, idx) => (
+                  <div key={idx} className="flex items-start gap-2 rounded-lg bg-orange-500/5 p-2 border border-orange-500/10">
+                    <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
+                    <div>
+                      <p className="text-[11px] font-bold text-orange-700 dark:text-orange-400 leading-tight">
+                        {String(flag.type).replace(/_/g, ' ')}
+                      </p>
+                      {!!flag.message && <p className="text-[10px] text-slate-500 mt-0.5">{String(flag.message)}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </>
       )}
 
-      {/* Cap Table: Shareholders section */}
       <ShareholdersSection
         nodeId={node.id}
         ownership={ownership}
@@ -368,13 +510,13 @@ function NodeEditor({
       />
 
       <div className="mt-6 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/50 p-4 shadow-sm backdrop-blur-md">
-        <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">Technical Data</h4>
+        <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">{t('technicalData')}</h4>
         <div className="text-[12px] text-slate-800 dark:text-slate-200 space-y-1 font-mono">
           <p><span className="text-slate-500 dark:text-slate-400">ID:</span> {node.id}</p>
-          <p><span className="text-slate-500 dark:text-slate-400">Type:</span> {node.type}</p>
-          <p><span className="text-slate-500 dark:text-slate-400">Frozen:</span> {node.frozen ? 'Yes' : 'No'}</p>
-          {node.computedEtr != null && <p><span className="text-slate-500 dark:text-slate-400">Computed ETR:</span> {(node.computedEtr * 100).toFixed(2)}%</p>}
-          {node.computedCitKZT != null && <p><span className="text-slate-500 dark:text-slate-400">Computed CIT (KZT):</span> {node.computedCitKZT.toLocaleString('ru-RU')}</p>}
+          <p><span className="text-slate-500 dark:text-slate-400">{t('type')}:</span> {node.type}</p>
+          <p><span className="text-slate-500 dark:text-slate-400">{t('frozen')}:</span> {node.frozen ? t('yes') : t('no')}</p>
+          {node.computedEtr != null && <p><span className="text-slate-500 dark:text-slate-400">{t('computedEtr')}:</span> {(node.computedEtr * 100).toFixed(2)}%</p>}
+          {node.computedCitKZT != null && <p><span className="text-slate-500 dark:text-slate-400">{t('computedCitKzt')}:</span> {node.computedCitKZT.toLocaleString('ru-RU')}</p>}
         </div>
       </div>
     </>
@@ -388,9 +530,10 @@ function OwnershipEditor({
   edge: OwnershipEdge;
   register: ReturnType<typeof useForm<OwnershipFormValues>>['register'];
 }) {
+  const { t } = useTranslation();
   return (
     <>
-      <Field label="Ownership (%)">
+      <Field label={t('ownershipPercent')}>
         <Input
           type="number"
           step="0.01"
@@ -400,7 +543,7 @@ function OwnershipEditor({
           {...register('percent', { valueAsNumber: true })}
         />
       </Field>
-      <Field label="Manual Adjustment">
+      <Field label={t('manualAdjustment')}>
         <Input
           type="number"
           step="0.01"
@@ -409,7 +552,7 @@ function OwnershipEditor({
         />
       </Field>
       <div className="mt-4 rounded-xl bg-black/[0.03] p-3 text-[11px] text-gray-500">
-        ID: {edge.id}<br />Parent: {edge.fromId}<br />Subsidiary: {edge.toId}
+        ID: {edge.id}<br />{t('parent')}: {edge.fromId}<br />{t('subsidiary')}: {edge.toId}
       </div>
     </>
   );
@@ -438,9 +581,8 @@ export function EditorModal() {
   const updateNode = useSetAtom(updateNodeAtom);
   const updateOwnership = useSetAtom(updateOwnershipAtom);
   const [nodeEditing, setNodeEditing] = useAtom(nodeEditingAtom);
-  const { t: tr, lang } = useTranslation();
+  const { t, lang } = useTranslation();
 
-  // ─── Resolve entity from selection ──────────────────────────────────
   let entity: NodeDTO | OwnershipEdge | undefined;
   let entityKey: string | null = null;
   let isMultiNode = false;
@@ -459,16 +601,14 @@ export function EditorModal() {
   const isNode = selection?.type === 'node';
   const isOwnership = selection?.type === 'ownership';
 
-  // ─── react-hook-form for node editing ──────────────────────────────
   const nodeForm = useForm<NodeFormValues>({
-    defaultValues: { name: '', type: 'company', annualIncome: 0, etr: 0, citizenship: '', passiveIncomeShare: 0, hasSubstance: false },
+    defaultValues: { name: '', type: 'company', annualIncome: 0, etr: 0, citizenship: '', passiveIncomeShare: 0, hasSubstance: false, headcount: 0, operationalExpenses: 0, payrollCosts: 0, isIPIncome: false, hasSeparateAccounting: false, cigaInZone: false, legalForm: 'LLC' },
   });
 
   const ownershipForm = useForm<OwnershipFormValues>({
     defaultValues: { percent: 100, manualAdjustment: 0 },
   });
 
-  // Reset form when selected entity changes
   useEffect(() => {
     if (entity && isNode && 'name' in entity) {
       const n = entity as NodeDTO;
@@ -480,9 +620,16 @@ export function EditorModal() {
         citizenship: n.citizenship?.join(', ') ?? '',
         passiveIncomeShare: n.passiveIncomeShare ?? 0,
         hasSubstance: n.hasSubstance ?? false,
+        headcount: n.substanceMetrics?.headcount ?? 0,
+        operationalExpenses: n.substanceMetrics?.operationalExpenses ?? 0,
+        payrollCosts: n.substanceMetrics?.payrollCosts ?? 0,
+        isIPIncome: n.isIPIncome ?? false,
+        hasSeparateAccounting: n.hasSeparateAccounting ?? false,
+        cigaInZone: n.complianceData?.aifc?.cigaInZone ?? false,
+        legalForm: n.legalForm ?? 'LLC',
       });
     }
-  }, [entityKey, isNode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [entityKey, isNode]);
 
   useEffect(() => {
     if (entity && isOwnership && 'percent' in entity) {
@@ -492,9 +639,8 @@ export function EditorModal() {
         manualAdjustment: o.manualAdjustment,
       });
     }
-  }, [entityKey, isOwnership]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [entityKey, isOwnership]);
 
-  // ─── Gate: determine if modal should be open ───────────────────────
   const isOpen =
     !!selection &&
     !!project &&
@@ -503,7 +649,6 @@ export function EditorModal() {
     (selection.type !== 'node' || nodeEditing) &&
     (!!entity || isMultiNode);
 
-  // ─── Handlers ──────────────────────────────────────────────────────
   const handleClose = () => {
     setSelection(null);
     setNodeEditing(false);
@@ -518,7 +663,27 @@ export function EditorModal() {
       etr: values.etr,
       passiveIncomeShare: values.passiveIncomeShare,
       hasSubstance: values.hasSubstance,
+      isIPIncome: values.isIPIncome,
+      hasSeparateAccounting: values.hasSeparateAccounting,
+      legalForm: values.legalForm as any,
     };
+    if (values.hasSubstance && (values.headcount > 0 || values.operationalExpenses > 0 || values.payrollCosts > 0)) {
+      patch.substanceMetrics = {
+        headcount: values.headcount,
+        operationalExpenses: values.operationalExpenses,
+        payrollCosts: values.payrollCosts,
+      };
+    } else if (!values.hasSubstance) {
+      patch.substanceMetrics = undefined;
+    }
+    if (values.cigaInZone) {
+      const prev = (entity as NodeDTO)?.complianceData;
+      patch.complianceData = {
+        substance: prev?.substance ?? { employeesCount: 0, hasPhysicalOffice: false, cigaInZone: false },
+        aifc: { ...(prev?.aifc ?? { usesCITBenefit: true, cigaInZone: false }), cigaInZone: values.cigaInZone },
+        bvi: prev?.bvi ?? { relevantActivity: false, employees: 0, office: false },
+      };
+    }
     if (values.type === 'person' && values.citizenship) {
       patch.citizenship = values.citizenship.split(',').map((s) => s.trim()).filter(Boolean);
     }
@@ -546,12 +711,11 @@ export function EditorModal() {
     setNodeEditing(false);
   };
 
-  // ─── Label ─────────────────────────────────────────────────────────
   const label =
     isMultiNode && selection?.type === 'node'
-      ? `${selection.ids.length} ${tr('nodesSelected')}`
+      ? `${selection.ids.length} ${t('nodesSelected')}`
       : selection
-        ? (tr(ENTITY_LABEL_KEYS[selection.type] as Parameters<typeof tr>[0]) ?? selection.type)
+        ? (t(ENTITY_LABEL_KEYS[selection.type] as any) ?? selection.type)
         : '';
 
   return (
@@ -563,17 +727,16 @@ export function EditorModal() {
         <DialogHeader className="px-0 pt-0 pb-4">
           <DialogTitle>{label}</DialogTitle>
           <DialogDescription className="sr-only">
-            Edit properties for the selected canvas entity.
+            {t('editProperties')}
           </DialogDescription>
         </DialogHeader>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto flex flex-col gap-0">
           {isMultiNode ? (
             <div className="rounded-2xl bg-blue-500/6 p-3.5 text-[13px] text-blue-600">
-              <strong>{selection?.type === 'node' ? selection.ids.length : 0} nodes</strong> selected.
+              <strong>{selection?.type === 'node' ? selection.ids.length : 0} {t('nodes')}</strong> {t('selected')}.
               <br /><br />
-              Drag any selected node to move all. Press <kbd className="rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[11px]">Delete</kbd> to remove all.
+              {t('multiNodeHint')} <kbd className="rounded-md bg-blue-500/10 px-1.5 py-0.5 text-[11px]">Delete</kbd> {t('toRemoveAll')}
             </div>
           ) : entity ? (
             <>
@@ -582,10 +745,12 @@ export function EditorModal() {
                   node={entity as NodeDTO}
                   control={nodeForm.control}
                   register={nodeForm.register}
+                  watch={nodeForm.watch}
+                  errors={nodeForm.formState.errors}
                   projectZones={project?.zones ?? []}
-                  lang={lang}
                   ownership={project?.ownership ?? []}
                   allNodes={project?.nodes ?? []}
+                  project={project!}
                   updateOwnership={updateOwnership}
                 />
               )}
@@ -602,14 +767,14 @@ export function EditorModal() {
         {/* Footer */}
         <DialogFooter className="px-0 pt-6 mt-6 border-t border-slate-100 dark:border-slate-800">
           <Button variant="outline" onClick={handleDelete} data-testid="btn-delete-entity" className="bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 border-red-500/20 shadow-none hover:text-red-700 dark:hover:text-red-300 transition-colors">
-            {tr('delete')}
+            {t('delete')}
           </Button>
           <div className="flex-1" />
           <Button variant="outline" onClick={handleClose} className="bg-white/50 hover:bg-white/80 dark:bg-black/20 dark:hover:bg-white/10 border-black/5 dark:border-white/10">
-            {tr('cancel')}
+            {t('cancel')}
           </Button>
           <Button onClick={handleSave} data-testid="btn-save-entity" className="px-8 bg-slate-900 hover:bg-slate-800 text-white dark:bg-indigo-500 dark:text-white dark:hover:bg-indigo-600 shadow-md transition-all">
-            {tr('save')}
+            {t('save')}
           </Button>
         </DialogFooter>
       </DialogContent>

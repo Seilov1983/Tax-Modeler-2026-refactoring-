@@ -8,6 +8,7 @@
 import { useAtomValue } from 'jotai';
 import { memo, useCallback } from 'react';
 import { viewportAtom } from '../model/viewport-atom';
+import { useTranslation } from '@shared/lib/i18n';
 
 interface CanvasControlsProps {
   onZoomIn: () => void;
@@ -22,6 +23,7 @@ export const CanvasControls = memo(function CanvasControls({
 }: CanvasControlsProps) {
   const viewport = useAtomValue(viewportAtom);
   const percent = Math.round(viewport.scale * 100);
+  const { t } = useTranslation();
 
   const handleReset = useCallback(
     (e: React.MouseEvent) => {
@@ -40,14 +42,14 @@ export const CanvasControls = memo(function CanvasControls({
         onClick={onZoomOut}
         data-testid="btn-zoom-out"
         className="px-4 py-2 bg-transparent border-none text-[18px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 transition-colors active:bg-black/10 dark:active:bg-white/20"
-        title="Zoom Out"
+        title={t('zoomOut')}
       >
         &minus;
       </button>
 
       <div
         onClick={handleReset}
-        title="Reset zoom (double-click canvas)"
+        title={t('resetZoom')}
         className="px-3 py-2 text-[12px] font-mono font-bold text-slate-500 dark:text-slate-400 cursor-pointer flex items-center justify-center min-w-[56px] border-x border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors bg-black/5 dark:bg-white/5"
       >
         {percent}%
@@ -57,7 +59,7 @@ export const CanvasControls = memo(function CanvasControls({
         onClick={onZoomIn}
         data-testid="btn-zoom-in"
         className="px-4 py-2 bg-transparent border-none text-[18px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 transition-colors active:bg-black/10 dark:active:bg-white/20"
-        title="Zoom In"
+        title={t('zoomIn')}
       >
         +
       </button>

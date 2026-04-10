@@ -17,6 +17,7 @@ import {
   exportStructureBook,
   downloadMarkdown,
 } from '@shared/lib/engine';
+import { useTranslation } from '@shared/lib/i18n';
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ export function ExportReportButton() {
   const project = useAtomValue(projectAtom);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   const isReadOnly = project?.readOnly === true;
 
@@ -79,7 +81,7 @@ export function ExportReportButton() {
 
     // SECURITY BLOCKER: readOnly === true means hash chain is broken
     if (project.readOnly) {
-      showToast('Export disabled: Audit Log integrity compromised.');
+      showToast(t('exportDisabledAudit'));
       return;
     }
 
@@ -93,11 +95,11 @@ export function ExportReportButton() {
       downloadMarkdown(markdown, `structure-book-${ts}.md`);
     } catch (err) {
       console.error('[Export Report]', err);
-      showToast('Failed to generate Corporate Structure Book.');
+      showToast(t('failedToGenerateMd'));
     } finally {
       setLoading(false);
     }
-  }, [project, loading, showToast]);
+  }, [project, loading, showToast, t]);
 
   const currentStyle = isReadOnly || loading ? btnDisabledStyle : btnStyle;
 
@@ -108,8 +110,8 @@ export function ExportReportButton() {
         disabled={isReadOnly || loading}
         title={
           isReadOnly
-            ? 'Export disabled: Audit Log integrity compromised'
-            : 'Generate SHA-256 sealed Corporate Structure Book (Markdown)'
+            ? t('exportDisabledAudit')
+            : t('generateShaSealed')
         }
         style={currentStyle}
       >
@@ -125,7 +127,7 @@ export function ExportReportButton() {
         >
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         </svg>
-        {loading ? 'Generating...' : 'Export to Markdown'}
+        {loading ? t('generating') : t('exportToMd')}
       </button>
 
       {isReadOnly && !toast && (
@@ -140,7 +142,7 @@ export function ExportReportButton() {
             marginLeft: '8px',
           }}
         >
-          Audit Log integrity compromised
+          {t('auditLogCompromised')}
         </div>
       )}
 

@@ -26,6 +26,19 @@ export interface NexusFractionParams {
   rAcq: number;
 }
 
+/** Substance operational metrics for special-zone entities (Astana Hub, AIFC). */
+export interface SubstanceMetrics {
+  /** Full-time employees or equivalent headcount. */
+  headcount: number;
+  /** Annual operational expenses total (functional currency). */
+  operationalExpenses: number;
+  /** Specifically, payroll expenses (often a subset of OPEX, but tracked separately for Hub/AIFC). */
+  payrollCosts: number;
+}
+
+/** Nexus category tags for outflows from IP-income nodes. */
+export type NexusCategory = 'R_OUT_UNRELATED' | 'R_OUT_RELATED_FOR' | 'R_IP_ACQUISITION';
+
 // ─── Core Domain Types ───────────────────────────────────────────────────────
 
 export type JurisdictionCode =
@@ -42,6 +55,10 @@ export type NodeType = 'company' | 'person' | 'txa';
 
 export type CITMode =
   | 'flat' | 'threshold' | 'twoTier' | 'qfzp' | 'brackets' | 'smallProfits';
+
+export type LegalForm =
+  | 'LLC' | 'JSC' | 'Branch' | 'Representative' | 'Partnership'
+  | 'Trust' | 'Foundation' | 'Other';
 
 // ─── Tax Configuration (Law-as-Code declarative schema) ──────────────────────
 
@@ -237,6 +254,8 @@ export interface NodeDTO {
   passiveIncomeShare?: number;
   /** Whether the entity has real economic substance (employees, office, CIGA). */
   hasSubstance?: boolean;
+  /** Operational metrics backing the substance claim (headcount, OPEX). */
+  substanceMetrics?: SubstanceMetrics;
   /** Whether the entity's income qualifies as IP income (Astana Hub Nexus). */
   isIPIncome?: boolean;
   /** Nexus fraction parameters for Astana Hub IP income CIT reduction. */
@@ -245,6 +264,8 @@ export interface NodeDTO {
   hasSeparateAccounting?: boolean;
   /** Management-layer tags for dual-track analysis (shadow grouping). */
   managementTags?: string[];
+  /** Legal structure form (LLC, JSC, Trust, etc.) for tax characterization. */
+  legalForm?: LegalForm;
 }
 
 export interface AccountingYearData {
@@ -273,8 +294,12 @@ export interface FlowDTO {
   applyDTT?: boolean;
   /** Custom WHT rate (%) when a treaty rate overrides the domestic rate. */
   customWhtRate?: number;
+  /** Whether the recipient node is the beneficial owner (requirement for most DTT benefits). */
+  isBeneficialOwner?: boolean;
   isOffshoreSource?: boolean;
   isDirectExemptExpense?: boolean;
+  /** Nexus category for IP-income Nexus fraction calculation (Astana Hub outflows). */
+  nexusCategory?: NexusCategory;
   ack: {
     ackStatus: 'not_required' | 'required' | 'acknowledged';
     acknowledgedBy: string | null;
@@ -505,6 +530,12 @@ export interface EntityCITLiability {
   currency: CurrencyCode;
   /** Law reference for the CIT regime/override applied. */
   lawRef?: string | null;
+  /** Real effective tax rate computed as (Actual Tax / Income) (0–1). */
+  realEtr?: number;
+  /** Amount of Top-up Tax (to reach 15%) computed for this entity under Pillar 2. */
+  topUpTaxAmount?: number;
+  /** Whether this entity has been hit by the Pillar 2 (GloBE) minimum tax trigger. */
+  isPillarTwoAffected?: boolean;
 }
 
 /** Per-flow WHT liability computed by the tax engine. */
@@ -534,6 +565,8 @@ export interface GroupTaxSummary {
   whtLiabilities: FlowWHTLiability[];
   /** Sum of all CIT amounts, converted to project base currency. */
   totalCITBase: number;
+  /** Sum of all Top-up Tax amounts (Pillar 2) in project base currency. */
+  totalTopUpTaxBase: number;
   /** Sum of all WHT amounts, converted to project base currency. */
   totalWHTBase: number;
   /** Total tax burden (CIT + WHT) in project base currency. */

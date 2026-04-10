@@ -199,7 +199,7 @@ export function MasterDataSidebar() {
       cleanupGhost();
       const ghost = createGhostElement(
         `${COUNTRY_FLAGS[country.id] || ''} ${country.name}`,
-        `Country \u00b7 ${country.baseCurrency}`,
+        `${t('country', lang)} \u00b7 ${country.baseCurrency}`,
       );
       ghostRef.current = ghost;
       e.dataTransfer.setDragImage(ghost, 60, 24);
@@ -252,8 +252,8 @@ export function MasterDataSidebar() {
       (e.target as HTMLElement).style.cursor = 'grabbing';
 
       cleanupGhost();
-      const label = type === 'company' ? '\u{1F3E2} Company' : '\u{1F464} Person';
-      const ghost = createGhostElement(label, 'Drag to canvas');
+      const label = type === 'company' ? `\u{1F3E2} ${t('company', lang)}` : `\u{1F464} ${t('person', lang)}`;
+      const ghost = createGhostElement(label, t('dragToCanvas', lang));
       ghostRef.current = ghost;
       e.dataTransfer.setDragImage(ghost, 60, 24);
     },
@@ -418,7 +418,7 @@ export function MasterDataSidebar() {
         </div>
         {(['company', 'person'] as const).map((type) => {
           const icon = type === 'company' ? '\u{1F3E2}' : '\u{1F464}';
-          const label = type === 'company' ? 'Company' : 'Person';
+          const label = type === 'company' ? t('company', lang) : t('person', lang);
           return (
             <div
               key={type}
@@ -847,7 +847,7 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, on
             }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.7'; }}
-            title="Edit regime"
+            title={t('editRegimeHint', lang)}
           >
             {'\u270f\ufe0f'}
           </button>
@@ -890,16 +890,16 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, on
             color: '#c77c00',
             fontSize: '10px',
           }}
-          title="Substance requirements apply"
+          title={t('substanceReq', lang)}
           >
-            {'\u{1F6E1}'} Substance
+            {'\u{1F6E1}'} {t('substance', lang)}
           </span>
         )}
       </div>
 
       {/* Strategy Copilot Tooltip */}
       {tooltip && tooltipText && (
-        <CopilotTooltip x={tooltip.x} y={tooltip.y} text={tooltipText} />
+        <CopilotTooltip x={tooltip.x} y={tooltip.y} text={tooltipText} lang={lang} />
       )}
     </>
   );
@@ -907,7 +907,7 @@ function RegimeRow({ regime, countryName, onDragStart, onDragEnd, isEditMode, on
 
 // ─── Strategy Copilot Tooltip ───────────────────────────────────────────────
 
-function CopilotTooltip({ x, y, text }: { x: number; y: number; text: string }) {
+function CopilotTooltip({ x, y, text, lang }: { x: number; y: number; text: string; lang: 'en' | 'ru' }) {
   const spring = useSpring({
     from: { opacity: 0, transform: 'scale(0.96) translateX(-4px)' },
     to: { opacity: 1, transform: 'scale(1) translateX(0px)' },
@@ -939,7 +939,7 @@ function CopilotTooltip({ x, y, text }: { x: number; y: number; text: string }) 
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
         <span style={{ fontSize: '12px' }}>{'\u2728'}</span>
         <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-label)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-          Strategy Copilot
+          {t('strategyCopilot', lang)}
         </span>
       </div>
       <p style={{

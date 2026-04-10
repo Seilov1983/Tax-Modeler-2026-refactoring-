@@ -240,6 +240,24 @@ export function computeNexusFraction(params: NexusFractionParams): number {
 }
 
 /**
+ * Compute Nexus fraction from a node's substance OPEX and outgoing flow tags
+ * (R_OUT_UNRELATED, R_OUT_RELATED_FOR, R_IP_ACQUISITION). All amounts are
+ * converted to KZT for proportional aggregation.
+ */
+export function computeNexusFractionFromFlows(project: Project, node: NodeDTO): number {
+  const rUp = node.substanceMetrics?.operationalExpenses ?? 0;
+  let rOut1 = 0, rOut2 = 0, rAcq = 0;
+  for (const f of project.flows) {
+    if (f.fromId !== node.id || !f.nexusCategory) continue;
+    const amt = convert(project, Number(f.grossAmount || 0), f.currency, 'KZT');
+    if (f.nexusCategory === 'R_OUT_UNRELATED') rOut1 += amt;
+    else if (f.nexusCategory === 'R_OUT_RELATED_FOR') rOut2 += amt;
+    else if (f.nexusCategory === 'R_IP_ACQUISITION') rAcq += amt;
+  }
+  return computeNexusFraction({ rUp, rOut1, rOut2, rAcq });
+}
+
+/**
  * Compute Astana Hub CIT for a company with IP income.
  * If isIPIncome === true, the CIT exemption is scaled by the Nexus fraction K.
  * Non-IP income at the Hub gets a full 100% CIT reduction (0% CIT).
@@ -489,15 +507,19 @@ export function computeWht(p: Project, flow: FlowDTO, overrideRatePercent?: numb
   let appliedLawRef: string | null = null;
 
   // Apply WHT exemption rules from declarative JSON (replaces hardcoded if-chains)
+  // Match conditions are AND-ed: a rule with both flowTypes and sameJurisdiction
+  // matches only when BOTH conditions are true.
   for (const rule of zoneRules.whtExemptionRules) {
     const match = rule.match;
-    let matched = false;
+    // Skip rules with no conditions at all
+    if (!match.flowTypes && !match.sameJurisdiction) continue;
 
-    if (match.flowTypes && match.flowTypes.includes(flow.flowType as FlowType)) {
-      matched = true;
+    let matched = true;
+    if (match.flowTypes && !match.flowTypes.includes(flow.flowType as FlowType)) {
+      matched = false;
     }
-    if (match.sameJurisdiction && zPayer && zPayee && zPayer.jurisdiction === zPayee.jurisdiction) {
-      matched = true;
+    if (match.sameJurisdiction && !(zPayer && zPayee && zPayer.jurisdiction === zPayee.jurisdiction)) {
+      matched = false;
     }
 
     if (matched) {
@@ -877,6 +899,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
     citLiabilities,
     whtLiabilities,
     totalCITBase,
+    totalTopUpTaxBase: 0,
     totalWHTBase,
     totalTaxBase,
     totalIncomeBase,

@@ -19,6 +19,7 @@ import { EntityTaxTable } from '@entities/report/ui/EntityTaxTable';
 import { ExportReportButton } from '@features/export-report/ui/ExportReportButton';
 import { exportReportPdf } from '@features/project-management/model/export-pdf';
 import type { LedgerRow } from '@entities/report/ui/LedgerTable';
+import { useTranslation } from '@shared/lib/i18n';
 
 // ─── Tailwind Classes ────────────────────────────────────────────────────────
 const twRoot = "fixed top-[54px] left-0 right-0 bottom-0 flex flex-col bg-slate-50 dark:bg-slate-900 font-sans overflow-hidden";
@@ -35,6 +36,7 @@ export function ReportsBuilder() {
   const project = useAtomValue(projectAtom);
   const showNotification = useSetAtom(showNotificationAtom);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const { t } = useTranslation();
 
   const handleExportPdf = useCallback(async () => {
     if (!project || pdfLoading) return;
@@ -43,7 +45,7 @@ export function ReportsBuilder() {
       await exportReportPdf(project);
     } catch (err) {
       console.error('[PDF Export]', err);
-      showNotification({ type: 'error', message: 'Ошибка экспорта PDF: ' + ((err as Error).message || 'Граф слишком велик или недоступен') });
+      showNotification({ type: 'error', message: t('pdfExportError') + ((err as Error).message || 'Graph too large or unavailable') });
     } finally {
       setPdfLoading(false);
     }
@@ -232,7 +234,7 @@ export function ReportsBuilder() {
   if (!project) {
     return (
       <div className={`${twRoot} items-center justify-center`}>
-        <span className="text-slate-500 text-sm">No project loaded.</span>
+        <span className="text-slate-500 text-sm">{t('noProjectLoaded')}</span>
       </div>
     );
   }
@@ -241,7 +243,7 @@ export function ReportsBuilder() {
     <div className={twRoot}>
       {/* Header bar with title + export button */}
       <div className={twHeaderBar}>
-        <span className={twTitle}>Reports</span>
+        <span className={twTitle}>{t('reports')}</span>
         <div className="flex items-center gap-2">
           <button
             onClick={handleExportPdf}
@@ -270,7 +272,7 @@ export function ReportsBuilder() {
               <line x1="16" y1="17" x2="8" y2="17" />
               <polyline points="10 9 9 9 8 9" />
             </svg>
-            {pdfLoading ? 'Generating...' : 'Export to PDF'}
+            {pdfLoading ? t('generating') : t('exportToPdf')}
           </button>
           <ExportReportButton />
         </div>
@@ -295,11 +297,11 @@ export function ReportsBuilder() {
       {/* Summary statistics bar */}
       <div className={twStatRow}>
         <div className={twStat}>
-          <span className={twStatLabel}>Flows</span>
+          <span className={twStatLabel}>{t('flows')}</span>
           <span className={twStatValue}>{stats.flowCount}</span>
         </div>
         <div className={twStat}>
-          <span className={twStatLabel}>Total Gross</span>
+          <span className={twStatLabel}>{t('totalGross')}</span>
           <span className={twStatValue}>
             {stats.totalGross.toLocaleString('en-US', {
               minimumFractionDigits: 2,
@@ -308,7 +310,7 @@ export function ReportsBuilder() {
           </span>
         </div>
         <div className={twStat}>
-          <span className={twStatLabel}>Total WHT</span>
+          <span className={twStatLabel}>{t('totalWht')}</span>
           <span className={twStatValue}>
             {stats.totalWht.toLocaleString('en-US', {
               minimumFractionDigits: 2,
@@ -317,7 +319,7 @@ export function ReportsBuilder() {
           </span>
         </div>
         <div className={twStat}>
-          <span className={twStatLabel}>Violations</span>
+          <span className={twStatLabel}>{t('violations')}</span>
           <span
             className={`${twStatValue} ${stats.violations > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}
           >

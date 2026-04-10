@@ -11,6 +11,7 @@
  */
 
 import { useMemo } from 'react';
+import { useTranslation, localizedName } from '@shared/lib/i18n';
 
 // ─── Inline Types ────────────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ export function LedgerTable(props: {
   visibleOptionalColumns: ReadonlyArray<string>;
 }) {
   const { rows, visibleOptionalColumns } = props;
+  const { t, lang } = useTranslation();
 
   // Mandatory sort: chronological by flowDate → flowId
   const sorted = useMemo(() => {
@@ -81,7 +83,7 @@ export function LedgerTable(props: {
   if (sorted.length === 0) {
     return (
       <div className={twEmpty}>
-        No flows match the current filters.
+        {t('noFlowsMatch')}
       </div>
     );
   }
@@ -91,18 +93,18 @@ export function LedgerTable(props: {
       <table className={twTable}>
         <thead>
           <tr>
-            <th className={twTh}>Date</th>
-            <th className={twTh}>Flow Type</th>
-            <th className={twTh}>From</th>
-            <th className={twTh}>To</th>
-            <th className={`${twTh} text-right`}>Gross</th>
-            <th className={`${twTh} text-right`}>Net</th>
-            <th className={`${twTh} text-right`}>WHT</th>
-            <th className={twTh}>Compliance Status</th>
-            {showCurrency && <th className={twTh}>Currency</th>}
-            {showDtt && <th className={twTh}>DTT Applied</th>}
-            {showZone && <th className={twTh}>Zone</th>}
-            {showTags && <th className={twTh}>Tags</th>}
+            <th className={twTh}>{t('colDate')}</th>
+            <th className={twTh}>{t('colFlowType')}</th>
+            <th className={twTh}>{t('colFrom')}</th>
+            <th className={twTh}>{t('colTo')}</th>
+            <th className={`${twTh} text-right`}>{t('colGross')}</th>
+            <th className={`${twTh} text-right`}>{t('colNet')}</th>
+            <th className={`${twTh} text-right`}>{t('colWht')}</th>
+            <th className={twTh}>{t('colCompliance')}</th>
+            {showCurrency && <th className={twTh}>{t('colCurrency')}</th>}
+            {showDtt && <th className={twTh}>{t('colDttApplied')}</th>}
+            {showZone && <th className={twTh}>{t('colZone')}</th>}
+            {showTags && <th className={twTh}>{t('colTags')}</th>}
           </tr>
         </thead>
         <tbody>
@@ -126,7 +128,7 @@ export function LedgerTable(props: {
                       : 'bg-red-500/10 text-red-700 dark:text-red-400'
                   }`}
                 >
-                  {row.complianceStatus}
+                  {row.complianceStatus === 'OK' ? t('statusOk') : t('violationAcknowledged')}
                 </span>
               </td>
               {showCurrency && <td className={twTd}>{row.currency}</td>}

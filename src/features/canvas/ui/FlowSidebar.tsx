@@ -16,6 +16,7 @@ import { projectAtom } from '@features/canvas/model/project-atom';
 import { deleteFlowAtom } from '@features/canvas/model/graph-actions-atom';
 import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
 import type { FlowType, CurrencyCode } from '@shared/types';
+import { useTranslation } from '@shared/lib/i18n';
 
 // ─── Zod 4 Schema ────────────────────────────────────────────────────────────
 
@@ -43,6 +44,7 @@ export function FlowSidebar() {
   const [project, setProject] = useAtom(projectAtom);
   const deleteFlow = useSetAtom(deleteFlowAtom);
   const commitHistory = useSetAtom(commitHistoryAtom);
+  const { t } = useTranslation();
 
   const flow = selection?.type === 'flow'
     ? project?.flows.find((f) => f.id === selection.id)
@@ -119,7 +121,7 @@ export function FlowSidebar() {
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-        <span className="text-sm font-bold text-gray-800">Edit Flow</span>
+        <span className="text-sm font-bold text-gray-800">{t('editFlow')}</span>
         <button
           onClick={handleCancel}
           className="border-none bg-none text-lg leading-none text-gray-500 hover:text-gray-800 cursor-pointer"
@@ -139,14 +141,14 @@ export function FlowSidebar() {
           {/* Flow Type */}
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-              Flow Type
+              {t('flowType')}
             </label>
             <select
               {...register('flowType')}
               className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
             >
               {FLOW_TYPES.map((ft) => (
-                <option key={ft} value={ft}>{ft}</option>
+                <option key={ft} value={ft}>{t(ft.toLowerCase() as any)}</option>
               ))}
             </select>
             {errors.flowType && <p className="mt-0.5 text-xs text-red-500">{errors.flowType.message}</p>}
@@ -155,7 +157,7 @@ export function FlowSidebar() {
           {/* Gross Amount */}
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-              Gross Amount
+              {t('grossAmount')}
             </label>
             <input
               type="number"
@@ -170,7 +172,7 @@ export function FlowSidebar() {
           {/* Currency */}
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-              Currency
+              {t('currency')}
             </label>
             <select
               {...register('currency')}
@@ -185,7 +187,7 @@ export function FlowSidebar() {
           {/* WHT Rate */}
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-              WHT Rate (0-1)
+              {t('whtRate')}
             </label>
             <input
               type="number"
@@ -201,27 +203,27 @@ export function FlowSidebar() {
           {/* Payment Method */}
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-              Payment Method
+              {t('paymentMethod')}
             </label>
             <select
               {...register('paymentMethod')}
               className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
             >
-              <option value="bank">Bank</option>
-              <option value="cash">Cash</option>
-              <option value="crypto">Crypto</option>
+              <option value="bank">{t('bank')}</option>
+              <option value="cash">{t('cash')}</option>
+              <option value="crypto">{t('crypto')}</option>
             </select>
           </div>
 
           {/* Deal Tag */}
           <div>
             <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500">
-              Deal Tag
+              {t('dealTag')}
             </label>
             <input
               type="text"
               {...register('dealTag')}
-              placeholder="Optional tag"
+              placeholder={t('optionalTag')}
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
             />
           </div>
@@ -243,7 +245,7 @@ export function FlowSidebar() {
             onClick={handleDelete}
             className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-100 cursor-pointer transition-colors"
           >
-            Delete
+            {t('delete')}
           </button>
           <div className="flex-1" />
           <button
@@ -251,14 +253,14 @@ export function FlowSidebar() {
             onClick={handleCancel}
             className="rounded border border-gray-300 bg-gray-100 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 cursor-pointer transition-colors"
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             type="submit"
             disabled={!isDirty}
             className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 cursor-pointer transition-colors"
           >
-            Save
+            {t('save')}
           </button>
         </div>
       </form>

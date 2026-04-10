@@ -4,6 +4,7 @@ import { useAtomValue } from 'jotai';
 import { Suspense, useState } from 'react';
 import { accountingLedgerAtom } from '../model/atoms';
 import type { LedgerRow } from '../model/atoms';
+import { useTranslation, localizedName } from '@shared/lib/i18n';
 
 function formatAmount(amount: number, currency: string): string {
   return `${amount.toFixed(2)} ${currency}`;
@@ -11,11 +12,12 @@ function formatAmount(amount: number, currency: string): string {
 
 function AuditLogTable() {
   const { entries, pipelineSteps, baseCurrency } = useAtomValue(accountingLedgerAtom);
+  const { t, lang } = useTranslation();
 
   if (!entries || entries.length === 0) {
     return (
       <div className="p-6 text-[13px] font-medium text-slate-500 dark:text-slate-400">
-        No tax entries recorded yet.
+        {t('noEntries')}
         {pipelineSteps.length > 0 && (
           <div className="mt-2 text-[11px] font-mono text-slate-400 dark:text-slate-500">
             Pipeline ran {pipelineSteps.length} step(s): {pipelineSteps.map((s) => s.name).join(' → ')}
@@ -29,14 +31,14 @@ function AuditLogTable() {
     <table className="w-full text-left border-collapse">
       <thead className="bg-black/5 dark:bg-white/5 sticky top-0 backdrop-blur-md z-10">
         <tr>
-          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap">Tax Type</th>
-          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap">Payer</th>
-          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap">Zone</th>
-          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-right">Amount ({baseCurrency})</th>
-          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-right">Amount (Func.)</th>
-          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-right">Amount (Orig.)</th>
-          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-center">FX Date</th>
-          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-center">Status</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap">{t('taxType')}</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap">{t('payer')}</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap">{t('zone')}</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-right">{t('amount')} ({baseCurrency})</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-right">{t('amount')} (Func.)</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-right">{t('amount')} (Orig.)</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-center">{t('fxDate')}</th>
+          <th className="px-4 py-2 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest border-b border-black/5 dark:border-white/5 whitespace-nowrap text-center">{t('status')}</th>
         </tr>
       </thead>
       <tbody>
@@ -73,6 +75,7 @@ function AuditLogTable() {
 
 export function AuditLogPanel() {
   const [isOpen, setIsOpen] = useState(false);
+  const { t } = useTranslation();
 
   return (
     <div 
@@ -86,19 +89,19 @@ export function AuditLogPanel() {
       >
         <div className="flex items-center gap-2">
           <span className="font-bold text-[12px] uppercase tracking-widest text-slate-600 dark:text-slate-300">
-            Audit Log & Accounting
+            {t('auditLogTitle')}
           </span>
           <span className="bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400 px-2 py-0.5 rounded-full text-[10px] font-bold">LIVE</span>
         </div>
         <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-          {isOpen ? '▼ Close' : '▲ Open'}
+          {isOpen ? `▼ ${t('close')}` : `▲ ${t('open')}`}
         </span>
       </div>
 
       {isOpen && (
         <Suspense fallback={
           <div className="p-4 text-[13px] font-semibold text-slate-400 dark:text-slate-500 animate-pulse">
-            Generating ledger...
+            {t('generatingLedger')}
           </div>
         }>
           <div className="flex-1 overflow-auto w-full relative">

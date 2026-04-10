@@ -26,6 +26,7 @@ import { projectAtom } from '@features/canvas';
 import { generateAuditSnapshot } from '@shared/lib/engine';
 import { MessageSquare, X, Send, Sparkles, AlertTriangle, Check } from 'lucide-react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
+import { useTranslation } from '@shared/lib/i18n';
 
 /** Extract concatenated text from UIMessage parts. */
 function getMessageText(msg: UIMessage): string {
@@ -108,6 +109,7 @@ export function AICopilotChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation();
 
   const nodes = useAtomValue(nodesAtom);
   const zones = useAtomValue(zonesAtom);
@@ -186,7 +188,7 @@ export function AICopilotChat() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        title="Ask AI Copilot"
+        title={t('askAiCopilot')}
         className="fixed bottom-12 right-6 z-50 w-12 h-12 rounded-full bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] flex items-center justify-center text-indigo-500 cursor-pointer transition-all hover:scale-105 hover:shadow-[0_12px_40px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] active:scale-95"
       >
         <Sparkles size={22} />
@@ -205,15 +207,15 @@ export function AICopilotChat() {
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-indigo-500" />
           <span className="text-[14px] font-bold text-slate-800 dark:text-slate-200">
-            AI Tax Advisor
+            {t('aiTaxAdvisor')}
           </span>
           {canvasHash && (
             <span
               className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold shadow-[0_0_8px_rgba(16,185,129,0.15)]"
-              title="AI has real-time access to your canvas structure"
+              title={t('canvasSyncHint')}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.8)]" />
-              Canvas synced ({canvasHash.slice(0, 7)})
+              {t('canvasSynced')} ({canvasHash.slice(0, 7)})
             </span>
           )}
         </div>
@@ -233,9 +235,9 @@ export function AICopilotChat() {
         {messages.length === 0 && !isError && (
           <div className="text-center text-slate-400 mt-10 text-[13px]">
             <MessageSquare size={28} className="mx-auto mb-3 opacity-40" />
-            <p className="m-0 font-bold text-slate-500">Ask about your tax structure</p>
+            <p className="m-0 font-bold text-slate-500">{t('askAboutStructure')}</p>
             <p className="mt-2 text-[12px] leading-relaxed">
-              I can analyze ETR, CFC risks, WHT optimization, and Pillar 2 exposure for your current model.
+              {t('aiCapabilities')}
             </p>
           </div>
         )}
@@ -366,7 +368,7 @@ export function AICopilotChat() {
 
         {isLoading && messages[messages.length - 1]?.role === 'user' && (
           <div className="self-start px-3.5 py-2.5 rounded-[16px_16px_16px_4px] bg-black/5 dark:bg-white/5 text-[13px] text-slate-500 animate-pulse">
-            Thinking...
+            {t('thinking')}
           </div>
         )}
 
@@ -389,7 +391,7 @@ export function AICopilotChat() {
         <input
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          placeholder="Ask about ETR, CFC, WHT..."
+          placeholder={t('askPlaceholder')}
           className="flex-1 px-3.5 py-2 text-[13px] border border-black/5 dark:border-white/10 rounded-xl bg-white/50 dark:bg-slate-900/50 outline-none text-slate-800 dark:text-slate-200 transition-colors focus:border-indigo-500/50 focus:bg-white dark:focus:bg-slate-900"
           disabled={isLoading}
         />

@@ -5,7 +5,12 @@
 
 import { uid, bankersRound2, numOrNull, isoDate, nowIso } from './utils';
 import { getZone, getNode, listPersons, listCompanies, convert } from './engine-core';
-import { effectiveZoneTax, whtDefaultPercentForFlow, effectiveEtrForCompany, resolveMRP } from './engine-tax';
+import {
+  effectiveZoneTax,
+  whtDefaultPercentForFlow,
+  effectiveEtrForCompany,
+  resolveMRP,
+} from './engine-tax';
 import type { Project, NodeDTO, FlowDTO, Zone, FlowType } from '@shared/types';
 
 // ─── Frozen Threshold ────────────────────────────────────────────────────────
@@ -176,7 +181,7 @@ export function recomputeRisks(p: Project): void {
   }
 
   // ── SUBSTANCE_BREACH: BVI and other offshore jurisdictions requiring substance ──
-  const offshoreSubstanceJurisdictions = ['BVI', 'CAY', 'SEY'];
+  const offshoreSubstanceJurisdictions = ['BVI', 'CAY', 'SEY', 'HK'];
   listCompanies(p).forEach((co) => {
     const z = getZone(p, co.zoneId);
     if (!z) return;
@@ -190,9 +195,7 @@ export function recomputeRisks(p: Project): void {
     }
 
     // Generic offshore substance check: any node in offshore jurisdiction without proven substance
-    // Default assumption: companies in offshore jurisdictions lack substance unless explicitly set
     if (offshoreSubstanceJurisdictions.includes(z.jurisdiction) && !co.hasSubstance) {
-      // Avoid duplicate BVI_SUBSTANCE_BREACH — only flag if not already flagged by BVI-specific check
       const alreadyFlagged = co.riskFlags.some(
         (r) => r.type === 'SUBSTANCE_BREACH' && (r.lawRef === 'APP_G_G1_BVI_SUBSTANCE' || r.lawRef === 'KZ_CFC_SUBSTANCE'),
       );
@@ -214,8 +217,6 @@ export function recomputeRisks(p: Project): void {
   });
 
   // ── Pillar Two Exposure Risk (PILLAR2_TRIGGER) ────────────────────────────
-  // Trigger if global group revenue > 750M EUR AND local jurisdiction ETR < 15%.
-  // Does NOT calculate HKMTT Top-up Tax.
   const rev = numOrNull(p.group?.consolidatedRevenueEur);
   const pillarTwoInScope = p.isPillarTwoScope || (rev != null && rev > 750_000_000);
   if (pillarTwoInScope) {
@@ -236,12 +237,131 @@ export function recomputeRisks(p: Project): void {
     }
   }
 
-  (p.flows || []).forEach((f) => {
+  // ── CAPITAL_ANOMALY: outgoing flows exceed available capital after CIT ──
+  {
+    const companies = listCompanies(p);
+    for (const co of companies) {
+      const z = getZone(p, co.zoneId);
+      if (!z) continue;
+      let netIncoming = 0;
+      let totalOutgoing = 0;
+      for (const f of p.flows) {
+        const gross = Number(f.grossAmount || 0);
+        if (gross <= 0) continue;
+        if (f.toId === co.id) {
+          const payer = getNode(p, f.fromId);
+          const payerZone = payer ? getZone(p, payer.zoneId) : null;
+          let whtRate = 0;
+          if (payerZone && payerZone.jurisdiction !== z.jurisdiction) {
+            const payerZoneTax = effectiveZoneTax(p, payerZone);
+            whtRate = whtDefaultPercentForFlow(payerZoneTax, f.flowType) / 100;
+          }
+          const wht = gross * whtRate;
+          netIncoming += convert(p, gross - wht, f.currency, z.currency);
+        }
+        if (f.fromId === co.id) {
+          totalOutgoing += convert(p, gross, f.currency, z.currency);
+        }
+      }
+      if (netIncoming <= 0) continue;
+      const explicitIncome = Number(co.annualIncome || 0);
+      const income = explicitIncome > 0 ? explicitIncome : netIncoming;
+      const etr = effectiveEtrForCompany(p, co);
+      const estimatedCIT = Math.max(0, income) * etr;
+      const available = income - estimatedCIT;
+      if (totalOutgoing > available && totalOutgoing > 0) {
+        co.riskFlags.push({
+          type: 'CAPITAL_ANOMALY',
+          available: bankersRound2(available),
+          outgoing: bankersRound2(totalOutgoing),
+          deficit: bankersRound2(totalOutgoing - available),
+          lawRef: 'CAPITAL_ANOMALY_DETECTION',
+          message: `Outgoing flows (${bankersRound2(totalOutgoing)}) exceed available capital after estimated CIT (${bankersRound2(available)}).`,
+        });
+      }
+    }
+  }
+
+  // ── SUBSTANCE_EXPENSE_MISMATCH: income > 100x OPEX when substance claimed ──
+  {
+    for (const co of listCompanies(p)) {
+      if (!co.hasSubstance) continue;
+      const opex = co.substanceMetrics?.operationalExpenses ?? 0;
+      if (opex <= 0) continue;
+      let totalIncome = Number(co.annualIncome || 0);
+      if (totalIncome <= 0) {
+        for (const f of p.flows) {
+          const gross = Number(f.grossAmount || 0);
+          if (gross <= 0) continue;
+          if (f.toId === co.id) totalIncome += convert(p, gross, f.currency, 'KZT');
+          if (f.fromId === co.id) totalIncome -= convert(p, gross, f.currency, 'KZT');
+        }
+        totalIncome = Math.max(0, totalIncome);
+      }
+      if (totalIncome > opex * 100) {
+        co.riskFlags.push({
+          type: 'SUBSTANCE_EXPENSE_MISMATCH',
+          ratio: Math.round(totalIncome / opex),
+          message: `Income (${bankersRound2(totalIncome)}) is ${Math.round(totalIncome / opex)}x OPEX (${bankersRound2(opex)}).`,
+        });
+      }
+    }
+  }
+
+  // ── TP_SCANNER: Related Party and HK Transit Checks ─────────────────────
+  p.flows.forEach((f) => {
     if (['Goods', 'Equipment', 'Services', 'Royalties'].includes(f.flowType) && isRelatedParty(p, f.fromId, f.toId)) {
       const pZ = getZone(p, getNode(p, f.fromId)?.zoneId);
       const payeeZ = getZone(p, getNode(p, f.toId)?.zoneId);
       if (pZ && payeeZ && pZ.jurisdiction !== payeeZ.jurisdiction) {
         getNode(p, f.fromId)?.riskFlags.push({ type: 'TRANSFER_PRICING_RISK', lawRef: 'KZ_LAW_ON_TP', flowId: f.id });
+      }
+    }
+  });
+
+  listCompanies(p).forEach((co) => {
+    const z = getZone(p, co.zoneId);
+    if (!z || z.jurisdiction !== 'HK') return;
+    let totalServiceOut = 0;
+    p.flows.forEach((f) => {
+      if (f.fromId === co.id && f.flowType === 'Services') {
+        totalServiceOut += convert(p, Number(f.grossAmount || 0), f.currency, z.currency);
+      }
+    });
+    const income = Number(co.annualIncome || 0);
+    if (income > 0 && totalServiceOut > income * 0.3) {
+      co.riskFlags.push({
+        type: 'TRANSFER_PRICING_RISK', lawRef: 'HK_IR_DIPN_46',
+        ratio: Math.round((totalServiceOut / income) * 100),
+        message: `High Service/Income Ratio (${Math.round((totalServiceOut / income) * 100)}%).`,
+      });
+    }
+  });
+
+  // ── TP_SCANNER: Arm's-Length Price Monitoring (OECD Guidelines) ────────
+  p.flows.forEach((f) => {
+    if (!isRelatedParty(p, f.fromId, f.toId)) return;
+    
+    // Check for "Aggressive Scaling" (e.g. Services priced low/high to shift profits)
+    // Benchmarks: Services 10-15% margin, Goods variable.
+    // For now, flagging if 'Services' flow is missing a proper dealTag or has abnormal taxAdjustments.
+    if (f.flowType === 'Services') {
+      const payer = getNode(p, f.fromId);
+      const payee = getNode(p, f.toId);
+      if (payer && payee && payer.zoneId !== payee.zoneId) {
+        // Multi-jurisdictional service flow between related parties
+        const hasRisk = (f.grossAmount > 1_000_000 && !f.dealTag);
+        if (hasRisk) {
+          f.compliance = f.compliance || { applicable: true, exceeded: false };
+          f.compliance.exceeded = true;
+          f.compliance.violationType = (f.compliance.violationType ? f.compliance.violationType + ' & ' : '') + 'TP_ARM_LENGTH_POTENTIAL_BREACH';
+          payer.riskFlags.push({
+            type: 'TRANSFER_PRICING_RISK',
+            lawRef: 'OECD_TP_GUIDELINES_CH1',
+            message: `Cross-border service flow (>1M) without documented pricing policy (dealTag).`,
+            flowId: f.id
+          });
+        }
       }
     }
   });
@@ -261,7 +381,6 @@ export function checkCashLimit(p: Project, flow: FlowDTO) {
   const payer = getNode(p, flow.fromId);
   if (!payer || !cashLimitApplicable(p, flow)) return { applicable: false };
   const z = getZone(p, payer.zoneId)!;
-  // Use MRP from Zod-validated temporal data for 1000 MRP cash limit
   const flowDate = flow.flowDate || p.fx?.fxDate || '2026-01-01';
   const mrp = resolveMRP(flowDate);
   const threshold = 1000 * mrp;
@@ -353,7 +472,6 @@ export function updateFlowCompliance(p: Project, flow: FlowDTO): void {
     flow.ack.ackStatus = flow.ack.ackStatus === 'acknowledged' ? 'acknowledged' : 'required';
   }
 
-  // FSIE / Offshore income risk flags
   const toNode = getNode(p, flow.toId);
   if (flow.isOffshoreSource && toNode) {
     toNode.riskFlags = toNode.riskFlags || [];
@@ -369,7 +487,6 @@ export function updateFlowCompliance(p: Project, flow: FlowDTO): void {
     });
   }
 
-  // Non-deductible expense flag
   const fromNode = getNode(p, flow.fromId);
   if (flow.isDirectExemptExpense && fromNode) {
     fromNode.riskFlags = fromNode.riskFlags || [];

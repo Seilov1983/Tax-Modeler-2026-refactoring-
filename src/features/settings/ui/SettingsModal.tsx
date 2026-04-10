@@ -4,6 +4,7 @@ import { useAtom } from 'jotai';
 import { settingsAtom, ThemeMode, Language } from '../model/settings-atom';
 import { useTheme } from 'next-themes';
 import { X, Check } from 'lucide-react';
+import { useTranslation } from '@shared/lib/i18n';
 
 interface SettingsModalProps {
   open: boolean;
@@ -15,6 +16,7 @@ const CURRENCIES = ['USD', 'EUR', 'KZT', 'AED', 'GBP', 'HKD', 'SGD'];
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [settings, setSettings] = useAtom(settingsAtom);
   const { setTheme } = useTheme();
+  const { t } = useTranslation();
 
   const styles = useSpring({
     opacity: open ? 1 : 0,
@@ -53,32 +55,30 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold tracking-tight">Settings</h2>
+          <h2 className="text-xl font-semibold tracking-tight">{t('settings')}</h2>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
             <X size={20} />
           </button>
         </div>
 
         <div className="space-y-6">
-          {/* Theme */}
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Theme</label>
+            <label className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('theme')}</label>
             <div className="grid grid-cols-3 gap-2">
-              {['light', 'dark', 'system'].map((t) => (
+              {['light', 'dark', 'system'].map((themeKey) => (
                 <button
-                  key={t}
-                  onClick={() => handleThemeChange(t as ThemeMode)}
-                  className={`py-2 px-3 rounded-xl border text-sm font-medium transition-all ${settings.theme === t ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-500/30 dark:text-indigo-300' : 'bg-white/50 border-black/5 hover:border-black/10 dark:bg-black/20 dark:border-white/5 dark:hover:border-white/10'}`}
+                  key={themeKey}
+                  onClick={() => handleThemeChange(themeKey as ThemeMode)}
+                  className={`py-2 px-3 rounded-xl border text-sm font-medium transition-all ${settings.theme === themeKey ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-900/30 dark:border-indigo-500/30 dark:text-indigo-300' : 'bg-white/50 border-black/5 hover:border-black/10 dark:bg-black/20 dark:border-white/5 dark:hover:border-white/10'}`}
                 >
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                  {t(themeKey as any)}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Language */}
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Language</label>
+            <label className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('language')}</label>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { code: 'en', label: 'English' },
@@ -98,7 +98,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
 
           {/* Base Currency */}
           <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Base Currency</label>
+            <label className="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t('baseCurrency')}</label>
             <div className="flex flex-wrap gap-2">
               {CURRENCIES.map((c) => (
                 <button
@@ -112,11 +112,10 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             </div>
           </div>
 
-          {/* Canvas Snap to Grid */}
           <div className="flex items-center justify-between pt-2">
             <div className="space-y-0.5">
-              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">Snap to Grid</label>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Align canvas elements to a grid</p>
+              <label className="text-sm font-semibold text-slate-800 dark:text-slate-200">{t('snapToGrid')}</label>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('snapToGridHint')}</p>
             </div>
             <button
               onClick={toggleSnap}

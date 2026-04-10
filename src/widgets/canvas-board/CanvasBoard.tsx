@@ -57,6 +57,7 @@ import { activeTabAtom } from '@features/canvas/model/project-atom';
 import { ReportsBuilder } from '@widgets/reports-builder';
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
 import type { JurisdictionCode, CurrencyCode, Zone, NodeDTO } from '@shared/types';
+import { useTranslation } from '@shared/lib/i18n';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 
@@ -214,6 +215,7 @@ function GridBackground({ width, height }: { width: number; height: number }) {
 
 export function CanvasBoard() {
   const activeTab = useAtomValue(activeTabAtom);
+  const { t } = useTranslation();
   const zones = useAtomValue(zonesAtom);
   const nodeAtoms = useAtomValue(nodeAtomsAtom);
   const nodes = useAtomValue(nodesAtom);
@@ -903,7 +905,7 @@ export function CanvasBoard() {
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
               >
                 <span style={{ fontSize: '15px', lineHeight: 1 }}>+</span>
-                <span>Country</span>
+                <span>{t('country')}</span>
               </button>
             )}
 
@@ -922,7 +924,7 @@ export function CanvasBoard() {
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
               >
                 <span style={{ fontSize: '15px', lineHeight: 1 }}>+</span>
-                <span>Regime</span>
+                <span>{t('regime')}</span>
               </button>
             )}
 
@@ -942,7 +944,7 @@ export function CanvasBoard() {
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
                 >
                   <span style={{ fontSize: '15px', lineHeight: 1, color: 'var(--color-accent)' }}>+</span>
-                  <span>Company</span>
+                  <span>{t('company')}</span>
                 </button>
                 <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '2px 10px' }} />
                 <button
@@ -959,7 +961,7 @@ export function CanvasBoard() {
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
                 >
                   <span style={{ fontSize: '15px', lineHeight: 1, color: 'var(--color-success-light)' }}>+</span>
-                  <span>Person</span>
+                  <span>{t('person')}</span>
                 </button>
               </>
             )}

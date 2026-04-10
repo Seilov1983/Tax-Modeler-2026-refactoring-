@@ -1,4 +1,4 @@
-export { FilterPanel, MANDATORY_COLUMNS, OPTIONAL_COLUMNS, COLUMN_LABELS } from './ui/FilterPanel';
+export { FilterPanel, MANDATORY_COLUMNS, OPTIONAL_COLUMNS } from './ui/FilterPanel';
 export { LedgerTable } from './ui/LedgerTable';
 export { EntityTaxTable } from './ui/EntityTaxTable';
 export type { ColumnId } from './ui/FilterPanel';

@@ -13,13 +13,13 @@
 
 import { useAtom, useSetAtom } from 'jotai';
 import { useEffect, useCallback } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { deleteFlowAtom } from '@features/canvas/model/graph-actions-atom';
 import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
 import { useTranslation } from '@shared/lib/i18n';
-import type { FlowType, CurrencyCode } from '@shared/types';
+import type { FlowType, CurrencyCode, NexusCategory } from '@shared/types';
 import {
   Dialog,
   DialogContent,
@@ -48,6 +48,15 @@ const CURRENCIES: CurrencyCode[] = [
   'KZT', 'USD', 'EUR', 'AED', 'HKD', 'SGD', 'GBP', 'SCR', 'CNY',
 ];
 
+const NEXUS_CATEGORIES: { value: NexusCategory; label: string }[] = [
+  { value: 'R_OUT_UNRELATED', label: 'R&D Outsourced — Unrelated Parties' },
+  { value: 'R_OUT_RELATED_FOR', label: 'R&D Outsourced — Related (Foreign)' },
+  { value: 'R_IP_ACQUISITION', label: 'IP Acquisition Cost' },
+];
+
+/** Zone codes whose IP-income nodes qualify for Nexus fraction tagging. */
+const NEXUS_ZONE_CODES = new Set(['KZ_HUB', 'KZ_AIFC']);
+
 // ─── Liquid Glass utility classes (localized — no globals.css pollution) ──────
 
 const GLASS_INPUT = 'bg-white/50 border-white/40 text-slate-900 placeholder:text-slate-500 focus-visible:ring-blue-500 focus-visible:border-transparent dark:bg-slate-800/50 dark:border-slate-600/40 dark:text-slate-100 dark:placeholder:text-slate-400';
@@ -63,6 +72,8 @@ interface FlowFormData {
   dealTag: string;
   applyDTT: boolean;
   customWhtRate: number | undefined;
+  nexusCategory: NexusCategory | '';
+  isBeneficialOwner: boolean;
 }
 
 export function FlowModal() {
@@ -81,7 +92,7 @@ export function FlowModal() {
     handleSubmit,
     reset,
     watch,
-    setValue,
+    control,
     formState: { errors, isDirty },
   } = useForm<FlowFormData>({
     defaultValues: flow ? {
@@ -93,6 +104,8 @@ export function FlowModal() {
       dealTag: flow.dealTag ?? '',
       applyDTT: flow.applyDTT ?? false,
       customWhtRate: flow.customWhtRate,
+      nexusCategory: flow.nexusCategory ?? '',
+      isBeneficialOwner: flow.isBeneficialOwner ?? true,
     } : undefined,
   });
 
@@ -107,6 +120,8 @@ export function FlowModal() {
         dealTag: flow.dealTag ?? '',
         applyDTT: flow.applyDTT ?? false,
         customWhtRate: flow.customWhtRate,
+        nexusCategory: flow.nexusCategory ?? '',
+        isBeneficialOwner: flow.isBeneficialOwner ?? true,
       });
     }
   }, [flow?.id, reset]);
@@ -115,12 +130,14 @@ export function FlowModal() {
     (data: FlowFormData) => {
       if (!flow || !selection || selection.type !== 'flow') return;
       commitHistory();
+      const { nexusCategory, ...rest } = data;
+      const patch = { ...rest, nexusCategory: nexusCategory || undefined } as Record<string, unknown>;
       setProject((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
           flows: prev.flows.map((f) =>
-            f.id === flow.id ? { ...f, ...data } : f,
+            f.id === flow.id ? { ...f, ...patch } : f,
           ),
         };
       });
@@ -142,6 +159,8 @@ export function FlowModal() {
 
   const fromNode = project?.nodes.find((n) => n.id === flow.fromId);
   const toNode = project?.nodes.find((n) => n.id === flow.toId);
+  const fromZone = fromNode?.zoneId ? project?.zones.find((z) => z.id === fromNode.zoneId) : null;
+  const showNexus = !!fromNode?.isIPIncome && !!fromZone && (fromZone.code === 'KZ_HUB' || fromZone.code === 'KZ_AIFC');
 
   const isOpen = true;
 
@@ -163,18 +182,25 @@ export function FlowModal() {
           <div className="flex-1 space-y-4 px-6 py-4">
             <div>
               <Label className={GLASS_LABEL}>{t('flowType')}</Label>
-              <Select
-                value={watch('flowType')}
-                onValueChange={(v) => setValue('flowType', v as FlowType, { shouldDirty: true })}
-              >
-                <SelectTrigger className={GLASS_SELECT}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FLOW_TYPES.map((ft) => <SelectItem key={ft} value={ft}>{ft}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {errors.flowType && <p className="mt-1 text-xs text-red-500">{errors.flowType.message}</p>}
+              <Controller
+                name="flowType"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger className={GLASS_SELECT}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {FLOW_TYPES.map((ft) => (
+                        <SelectItem key={ft} value={ft}>{t(ft.toLowerCase() as any)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {errors.flowType && (
+                <p className="mt-1 text-xs text-red-500">{errors.flowType.message}</p>
+              )}
             </div>
 
             <div>
@@ -185,17 +211,22 @@ export function FlowModal() {
 
             <div>
               <Label className={GLASS_LABEL}>{t('currency')}</Label>
-              <Select
-                value={watch('currency')}
-                onValueChange={(v) => setValue('currency', v as CurrencyCode, { shouldDirty: true })}
-              >
-                <SelectTrigger className={GLASS_SELECT}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CURRENCIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <Controller
+                name="currency"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger className={GLASS_SELECT}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CURRENCIES.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
 
             <div>
@@ -206,19 +237,22 @@ export function FlowModal() {
 
             <div>
               <Label className={GLASS_LABEL}>{t('paymentMethod')}</Label>
-              <Select
-                value={watch('paymentMethod')}
-                onValueChange={(v) => setValue('paymentMethod', v as 'bank' | 'cash' | 'crypto', { shouldDirty: true })}
-              >
-                <SelectTrigger className={GLASS_SELECT}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="bank">{t('bank')}</SelectItem>
-                  <SelectItem value="cash">{t('cash')}</SelectItem>
-                  <SelectItem value="crypto">{t('crypto')}</SelectItem>
-                </SelectContent>
-              </Select>
+              <Controller
+                name="paymentMethod"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger className={GLASS_SELECT}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bank">{t('bank')}</SelectItem>
+                      <SelectItem value="cash">{t('cash')}</SelectItem>
+                      <SelectItem value="crypto">{t('crypto')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
 
             <div>
@@ -228,15 +262,40 @@ export function FlowModal() {
 
             <div>
               <Label className={GLASS_LABEL}>{t('applyDTT')}</Label>
-              <div className="flex items-center gap-2 py-1">
-                <Switch
-                  checked={watch('applyDTT')}
-                  onCheckedChange={(v) => setValue('applyDTT', v, { shouldDirty: true })}
-                />
-                <span className="text-sm text-slate-600">
-                  {watch('applyDTT') ? t('yes') : t('no')}
-                </span>
-              </div>
+              <Controller
+                name="applyDTT"
+                control={control}
+                render={({ field }) => (
+                  <div className="flex items-center gap-2 py-1">
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                    <span className="text-sm text-slate-600">
+                      {field.value ? t('yes') : t('no')}
+                    </span>
+                  </div>
+                )}
+              />
+            </div>
+
+            <div>
+              <Label className={GLASS_LABEL}>{t('isBeneficialOwner')}</Label>
+              <Controller
+                name="isBeneficialOwner"
+                control={control}
+                render={({ field }) => (
+                  <div className="flex items-center gap-2 py-1">
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                    <span className="text-sm text-slate-600">
+                      {field.value ? t('yes') : t('no')}
+                    </span>
+                  </div>
+                )}
+              />
             </div>
 
             {watch('applyDTT') && (
@@ -254,12 +313,33 @@ export function FlowModal() {
               </div>
             )}
 
+            {/* Nexus Category — shown only for outflows from IP-income nodes in Nexus zones */}
+            {showNexus && (
+              <div>
+                <Label className={GLASS_LABEL}>{t('nexusCategory')}</Label>
+                <Controller
+                  name="nexusCategory"
+                  control={control}
+                  render={({ field }) => (
+                    <Select value={field.value || ''} onValueChange={field.onChange}>
+                      <SelectTrigger className={GLASS_SELECT}>
+                        <SelectValue placeholder="None (own R&D)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{t('nexusRndNone')}</SelectItem>
+                        <SelectItem value="R_OUT_UNRELATED">{t('nexusRndUnrelated')}</SelectItem>
+                        <SelectItem value="R_OUT_RELATED_FOR">{t('nexusRndRelatedFor')}</SelectItem>
+                        <SelectItem value="R_IP_ACQUISITION">{t('nexusRndAcquisition')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+            )}
+
             <div className="rounded-2xl bg-black/[0.03] p-3 text-xs text-gray-500">
               ID: {flow.id}<br />
-              Status: {flow.status}
-              {flow.compliance?.exceeded && (
-                <><br /><span className="font-medium text-red-500">Violation: {flow.compliance.violationType}</span></>
-              )}
+              {t('status')}: {flow.status}
             </div>
           </div>
 

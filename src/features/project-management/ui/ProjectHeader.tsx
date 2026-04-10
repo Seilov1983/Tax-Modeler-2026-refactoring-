@@ -34,6 +34,7 @@ import { showNotificationAtom } from '@features/canvas/model/notification-atom';
 import { ProjectDashboard } from './ProjectDashboard';
 import { SettingsModal } from '../../settings/ui/SettingsModal';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@shared/lib/i18n';
 
 // ─── SyncBadge — autosave indicator next to title ────────────────────────────
 
@@ -108,6 +109,7 @@ const CURRENCY_OPTIONS = [
 
 export function ProjectHeader() {
   const [project, setProject] = useAtom(projectAtom);
+  const { t } = useTranslation();
   const baseCurrency = useAtomValue(baseCurrencyAtom);
   const hydrate = useSetAtom(hydrateProjectAtom);
   const undo = useSetAtom(undoAtom);
@@ -291,7 +293,7 @@ export function ProjectHeader() {
           onBlur={handleTitleBlur}
           onKeyDown={handleTitleKeyDown}
           onFocus={(e) => e.currentTarget.select()}
-          title="Click to rename project"
+          title={t('clickToRename')}
           spellCheck={false}
           className="text-[14px] font-semibold bg-transparent border border-transparent rounded-lg px-2 h-8 w-[200px] outline-none hover:bg-black/5 dark:hover:bg-white/5 focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 transition-all"
         />
@@ -299,7 +301,7 @@ export function ProjectHeader() {
 
         <div className="flex items-center gap-2 ml-3 pl-3 border-l border-black/10 dark:border-white/10">
           <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-            Currency:
+            {t('currencyLabel')}
           </label>
           <select
             value={baseCurrency}

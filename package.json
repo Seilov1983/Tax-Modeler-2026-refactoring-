@@ -15,7 +15,8 @@
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",
     "build:mac": "next build && electron-builder --mac",
-    "ai:setup": "bash scripts/ai/setup-ollama.sh"
+    "ai:setup": "bash scripts/ai/setup-ollama.sh",
+    "recovery": "bash scripts/recovery.sh"
   },
   "build": {
     "appId": "com.taxmodeler.app",

@@ -15,6 +15,7 @@
 import { useMemo } from 'react';
 import type { Project } from '@shared/types';
 import { effectiveEtrForCompany } from '@shared/lib/engine/engine-tax';
+import { useTranslation, localizedName } from '@shared/lib/i18n';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,8 @@ export function EntityTaxTable({
   dateFrom,
   dateTo,
 }: EntityTaxTableProps) {
+  const { t, lang } = useTranslation();
+
   const rows: EntityTaxRow[] = useMemo(() => {
     // Build node ID sets for tag/zone filters
     const taggedNodeIds =
@@ -125,7 +128,7 @@ export function EntityTaxTable({
         return {
           nodeId: n.id,
           entityName: n.name,
-          zoneName: zone ? `${zone.name} (${zone.jurisdiction})` : '-',
+          zoneName: zone ? `${localizedName(zone.name, lang)} (${zone.jurisdiction})` : '-',
           jurisdiction: zone?.jurisdiction ?? '-',
           totalInflows: Math.round(totalInflows * 100) / 100,
           totalOutflows: Math.round(totalOutflows * 100) / 100,
@@ -141,23 +144,23 @@ export function EntityTaxTable({
   return (
     <div>
       <div className={twSectionTitle}>
-        <span className="text-slate-500">Overview</span>
-        Entity Tax Summary
+        <span className="text-slate-500">{t('overview')}</span>
+        {t('entityTaxSummary')}
       </div>
       <div className={twContainer}>
         {rows.length === 0 ? (
-          <div className="p-10 text-center text-slate-500 text-[13px]">No company entities in the structure.</div>
+          <div className="p-10 text-center text-slate-500 text-[13px]">{t('noCompanyEntities')}</div>
         ) : (
           <table className={twTable}>
             <thead>
               <tr>
-                <th className={twTh}>Entity Name</th>
-                <th className={twTh}>Zone</th>
-                <th className={twThRight}>Total Inflows</th>
-                <th className={twThRight}>Total Outflows</th>
-                <th className={twThRight}>Pre-Tax Income</th>
-                <th className={twThRight}>CIT Rate</th>
-                <th className={twThRight}>CIT Amount</th>
+                <th className={twTh}>{t('entityName')}</th>
+                <th className={twTh}>{t('zone')}</th>
+                <th className={twThRight}>{t('totalInflows')}</th>
+                <th className={twThRight}>{t('totalOutflows')}</th>
+                <th className={twThRight}>{t('preTaxIncome')}</th>
+                <th className={twThRight}>{t('citRateCol')}</th>
+                <th className={twThRight}>{t('citAmountCol')}</th>
               </tr>
             </thead>
             <tbody>

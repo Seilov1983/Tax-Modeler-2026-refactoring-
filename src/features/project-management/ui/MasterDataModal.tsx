@@ -25,6 +25,7 @@ import { addZoneAtom } from '@features/canvas/model/graph-actions-atom';
 import { spawnCoordinatesAtom } from '@features/canvas/model/spawn-coordinates-atom';
 import { uid } from '@shared/lib/engine/utils';
 import type { Country, TaxRegime, CurrencyCode, JurisdictionCode } from '@shared/types';
+import { useTranslation } from '@shared/lib/i18n';
 
 const COUNTRY_CURRENCY: Record<string, CurrencyCode> = {
   KZ: 'KZT', UAE: 'AED', HK: 'HKD', CY: 'EUR', SG: 'SGD',
@@ -48,6 +49,7 @@ export function MasterDataModal({
   const addZone = useSetAtom(addZoneAtom);
   const [spawnCoords, setSpawnCoords] = useAtom(spawnCoordinatesAtom);
   const [isPending, startTransition] = useTransition();
+  const { t } = useTranslation();
   const [expandedCountries, setExpandedCountries] = useState<Set<string>>(() => {
     if (initialTab === 'regimes' && spawnCoords?.parentZone) {
       return new Set([spawnCoords.parentZone.id]);
@@ -121,7 +123,7 @@ export function MasterDataModal({
         (z) => z.jurisdiction === countryId || z.code?.startsWith(countryId + '_'),
       );
       if (hasZone) {
-        alert('Cannot delete: This jurisdiction is currently in use on the canvas.');
+        alert(t('cannotDeleteJurisdiction'));
         return;
       }
 
@@ -134,7 +136,7 @@ export function MasterDataModal({
         (n) => n.regimeId && countryRegimeIds.has(n.regimeId),
       );
       if (regimeInUse) {
-        alert('Cannot delete: This jurisdiction has regimes currently in use on the canvas.');
+        alert(t('cannotDeleteJurisdictionRegimes'));
         return;
       }
 
@@ -197,7 +199,7 @@ export function MasterDataModal({
 
       const inUse = project.nodes.some((n) => n.regimeId === regimeId);
       if (inUse) {
-        alert('Cannot delete: This regime is currently in use on the canvas.');
+        alert(t('cannotDeleteRegimeInUse'));
         return;
       }
 
@@ -282,10 +284,10 @@ export function MasterDataModal({
         <div className="flex items-center justify-between px-7 py-5">
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-gray-900">
-              Master Data
+              {t('masterData')}
             </h2>
             <p className="mt-0.5 text-xs text-gray-400">
-              Countries & Tax Regimes — drag a row onto the canvas to create a zone
+              {t('countriesAndRegimes')}
             </p>
           </div>
           <button
@@ -333,7 +335,7 @@ export function MasterDataModal({
 
                   {/* Regime count badge */}
                   <span className="mr-1 rounded-full bg-black/5 px-2.5 py-0.5 text-xs text-gray-400 font-medium">
-                    {countryRegimes.length} regime{countryRegimes.length !== 1 ? 's' : ''}
+                    {countryRegimes.length} {countryRegimes.length !== 1 ? t('regimesWord') : t('regimeWord')}
                   </span>
 
                   {/* Base currency selector */}
@@ -359,17 +361,17 @@ export function MasterDataModal({
                     variant="ghost"
                     size="sm"
                     onClick={(e) => { e.stopPropagation(); handleAddToCanvas(country); }}
-                    title="Add zone to canvas"
+                    title={t('addZoneToCanvas')}
                     className="h-7 whitespace-nowrap px-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-500/15 hover:text-blue-700 dark:text-blue-400"
                   >
-                    + Canvas
+                    {t('plusCanvas')}
                   </Button>
 
                   {/* Delete country */}
                   <button
                     onClick={(e) => { e.stopPropagation(); deleteCountry(country.id); }}
                     className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-transparent text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-600"
-                    title="Delete country and all its regimes"
+                    title={t('deleteCountryHint')}
                   >
                     &#215;
                   </button>
@@ -396,7 +398,7 @@ export function MasterDataModal({
                           value={regime.name}
                           onChange={(e) => updateRegime(regime.id, 'name', e.target.value)}
                           className="h-8 flex-1 text-sm"
-                          placeholder="Regime name"
+                          placeholder={t('regimeName')}
                         />
 
                         {/* CIT % */}
@@ -428,17 +430,17 @@ export function MasterDataModal({
                           variant="ghost"
                           size="sm"
                           onClick={() => handleAddRegimeToCanvas(regime)}
-                          title="Add regime as sub-zone to canvas"
+                          title={t('addRegimeSubzone')}
                           className="h-7 whitespace-nowrap px-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-500/15 hover:text-blue-700 dark:text-blue-400"
                         >
-                          + Canvas
+                          {t('plusCanvas')}
                         </Button>
 
                         {/* Delete regime */}
                         <button
                           onClick={() => deleteRegime(regime.id)}
                           className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-transparent text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-600"
-                          title="Delete regime"
+                          title={t('deleteRegimeHint')}
                         >
                           &#215;
                         </button>
@@ -452,7 +454,7 @@ export function MasterDataModal({
                       onClick={() => addRegime(country.id)}
                       className="mb-2 ml-8 mt-1.5 text-xs font-medium text-blue-500 hover:bg-blue-500/10 hover:text-blue-600 dark:text-blue-400"
                     >
-                      + Add Tax Regime
+                      {t('addTaxRegime')}
                     </Button>
                   </>
                 )}
@@ -466,13 +468,13 @@ export function MasterDataModal({
             onClick={addCountry}
             className="mt-3 w-full rounded-2xl text-sm font-semibold text-green-600 hover:bg-green-500/10 hover:text-green-700 dark:text-green-400"
           >
-            + Add Country
+            {t('addCountryBtn')}
           </Button>
         </div>
 
         {/* Footer */}
         <div className="border-t border-black/5 px-7 py-4 text-right dark:border-white/5">
-          <Button onClick={onClose}>Done</Button>
+          <Button onClick={onClose}>{t('done')}</Button>
         </div>
       </animated.div>
     </animated.div>
