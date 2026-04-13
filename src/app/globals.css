@@ -29,9 +29,9 @@
   --radius: 0.75rem;
 
   /* ── App-level theme tokens (light) ───────────────────────────────────── */
-  /* Surfaces */
-  --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-bg-heavy: rgba(255, 255, 255, 0.85);
+  /* Surfaces — Aeros Liquid Glass: extreme translucency, widget float */
+  --glass-bg: rgba(255, 255, 255, 0.40);
+  --glass-bg-heavy: rgba(255, 255, 255, 0.70);
   --glass-border: rgba(255, 255, 255, 0.50);
   --surface-primary: #ffffff;
   --surface-hover: #f9fafb;
@@ -99,9 +99,9 @@
   --ring: 211 100% 50%;
 
   /* ── App-level theme tokens (dark) ────────────────────────────────────── */
-  /* Surfaces */
-  --glass-bg: rgba(30, 30, 30, 0.78);
-  --glass-bg-heavy: rgba(30, 30, 30, 0.92);
+  /* Surfaces — Aeros Liquid Glass: extreme translucency, widget float */
+  --glass-bg: rgba(0, 0, 0, 0.40);
+  --glass-bg-heavy: rgba(0, 0, 0, 0.70);
   --glass-border: rgba(255, 255, 255, 0.10);
   --surface-primary: #1c1c1e;
   --surface-hover: #2c2c2e;

@@ -293,10 +293,11 @@ export function MasterDataSidebar() {
   }, [isOpen, setIsOpen]);
 
   // ─── Slide animation ─────────────────────────────────────────────────
+  // Aeros physics: tension 300, friction 30 — natural settle without overshoot
   const sidebarSpring = useSpring({
-    transform: isOpen ? 'translateX(0px)' : 'translateX(-420px)',
+    transform: isOpen ? 'translateX(0px)' : 'translateX(-440px)',
     opacity: isOpen ? 1 : 0,
-    config: config.stiff,
+    config: { tension: 300, friction: 30 },
   });
 
   if (!project) return null;
@@ -305,18 +306,22 @@ export function MasterDataSidebar() {
     <animated.aside
       style={{
         ...sidebarSpring,
+        // Aeros: detached floating widget — inset from the viewport edges
         position: 'fixed',
-        left: 0,
-        top: 0,
-        height: '100%',
+        left: 16,
+        top: 16,
+        height: 'calc(100% - 32px)',
         width: '420px',
         zIndex: 40,
         background: 'var(--glass-bg)',
-        backdropFilter: 'blur(12px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(12px) saturate(180%)',
-        borderRight: '1px solid var(--border-subtle)',
+        backdropFilter: 'blur(16px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+        border: '1px solid var(--glass-border)',
+        borderRadius: '28px',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
         display: 'flex',
         flexDirection: 'column',
+        overflow: 'hidden',
         fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif",
         pointerEvents: isOpen ? 'auto' : 'none',
       }}

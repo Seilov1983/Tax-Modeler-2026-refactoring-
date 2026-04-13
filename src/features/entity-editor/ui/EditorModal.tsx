@@ -39,12 +39,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-// ─── Liquid Glass utility classes (localized — no globals.css pollution) ──────
+// ─── Liquid Glass utility classes (aesthetic hooks layered on shadcn primitives) ──
 
-const GLASS_INPUT = 'bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus-visible:ring-2 focus-visible:ring-slate-500/30 focus-visible:border-slate-500/50 transition-all rounded-xl hover:bg-black/[0.07] dark:hover:bg-white/10 h-10 px-3 shadow-inner';
-const GLASS_SELECT = 'bg-black/5 border border-black/10 text-slate-900 dark:bg-white/5 dark:border-white/10 dark:text-slate-100 hover:bg-black/[0.07] dark:hover:bg-white/10 transition-all rounded-xl h-10 shadow-inner';
-const GLASS_LABEL = 'text-[12px] font-bold text-slate-500 tracking-wider uppercase mb-1.5 block ml-1';
-const GLASS_PANEL = 'rounded-2xl bg-white/40 border border-white/40 backdrop-blur-md shadow-sm dark:bg-slate-800/40 dark:border-slate-700/40';
+// Input/Select base styles now live in the shadcn primitives. Empty overrides
+// let consumers pass size/width tweaks without duplicating depth/chrome.
+const GLASS_INPUT = '';
+const GLASS_SELECT = '';
+const GLASS_LABEL = 'text-[12px] font-semibold text-slate-500 dark:text-slate-400 tracking-wider uppercase mb-1.5 block ml-1';
+const GLASS_PANEL = 'rounded-2xl bg-white/40 dark:bg-black/30 border border-white/50 dark:border-white/10 backdrop-blur-md shadow-sm';
 
 // ─── Form types ──────────────────────────────────────────────────────────────
 
@@ -409,27 +411,40 @@ function NodeEditor({
                 />
               </Field>
 
+              <Field label={t('hasSeparateAccounting')}>
+                <Controller
+                  name="hasSeparateAccounting"
+                  control={control}
+                  render={({ field }) => (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-slate-600 dark:text-slate-400">{t('hasSeparateAccounting')}</span>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </div>
+                  )}
+                />
+              </Field>
+
               {watchSubstance && (
                 <>
                   <Field label={t('headcount')}>
-                    <Input 
-                      type="number" 
-                      {...register('headcount', { valueAsNumber: true })} 
-                      className={GLASS_INPUT} 
+                    <Input
+                      type="number"
+                      {...register('headcount', { valueAsNumber: true })}
+                      className={GLASS_INPUT}
                     />
                   </Field>
                   <Field label={t('operationalExpenses')}>
-                    <Input 
-                      type="number" 
-                      {...register('operationalExpenses', { valueAsNumber: true })} 
-                      className={GLASS_INPUT} 
+                    <Input
+                      type="number"
+                      {...register('operationalExpenses', { valueAsNumber: true })}
+                      className={GLASS_INPUT}
                     />
                   </Field>
                   <Field label={t('payrollCosts')}>
-                    <Input 
-                      type="number" 
-                      {...register('payrollCosts', { valueAsNumber: true })} 
-                      className={GLASS_INPUT} 
+                    <Input
+                      type="number"
+                      {...register('payrollCosts', { valueAsNumber: true })}
+                      className={GLASS_INPUT}
                     />
                   </Field>
                 </>
@@ -721,7 +736,7 @@ export function EditorModal() {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent
-        className="no-canvas-events sm:max-w-[425px] !bg-white/70 dark:!bg-slate-900/70 backdrop-blur-3xl border border-black/10 dark:border-white/10 shadow-2xl"
+        className="no-canvas-events sm:max-w-[425px]"
         onPointerDown={(e) => e.stopPropagation()}
       >
         <DialogHeader className="px-0 pt-0 pb-4">

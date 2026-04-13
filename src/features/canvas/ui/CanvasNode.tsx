@@ -61,6 +61,25 @@ const HEADER_HEIGHT = 28;
 const PORT_RADIUS = 6;
 const NODE_PADDING = 10;
 
+// ─── Tax Health Glow ─────────────────────────────────────────────────────────
+// Two severities — critical (red) and warning (amber). Matches the risk-flag
+// taxonomy emitted by engine-risks.ts so the canvas surfaces compliance state
+// without the user having to open the editor sidebar.
+const CRITICAL_RISK_TYPES = new Set<string>([
+  'SUBSTANCE_BREACH',
+  'CFC_RISK',
+  'AIFC_PRESENCE_BREACH',
+  'PILLAR2_LOW_ETR',
+]);
+const WARNING_RISK_TYPES = new Set<string>([
+  'CAPITAL_ANOMALY',
+  'SUBSTANCE_EXPENSE_MISMATCH',
+  'TRANSFER_PRICING_RISK',
+  'NON_DEDUCTIBLE_EXPENSE',
+]);
+const CRITICAL_GLOW_COLOR = '#ff3b30'; // Apple red
+const WARNING_GLOW_COLOR = '#f59e0b'; // Amber
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 interface CanvasNodeProps {
@@ -109,7 +128,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const entranceSpring = useSpring({
     from: hasAnimated.value ? { s: 1, o: isGhosted ? 0.15 : 1 } : { s: 0.8, o: 0 },
     to: { s: 1, o: isGhosted ? 0.15 : 1 },
-    config: { tension: 300, friction: 20 },
+    config: { tension: 300, friction: 30 },
     onChange: (e) => {
       if (groupRef.current) {
         groupRef.current.scaleX(e.value.s);
@@ -126,6 +145,59 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const colors = isDark ? (NODE_COLORS_DARK[node.type] || NODE_COLORS_DARK.company) : (NODE_COLORS[node.type] || NODE_COLORS.company);
   const riskCount = node.riskFlags?.length || 0;
 
+  // ─── Tactile interaction: scale ~1.05 on drag/hover, spring-back to 1 on rest.
+  // Applied imperatively via Konva refs so we bypass React render cycles for
+  // 60 FPS feel without breaking the flat-rendering contract.
+  const [isHovering, setIsHovering] = useState(false);
+  const [isDraggingNow, setIsDraggingNow] = useState(false);
+  const interactionTarget = isDraggingNow ? 1.06 : isHovering ? 1.03 : 1;
+  useSpring({
+    scale: interactionTarget,
+    config: { tension: 300, friction: 30 },
+    onChange: ({ value }) => {
+      // Only apply the interaction scale once the entrance animation has settled;
+      // otherwise we fight entranceSpring over the same scaleX/scaleY attributes.
+      if (!hasAnimated.value || !groupRef.current) return;
+      groupRef.current.scaleX(value.scale);
+      groupRef.current.scaleY(value.scale);
+      groupRef.current.getLayer()?.batchDraw();
+    },
+  });
+
+  const handleMouseEnter = useCallback(() => {
+    if (!isTxa && !isGhosted) setIsHovering(true);
+  }, [isTxa, isGhosted]);
+  const handleMouseLeave = useCallback(() => setIsHovering(false), []);
+
+  // ─── Tax Health: classify the strongest risk flag on this node ─────────
+  const riskSeverity: 'critical' | 'warning' | null = useMemo(() => {
+    if (!node.riskFlags?.length) return null;
+    for (const f of node.riskFlags) {
+      if (CRITICAL_RISK_TYPES.has(f.type)) return 'critical';
+    }
+    for (const f of node.riskFlags) {
+      if (WARNING_RISK_TYPES.has(f.type)) return 'warning';
+    }
+    return null;
+  }, [node.riskFlags]);
+
+  // ─── Glow style resolved once per render — error & frozen keep priority
+  const healthGlow = useMemo(() => {
+    if (node.hasError) {
+      return { color: CRITICAL_GLOW_COLOR, blur: 16, opacity: 0.3 };
+    }
+    if (node.frozen) {
+      return { color: CRITICAL_GLOW_COLOR, blur: 12, opacity: 0.2 };
+    }
+    if (riskSeverity === 'critical') {
+      return { color: CRITICAL_GLOW_COLOR, blur: 22, opacity: 0.38 };
+    }
+    if (riskSeverity === 'warning') {
+      return { color: WARNING_GLOW_COLOR, blur: 18, opacity: 0.32 };
+    }
+    return { color: 'rgba(0,0,0,0.06)', blur: 8, opacity: 0.2 };
+  }, [node.hasError, node.frozen, riskSeverity]);
+
   // ─── Layout math (replaces CSS padding) ──────────────────────────────
   const cardLayout = useMemo(
     () => calculateNodeCardLayout(node.w, node.h, NODE_PADDING),
@@ -140,6 +212,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         return;
       }
       hasDragged.current = false;
+      setIsDraggingNow(true);
 
       // Store original positions on all selected siblings for accurate bulk drag
       const sel = selectionRef.current;
@@ -240,6 +313,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
 
   const handleDragEnd = useCallback(
     (e: KonvaEventObject<DragEvent>) => {
+      setIsDraggingNow(false);
       if (!hasDragged.current) return;
 
       const target = e.target;
@@ -380,23 +454,37 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       onTap={handleClick}
       onDblClick={handleDblClick}
       onPointerUp={handleNodePointerUp}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       scaleX={hasAnimated.value ? 1 : 0.8}
       scaleY={hasAnimated.value ? 1 : 0.8}
       opacity={hasAnimated.value ? (isGhosted ? 0.15 : 1) : 0}
       listening={!isGhosted}
     >
-      {/* Node body — uses layout background dimensions; refined red glow if hasError */}
+      {/* Node body — health glow resolved upstream (error → frozen → risk) */}
       <Rect
         width={cardLayout.background.width}
         height={cardLayout.background.height}
         fill={colors.bg}
-        stroke={node.hasError ? '#ff3b30' : isSelected ? (isDark ? '#60a5fa' : '#007aff') : node.frozen ? '#ff3b30' : colors.border}
-        strokeWidth={node.hasError ? 2 : isSelected ? 2 : node.frozen ? 1.5 : 1}
+        stroke={
+          node.hasError
+            ? CRITICAL_GLOW_COLOR
+            : isSelected
+              ? (isDark ? '#60a5fa' : '#007aff')
+              : node.frozen
+                ? CRITICAL_GLOW_COLOR
+                : riskSeverity === 'critical'
+                  ? CRITICAL_GLOW_COLOR
+                  : riskSeverity === 'warning'
+                    ? WARNING_GLOW_COLOR
+                    : colors.border
+        }
+        strokeWidth={node.hasError || riskSeverity === 'critical' ? 2 : isSelected ? 2 : node.frozen || riskSeverity === 'warning' ? 1.5 : 1}
         cornerRadius={12}
-        shadowColor={node.hasError ? '#ff3b30' : node.frozen ? '#ff3b30' : 'rgba(0,0,0,0.06)'}
-        shadowBlur={node.hasError ? 16 : node.frozen ? 12 : 8}
-        shadowOffsetY={node.hasError ? 0 : 2}
-        shadowOpacity={node.hasError ? 0.3 : node.frozen ? 0.2 : 0.2}
+        shadowColor={healthGlow.color}
+        shadowBlur={healthGlow.blur}
+        shadowOffsetY={node.hasError || riskSeverity ? 0 : 2}
+        shadowOpacity={healthGlow.opacity}
       />
 
       {/* Header background */}

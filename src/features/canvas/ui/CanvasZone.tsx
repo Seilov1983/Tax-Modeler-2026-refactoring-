@@ -69,6 +69,18 @@ const ZONE_BORDER_COLORS_DARK: Record<string, string> = {
 
 const HEADER_HEIGHT = 36;
 
+// ─── Tax Health Glow ─────────────────────────────────────────────────────────
+// Zones with a 0% CIT benefit get a soft mint glow as a visual health signal.
+// Source of truth: zone-rules.json overrides — kept as a typed allowlist so the
+// canvas can react without pulling the full Project through `effectiveZoneTax`.
+const ZERO_CIT_ZONE_CODES = new Set<string>([
+  'KZ_HUB',
+  'KZ_AIFC',
+  'UAE_FREEZONE_QFZP',
+  'HK_OFFSHORE',
+]);
+const HEALTH_GLOW_COLOR = '#34c759'; // Apple mint — "benefit" semantic
+
 export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZoneProps) {
   const [selection, setSelection] = useAtom(selectionAtom);
   const moveZone = useSetAtom(moveZoneAtom);
@@ -352,6 +364,13 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     resizeZone({ id: zone.id, w: newW, h: newH, x: newX, y: newY });
   }, [zone.id, resizeZone]);
 
+  // ─── Tax Health: zones that provide a 0% CIT benefit get a soft mint halo.
+  // Shown only when no error/drop-target state is competing for attention.
+  const isBenefitZone = useMemo(
+    () => !!zone.code && ZERO_CIT_ZONE_CODES.has(zone.code),
+    [zone.code],
+  );
+
   // ─── Compute border visual state ───────────────────────────────────────────
   // Priority: error > invalid drop target > valid drop target > selected > default
   const computedBorderStroke = useMemo(() => {
@@ -372,22 +391,25 @@ export const CanvasZone = memo(function CanvasZone({ zone, children }: CanvasZon
     if (zone.hasError) return '#ff3b30';
     if (isInvalidDropTarget) return '#ff3b30';
     if (isValidDropTarget) return '#34c759';
+    if (isBenefitZone) return HEALTH_GLOW_COLOR;
     return 'transparent';
-  }, [zone.hasError, isInvalidDropTarget, isValidDropTarget]);
+  }, [zone.hasError, isInvalidDropTarget, isValidDropTarget, isBenefitZone]);
 
   const computedShadowBlur = useMemo(() => {
     if (zone.hasError) return 16;
     if (isInvalidDropTarget) return 20;
     if (isValidDropTarget) return 24;
+    if (isBenefitZone) return 28;
     return 0;
-  }, [zone.hasError, isInvalidDropTarget, isValidDropTarget]);
+  }, [zone.hasError, isInvalidDropTarget, isValidDropTarget, isBenefitZone]);
 
   const computedShadowOpacity = useMemo(() => {
     if (zone.hasError) return 0.25;
     if (isInvalidDropTarget) return 0.35;
     if (isValidDropTarget) return 0.3;
+    if (isBenefitZone) return 0.35;
     return 0;
-  }, [zone.hasError, isInvalidDropTarget, isValidDropTarget]);
+  }, [zone.hasError, isInvalidDropTarget, isValidDropTarget, isBenefitZone]);
 
   const badgeText = `${zone.jurisdiction} \u00b7 ${zone.currency}`;
 

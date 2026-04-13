@@ -57,11 +57,11 @@ const NEXUS_CATEGORIES: { value: NexusCategory; label: string }[] = [
 /** Zone codes whose IP-income nodes qualify for Nexus fraction tagging. */
 const NEXUS_ZONE_CODES = new Set(['KZ_HUB', 'KZ_AIFC']);
 
-// ─── Liquid Glass utility classes (localized — no globals.css pollution) ──────
+// ─── Liquid Glass utility classes (aesthetic hooks layered on shadcn primitives) ──
 
-const GLASS_INPUT = 'bg-white/50 border-white/40 text-slate-900 placeholder:text-slate-500 focus-visible:ring-blue-500 focus-visible:border-transparent dark:bg-slate-800/50 dark:border-slate-600/40 dark:text-slate-100 dark:placeholder:text-slate-400';
-const GLASS_SELECT = 'bg-white/50 border-white/40 text-slate-900 dark:bg-slate-800/50 dark:border-slate-600/40 dark:text-slate-100';
-const GLASS_LABEL = 'text-slate-800 font-medium dark:text-slate-200';
+const GLASS_INPUT = '';
+const GLASS_SELECT = '';
+const GLASS_LABEL = 'text-[12px] font-semibold text-slate-500 dark:text-slate-400 tracking-wider uppercase mb-1.5 block ml-1';
 
 interface FlowFormData {
   flowType: FlowType;

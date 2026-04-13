@@ -18,10 +18,11 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { setTheme } = useTheme();
   const { t } = useTranslation();
 
+  // Aeros physics: calmer settle (tension 300, friction 30) per spec
   const styles = useSpring({
     opacity: open ? 1 : 0,
     transform: open ? 'scale(1)' : 'scale(0.95)',
-    config: { tension: 300, friction: 20 },
+    config: { tension: 300, friction: 30 },
   });
 
   const handleThemeChange = (theme: ThemeMode) => {
@@ -46,12 +47,12 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   return (
     <animated.div
       style={{ opacity: styles.opacity }}
-      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/20 dark:bg-black/50 backdrop-blur-sm"
       onClick={onClose}
     >
       <animated.div
         style={styles}
-        className="w-[420px] bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl p-6 text-slate-800 dark:text-slate-200"
+        className="w-[420px] bg-white/40 dark:bg-black/40 backdrop-blur-md border border-white/50 dark:border-white/10 rounded-3xl shadow-xl p-6 text-slate-800 dark:text-slate-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-6">
