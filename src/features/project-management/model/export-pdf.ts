@@ -14,7 +14,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { generateAuditSnapshot } from '@shared/lib/engine';
-import { effectiveEtrForCompany } from '@shared/lib/engine/engine-tax';
 import { fmtMoney, fmtPercent, bankersRound2 } from '@shared/lib/engine/utils';
 import { saveFile } from '@shared/lib/download';
 import type { Project } from '@shared/types';
@@ -105,52 +104,29 @@ export async function exportReportPdf(project: Project): Promise<void> {
   doc.text('Entity Tax Summary', 14, cursorY);
   cursorY += 2;
 
-  // Build zone lookup
-  const zoneMap = new Map(project.zones.map((z) => [z.id, z]));
-
-  // Build inflow/outflow maps from flows
-  const inflowMap = new Map<string, number>();
-  const outflowMap = new Map<string, number>();
-  for (const f of project.flows) {
-    const gross = Number(f.grossAmount || 0);
-    if (gross <= 0) continue;
-    inflowMap.set(f.toId, (inflowMap.get(f.toId) ?? 0) + gross);
-    outflowMap.set(f.fromId, (outflowMap.get(f.fromId) ?? 0) + gross);
-  }
-
-  const entityRows = project.nodes
-    .filter((n) => n.type === 'company')
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((n) => {
-      const zone = n.zoneId ? zoneMap.get(n.zoneId) : undefined;
-      const totalInflows = inflowMap.get(n.id) ?? 0;
-      const totalOutflows = outflowMap.get(n.id) ?? 0;
-      const PreTaxIncome = n.annualIncome > 0 ? n.annualIncome : totalInflows - totalOutflows;
-      const citRate = effectiveEtrForCompany(project, n);
-      const citAmount = Math.max(0, PreTaxIncome) * citRate;
-      const citEntry = taxSummary.citLiabilities.find(c => c.nodeId === n.id);
-      
-      return [
-        n.name,
-        zone ? `${zone.name} (${zone.jurisdiction})` : '-',
-        fmt(totalInflows),
-        fmt(totalOutflows),
-        fmt(PreTaxIncome),
-        pct(citRate),
-        fmt(citAmount),
-        citEntry?.lawRef ?? '-',
-      ];
-    });
+  // Use pre-computed CIT liabilities from the real engine
+  const entityRows = taxSummary.citLiabilities.map((cit) => {
+    const zone = project.zones.find((z) => z.id === cit.zoneId);
+    return [
+      cit.nodeName,
+      zone ? `${zone.name} (${cit.jurisdiction ?? '-'})` : (cit.jurisdiction ?? '-'),
+      fmt(cit.taxableIncome),
+      pct(cit.citRate),
+      fmt(cit.citAmount),
+      cit.lawRef ?? '-',
+      cit.calculationBreakdown ?? '-',
+    ];
+  });
 
   const tableFont = fontFamily;
 
   if (entityRows.length > 0) {
     autoTable(doc, {
       startY: cursorY,
-      head: [['Entity', 'Zone', 'Inflows', 'Outflows', 'Pre-Tax Income', 'CIT Rate', 'CIT Amount', 'Law Ref']],
+      head: [['Entity', 'Zone', 'Taxable Income', 'CIT Rate', 'CIT Amount', 'Law Ref', 'Breakdown']],
       body: entityRows,
       theme: 'grid',
-      styles: { fontSize: 8, cellPadding: 2, textColor: [55, 65, 81], font: tableFont },
+      styles: { fontSize: 7.5, cellPadding: 2, textColor: [55, 65, 81], font: tableFont },
       headStyles: {
         fillColor: [249, 250, 251],
         textColor: [107, 114, 128],
@@ -161,8 +137,7 @@ export async function exportReportPdf(project: Project): Promise<void> {
         2: { halign: 'right' },
         3: { halign: 'right' },
         4: { halign: 'right' },
-        5: { halign: 'right' },
-        6: { halign: 'right' },
+        6: { cellWidth: 60 },
       },
       margin: { left: 14, right: 14 },
     });
@@ -219,6 +194,7 @@ export async function exportReportPdf(project: Project): Promise<void> {
         fmt(net),
         fmt(whtAmount),
         liabilityEntry?.lawRef ?? '-',
+        liabilityEntry?.calculationBreakdown ?? '-',
         status,
       ];
     });
@@ -226,24 +202,25 @@ export async function exportReportPdf(project: Project): Promise<void> {
   if (flowRows.length > 0) {
     autoTable(doc, {
       startY: cursorY,
-      head: [['Date', 'Type', 'From', 'To', 'Gross', 'Net', 'WHT', 'Law Ref', 'Status']],
+      head: [['Date', 'Type', 'From', 'To', 'Gross', 'Net', 'WHT', 'Law Ref', 'Breakdown', 'Status']],
       body: flowRows,
       theme: 'grid',
-      styles: { fontSize: 7.5, cellPadding: 2, textColor: [55, 65, 81], font: tableFont },
+      styles: { fontSize: 7, cellPadding: 2, textColor: [55, 65, 81], font: tableFont },
       headStyles: {
         fillColor: [249, 250, 251],
         textColor: [107, 114, 128],
         fontStyle: 'bold',
-        fontSize: 7,
+        fontSize: 6.5,
       },
       columnStyles: {
         4: { halign: 'right' },
         5: { halign: 'right' },
         6: { halign: 'right' },
+        8: { cellWidth: 50 },
       },
       margin: { left: 14, right: 14 },
       didParseCell: (data: any) => {
-        if (data.section === 'body' && data.column.index === 8) {
+        if (data.section === 'body' && data.column.index === 9) {
           if (data.cell.raw === 'Violation') {
             data.cell.styles.textColor = [220, 38, 38];
             data.cell.styles.fontStyle = 'bold';

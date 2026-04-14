@@ -14,8 +14,9 @@
 
 import { useMemo } from 'react';
 import type { Project } from '@shared/types';
-import { effectiveEtrForCompany } from '@shared/lib/engine/engine-tax';
+import { computeGroupTax, effectiveEtrForCompany } from '@shared/lib/engine/engine-tax';
 import { useTranslation, localizedName } from '@shared/lib/i18n';
+import { fmtMoney, fmtPercent, bankersRound2 } from '@shared/lib/engine/utils';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,7 @@ export type EntityTaxRow = {
   citRate: number;
   citAmount: number;
   currency: string;
+  calculationBreakdown: string;
 };
 
 // ─── Tailwind Classes ────────────────────────────────────────────────────────
@@ -40,16 +42,6 @@ const twThRight = `${twTh} text-right`;
 const twTd = "px-4 py-2 border-b border-black/5 dark:border-white/5 text-slate-800 dark:text-slate-200 whitespace-nowrap group-hover:bg-transparent";
 const twTdRight = `${twTd} text-right tabular-nums`;
 const twSectionTitle = "px-6 pt-5 pb-2 text-[13px] font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex flex-col";
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function fmt(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function pct(n: number): string {
-  return (n * 100).toFixed(2) + '%';
-}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -114,6 +106,10 @@ export function EntityTaxTable({
     // Zone lookup
     const zoneMap = new Map(project.zones.map((z) => [z.id, z]));
 
+    // Compute group tax to get engine CIT liabilities with breakdowns
+    const groupTax = computeGroupTax(project);
+    const citByNodeId = new Map(groupTax.citLiabilities.map((c) => [c.nodeId, c]));
+
     // Build rows for company nodes only (persons/txa don't pay CIT)
     return project.nodes
       .filter((n) => n.type === 'company')
@@ -122,20 +118,22 @@ export function EntityTaxTable({
         const totalInflows = inflowMap.get(n.id) ?? 0;
         const totalOutflows = outflowMap.get(n.id) ?? 0;
         const preTaxIncome = n.annualIncome > 0 ? n.annualIncome : totalInflows - totalOutflows;
-        const citRate = effectiveEtrForCompany(project, n);
-        const citAmount = Math.max(0, preTaxIncome) * citRate;
+        const engineCit = citByNodeId.get(n.id);
+        const citRate = engineCit?.citRate ?? effectiveEtrForCompany(project, n);
+        const citAmount = engineCit?.citAmount ?? bankersRound2(Math.max(0, preTaxIncome) * citRate);
 
         return {
           nodeId: n.id,
           entityName: n.name,
           zoneName: zone ? `${localizedName(zone.name, lang)} (${zone.jurisdiction})` : '-',
           jurisdiction: zone?.jurisdiction ?? '-',
-          totalInflows: Math.round(totalInflows * 100) / 100,
-          totalOutflows: Math.round(totalOutflows * 100) / 100,
-          preTaxIncome: Math.round(preTaxIncome * 100) / 100,
+          totalInflows: bankersRound2(totalInflows),
+          totalOutflows: bankersRound2(totalOutflows),
+          preTaxIncome: bankersRound2(preTaxIncome),
           citRate,
-          citAmount: Math.round(citAmount * 100) / 100,
+          citAmount,
           currency: zone?.currency ?? project.baseCurrency,
+          calculationBreakdown: engineCit?.calculationBreakdown ?? '-',
         };
       })
       .sort((a, b) => a.entityName.localeCompare(b.entityName));
@@ -161,6 +159,7 @@ export function EntityTaxTable({
                 <th className={twThRight}>{t('preTaxIncome')}</th>
                 <th className={twThRight}>{t('citRateCol')}</th>
                 <th className={twThRight}>{t('citAmountCol')}</th>
+                <th className={twTh}>{t('breakdown')}</th>
               </tr>
             </thead>
             <tbody>
@@ -171,14 +170,17 @@ export function EntityTaxTable({
                 >
                   <td className={`${twTd} font-semibold`}>{r.entityName}</td>
                   <td className={twTd}>{r.zoneName}</td>
-                  <td className={twTdRight}>{fmt(r.totalInflows)}</td>
-                  <td className={twTdRight}>{fmt(r.totalOutflows)}</td>
+                  <td className={twTdRight}>{fmtMoney(r.totalInflows)}</td>
+                  <td className={twTdRight}>{fmtMoney(r.totalOutflows)}</td>
                   <td className={`${twTdRight} font-bold ${r.preTaxIncome < 0 ? 'text-red-500' : 'text-slate-900 dark:text-slate-100'}`}>
-                    {fmt(r.preTaxIncome)}
+                    {fmtMoney(r.preTaxIncome)}
                   </td>
-                  <td className={twTdRight}>{pct(r.citRate)}</td>
+                  <td className={twTdRight}>{fmtPercent(r.citRate)}</td>
                   <td className={`${twTdRight} font-bold text-red-600 dark:text-red-400`}>
-                    {fmt(r.citAmount)}
+                    {fmtMoney(r.citAmount)}
+                  </td>
+                  <td className={`${twTd} text-[10px] text-slate-500 italic max-w-[200px] truncate`} title={r.calculationBreakdown}>
+                    {r.calculationBreakdown}
                   </td>
                 </tr>
               ))}

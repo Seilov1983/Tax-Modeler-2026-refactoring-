@@ -760,6 +760,13 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
   const baseCurrency = project.baseCurrency;
   const graph = buildComputationGraph(project);
 
+  /** Compact money format for calculation breakdowns (e.g. "50,000,000" → "50M"). */
+  const fmtB = (n: number): string => {
+    if (Math.abs(n) >= 1_000_000) return `${bankersRound2(n / 1_000_000)}M`;
+    if (Math.abs(n) >= 1_000) return `${bankersRound2(n / 1_000)}K`;
+    return String(bankersRound2(n));
+  };
+
   // ── 1. CIT liabilities (company nodes only) ────────────────────────────────
   const citLiabilities: EntityCITLiability[] = [];
 
@@ -779,15 +786,33 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
     const adjustedIncome = income + cashExclusion + cyDenial;
 
     let citAmount: number;
+    let citBreakdown: string;
 
     // ── Astana Hub: 100% CIT reduction (non-IP) or Nexus fraction (IP) ──
     if (zone && zone.code === 'KZ_HUB') {
       const kzBaseCit = getEffectiveRate('KZ', 'cit', fxDate) ?? 0.20;
       citAmount = computeAstanaHubCIT(adjustedIncome, node, kzBaseCit);
+      if (node.isIPIncome && node.nexusParams) {
+        const K = computeNexusFraction(node.nexusParams);
+        citBreakdown = `Astana Hub IP: ${fmtB(adjustedIncome)} × (1 − ${(K * 100).toFixed(1)}% Nexus) × ${(kzBaseCit * 100).toFixed(0)}% = ${fmtB(citAmount)}`;
+      } else {
+        citBreakdown = `Astana Hub non-IP: 100% CIT reduction → ${fmtB(adjustedIncome)} × 0% = 0`;
+      }
     } else {
       // Use the full CIT computation engine (handles all 6 CIT modes)
       citAmount = computeCITAmount(adjustedIncome, cn.effectiveTax.cit);
+      const cit = cn.effectiveTax.cit as CITConfig;
+      const mode = cit?.mode || 'flat';
+      const rateStr = mode === 'flat' ? `${((cit.rate || 0) * 100).toFixed(1)}%`
+        : mode === 'qfzp' ? `${((cit.qualifyingRate || 0) * 100).toFixed(1)}% (QFZP)`
+        : mode === 'threshold' ? `${((cit.mainRate || 0) * 100).toFixed(1)}% (threshold)`
+        : `${((cit.mainRate || 0) * 100).toFixed(1)}%`;
+      citBreakdown = `${fmtB(adjustedIncome)} × ${rateStr} [${mode}] = ${fmtB(citAmount)}`;
     }
+
+    // Append deduction adjustments to breakdown if any
+    if (cashExclusion > 0) citBreakdown += ` (+${fmtB(cashExclusion)} cash discipline add-back)`;
+    if (cyDenial > 0) citBreakdown += ` (+${fmtB(cyDenial)} CY deduction denial)`;
 
     // Resolve lawRef for the applicable zone override
     const zoneOverride = zone ? zoneRules.zoneOverrides[zone.code] : null;
@@ -803,6 +828,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
       citAmount,
       currency,
       lawRef: citLawRef,
+      calculationBreakdown: citBreakdown,
     });
   }
 
@@ -853,6 +879,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
           whtAmountOriginal: whtOriginal,
           whtAmountBase: whtBase,
           lawRef: measures.lawRef,
+          calculationBreakdown: `CY Defensive: ${fmtB(gross)} × ${(penaltyRate * 100).toFixed(0)}% penalty WHT to LTJ (${payeeZone.jurisdiction}) = ${fmtB(whtOriginal)}`,
         });
         continue;
       }
@@ -878,6 +905,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
             whtAmountOriginal: whtAmount,
             whtAmountBase: whtBase,
             lawRef: 'KZ_NK_2026_PROGRESSIVE_WHT',
+            calculationBreakdown: `KZ Progressive WHT: ${fmtB(gross)} → eff. rate ${(effectiveRate * 100).toFixed(2)}% = ${fmtB(whtAmount)}`,
           });
         }
         continue;
@@ -902,6 +930,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
       whtAmountOriginal: whtAmtOrig,
       whtAmountBase: whtBase,
       lawRef: whtRes.appliedLawRef ?? _domesticWhtLawRef(payerZone?.jurisdiction ?? null),
+      calculationBreakdown: `${fmtB(gross)} × ${bankersRound2((whtAmtOrig / gross) * 100)}% = ${fmtB(whtAmtOrig)}`,
     });
   }
 

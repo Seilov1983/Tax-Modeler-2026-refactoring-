@@ -5,9 +5,10 @@ import { Suspense, useState } from 'react';
 import { accountingLedgerAtom } from '../model/atoms';
 import type { LedgerRow } from '../model/atoms';
 import { useTranslation, localizedName } from '@shared/lib/i18n';
+import { fmtMoney } from '@shared/lib/engine/utils';
 
 function formatAmount(amount: number, currency: string): string {
-  return `${amount.toFixed(2)} ${currency}`;
+  return `${fmtMoney(amount)} ${currency}`;
 }
 
 function AuditLogTable() {

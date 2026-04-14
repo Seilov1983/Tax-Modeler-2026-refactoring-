@@ -536,6 +536,8 @@ export interface EntityCITLiability {
   topUpTaxAmount?: number;
   /** Whether this entity has been hit by the Pillar 2 (GloBE) minimum tax trigger. */
   isPillarTwoAffected?: boolean;
+  /** Human-readable formula showing how CIT was computed (Evidence Trail). */
+  calculationBreakdown?: string;
 }
 
 /** Per-flow WHT liability computed by the tax engine. */
@@ -555,6 +557,8 @@ export interface FlowWHTLiability {
   whtAmountBase: number;
   /** Law reference for the WHT rate applied. */
   lawRef?: string | null;
+  /** Human-readable formula showing how WHT was computed (Evidence Trail). */
+  calculationBreakdown?: string;
 }
 
 /** Consolidated tax summary for the entire project graph. */

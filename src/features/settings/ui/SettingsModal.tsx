@@ -42,7 +42,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     setSettings((prev) => ({ ...prev, canvasSnapToGrid: !prev.canvasSnapToGrid }));
   };
 
-  if (!open && styles.opacity.get() === 0) return null;
+  if (!open) return null;
 
   return (
     <animated.div

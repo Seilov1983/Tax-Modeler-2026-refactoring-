@@ -262,10 +262,10 @@ export function exportStructureBook(
   lines.push('## Entity CIT Schedule');
   lines.push('');
   if (taxSummary.citLiabilities.length > 0) {
-    lines.push('| Entity | Jurisdiction | Taxable Income | CIT Rate | CIT Amount | Law Reference | Currency |');
-    lines.push('|---|---|---|---|---|---|---|');
+    lines.push('| Entity | Jurisdiction | Taxable Income | CIT Rate | CIT Amount | Law Reference | Breakdown | Currency |');
+    lines.push('|---|---|---|---|---|---|---|---|');
     for (const cit of taxSummary.citLiabilities) {
-      lines.push(`| ${cit.nodeName} | ${cit.jurisdiction ?? 'N/A'} | ${formatCurrency(cit.taxableIncome, cit.currency)} | ${formatPercent(cit.citRate)} | ${formatCurrency(cit.citAmount, cit.currency)} | ${cit.lawRef ?? '-'} | ${cit.currency} |`);
+      lines.push(`| ${cit.nodeName} | ${cit.jurisdiction ?? 'N/A'} | ${formatCurrency(cit.taxableIncome, cit.currency)} | ${formatPercent(cit.citRate)} | ${formatCurrency(cit.citAmount, cit.currency)} | ${cit.lawRef ?? '-'} | ${cit.calculationBreakdown ?? '-'} | ${cit.currency} |`);
     }
   } else {
     lines.push('*No company entities in the structure.*');
@@ -278,22 +278,24 @@ export function exportStructureBook(
   lines.push('');
   if (project.flows.length > 0) {
     // Build a lookup for WHT liabilities from the tax summary
-    const whtByFlowId = new Map<string, { ratePercent: number; amount: number }>();
-    lines.push('| Flow Type | From | To | Gross Amount | WHT Rate | WHT Amount | Law Reference |');
-    lines.push('|---|---|---|---|---|---|---|');
+    const whtByFlowId = new Map<string, typeof taxSummary.whtLiabilities[0]>();
+    for (const w of taxSummary.whtLiabilities) {
+      whtByFlowId.set(w.flowId, w);
+    }
+    lines.push('| Flow Type | From | To | Gross Amount | WHT Rate | WHT Amount | Law Reference | Breakdown |');
+    lines.push('|---|---|---|---|---|---|---|---|');
     for (const flow of project.flows) {
       const gross = Number(flow.grossAmount || 0);
       if (gross <= 0) continue;
       const fromName = project.nodes.find((n) => n.id === flow.fromId)?.name ?? flow.fromId;
       const toName = project.nodes.find((n) => n.id === flow.toId)?.name ?? flow.toId;
       const whtEntry = whtByFlowId.get(flow.id);
-      const ratePercent = whtEntry?.ratePercent ?? 0;
-      const whtAmount = whtEntry?.amount ?? 0;
+      const ratePercent = whtEntry?.whtRatePercent ?? 0;
+      const whtAmount = whtEntry?.whtAmountOriginal ?? 0;
+      const lawRef = whtEntry?.lawRef ?? '-';
+      const breakdown = whtEntry?.calculationBreakdown ?? '-';
       
-      // Look up LawRef from the whtLiabilities in the snapshot
-      const liabilityEntry = taxSummary.whtLiabilities.find(w => w.flowId === flow.id);
-      
-      lines.push(`| ${flow.flowType} | ${fromName} | ${toName} | ${formatCurrency(gross, flow.currency)} | ${ratePercent.toFixed(2)}% | ${formatCurrency(whtAmount, flow.currency)} | ${liabilityEntry?.lawRef ?? '-'} |`);
+      lines.push(`| ${flow.flowType} | ${fromName} | ${toName} | ${formatCurrency(gross, flow.currency)} | ${ratePercent.toFixed(2)}% | ${formatCurrency(whtAmount, flow.currency)} | ${lawRef} | ${breakdown} |`);
     }
   } else {
     lines.push('*No flows in the structure.*');

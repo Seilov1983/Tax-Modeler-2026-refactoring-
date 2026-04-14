@@ -20,9 +20,10 @@ import { ExportReportButton } from '@features/export-report/ui/ExportReportButto
 import { exportReportPdf } from '@features/project-management/model/export-pdf';
 import type { LedgerRow } from '@entities/report/ui/LedgerTable';
 import { useTranslation } from '@shared/lib/i18n';
+import { fmtMoney, bankersRound2 } from '@shared/lib/engine/utils';
 
 // ─── Tailwind Classes ────────────────────────────────────────────────────────
-const twRoot = "fixed top-[54px] left-0 right-0 bottom-0 flex flex-col bg-slate-50 dark:bg-slate-900 font-sans overflow-hidden";
+const twRoot = "w-full h-full flex flex-col bg-slate-50 dark:bg-slate-900 font-sans overflow-hidden";
 const twHeaderBar = "flex items-center justify-between px-5 py-3 border-b border-black/10 dark:border-white/10 shrink-0 bg-white/50 dark:bg-slate-950/50 backdrop-blur-md";
 const twTitle = "text-base font-bold text-slate-900 dark:text-slate-100";
 const twStatRow = "flex flex-wrap gap-8 px-5 py-3 border-b border-black/5 dark:border-white/5 shrink-0 bg-white/30 dark:bg-slate-950/30 backdrop-blur-sm";
@@ -155,8 +156,8 @@ export function ReportsBuilder() {
       .map((f): LedgerRow => {
         const gross = Number(f.grossAmount || 0);
         const whtRate = Number(f.whtRate || 0);
-        const wht = Math.round(gross * (whtRate / 100) * 100) / 100;
-        const net = Math.round((gross - wht) * 100) / 100;
+        const wht = bankersRound2(gross * (whtRate / 100));
+        const net = bankersRound2(gross - wht);
 
         const complianceStatus: 'OK' | 'Violation acknowledged' =
           f.compliance?.exceeded ? 'Violation acknowledged' : 'OK';
@@ -210,8 +211,8 @@ export function ReportsBuilder() {
     }
     return {
       flowCount: filteredRows.length,
-      totalGross: Math.round(totalGross * 100) / 100,
-      totalWht: Math.round(totalWht * 100) / 100,
+      totalGross: bankersRound2(totalGross),
+      totalWht: bankersRound2(totalWht),
       violations,
     };
   }, [filteredRows]);
@@ -302,21 +303,11 @@ export function ReportsBuilder() {
         </div>
         <div className={twStat}>
           <span className={twStatLabel}>{t('totalGross')}</span>
-          <span className={twStatValue}>
-            {stats.totalGross.toLocaleString('en-US', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </span>
+          <span className={twStatValue}>{fmtMoney(stats.totalGross)}</span>
         </div>
         <div className={twStat}>
           <span className={twStatLabel}>{t('totalWht')}</span>
-          <span className={twStatValue}>
-            {stats.totalWht.toLocaleString('en-US', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </span>
+          <span className={twStatValue}>{fmtMoney(stats.totalWht)}</span>
         </div>
         <div className={twStat}>
           <span className={twStatLabel}>{t('violations')}</span>

@@ -82,6 +82,7 @@ const dictionary = {
   preTaxIncome: { en: 'Pre-Tax Income', ru: '\u0414\u043e\u0445\u043e\u0434 \u0434\u043e \u043d\u0430\u043b\u043e\u0433\u043e\u0432' },
   citRateCol: { en: 'CIT Rate', ru: '\u0421\u0442\u0430\u0432\u043a\u0430 \u041a\u041f\u041d' },
   citAmountCol: { en: 'CIT Amount', ru: '\u0421\u0443\u043c\u043c\u0430 \u041a\u041f\u041d' },
+  breakdown: { en: 'Breakdown', ru: 'Расчёт' },
   noFlowsMatch: { en: 'No flows match the current filters.', ru: '\u041d\u0435\u0442 \u043f\u043e\u0442\u043e\u043a\u043e\u0432, \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u044e\u0449\u0438\u0445 \u0444\u0438\u043b\u044c\u0442\u0440\u0430\u043c.' },
   statusOk: { en: 'OK', ru: '\u041e\u041a' },
   violationAcknowledged: { en: 'Violation acknowledged', ru: '\u041d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u0435 \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u043e' },

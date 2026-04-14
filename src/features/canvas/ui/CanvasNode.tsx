@@ -34,7 +34,7 @@ import { zonesAtom } from '@entities/zone';
 import { settingsAtom } from '@features/settings';
 import { nodeLiveCITAtomFamily } from '@features/tax-calculator/model/atoms';
 import { calculateNodeCardLayout } from '../utils/canvas-layout';
-import { fmtMoney } from '@shared/lib/engine/utils';
+import { fmtMoney, fmtPercent } from '@shared/lib/engine/utils';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -542,7 +542,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
         <Text
           x={cardLayout.title.x}
           y={node.h - NODE_PADDING - 12}
-          text={`CIT ${fmtMoney(nodeTax.citAmount)}  ·  ETR ${(nodeTax.citRate * 100).toFixed(1)}%`}
+          text={`CIT ${fmtMoney(nodeTax.citAmount)}  ·  ETR ${fmtPercent(nodeTax.citRate, 1)}`}
           fontSize={10}
           fontStyle="500"
           fill={nodeTax.citRate > 0.20 ? '#dc2626' : nodeTax.citRate > 0.10 ? '#d97706' : '#16a34a'}

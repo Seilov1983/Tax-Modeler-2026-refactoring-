@@ -33,6 +33,7 @@ const DEFAULT_STATE: ViewportState = { panX: 0, panY: 0, scale: 1 };
 export function useCanvasViewport(
   stageRef: React.RefObject<Konva.Stage | null>,
   onViewportChange?: (state: ViewportState) => void,
+  enabled: boolean = true,
 ) {
   const stateRef = useRef<ViewportState>({ ...DEFAULT_STATE });
   const isPanningRef = useRef(false);
@@ -128,6 +129,8 @@ export function useCanvasViewport(
 
   // ─── Event handlers (attached to Konva Stage container) ───────────────────
   useEffect(() => {
+    if (!enabled) return;
+
     const stage = stageRef.current;
     if (!stage) return;
 
@@ -208,8 +211,11 @@ export function useCanvasViewport(
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+      // Reset transient state to avoid stale flags on re-mount
+      isPanningRef.current = false;
+      spaceDownRef.current = false;
     };
-  }, [stageRef, applyTransform, zoomAt]);
+  }, [stageRef, applyTransform, zoomAt, enabled]);
 
   return { stateRef, resetViewport, zoomBy, panTo };
 }

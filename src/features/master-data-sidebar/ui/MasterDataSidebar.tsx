@@ -292,38 +292,16 @@ export function MasterDataSidebar() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [isOpen, setIsOpen]);
 
-  // ─── Slide animation ─────────────────────────────────────────────────
-  // Aeros physics: tension 300, friction 30 — natural settle without overshoot
-  const sidebarSpring = useSpring({
-    transform: isOpen ? 'translateX(0px)' : 'translateX(-440px)',
-    opacity: isOpen ? 1 : 0,
-    config: { tension: 300, friction: 30 },
-  });
-
   if (!project) return null;
 
   return (
-    <animated.aside
+    <aside
+      className="flex-none w-[420px] h-full flex flex-col overflow-hidden border-r border-black/5 dark:border-white/5"
       style={{
-        ...sidebarSpring,
-        // Aeros: detached floating widget — inset from the viewport edges
-        position: 'fixed',
-        left: 16,
-        top: 16,
-        height: 'calc(100% - 32px)',
-        width: '420px',
-        zIndex: 40,
         background: 'var(--glass-bg)',
         backdropFilter: 'blur(16px) saturate(180%)',
         WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-        border: '1px solid var(--glass-border)',
-        borderRadius: '28px',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
         fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif",
-        pointerEvents: isOpen ? 'auto' : 'none',
       }}
     >
       {/* ─── Header ─────────────────────────────────────────────── */}
@@ -540,7 +518,7 @@ export function MasterDataSidebar() {
           onClose={() => setEditingRegime(null)}
         />
       )}
-    </animated.aside>
+    </aside>
   );
 }
 

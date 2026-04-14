@@ -27,8 +27,9 @@ import type { Project } from '@shared/types';
 import { exportProjectJson, duplicateProject, importProjectJson, exportCanvasToPng } from '../model/export-actions';
 import { exportReportPdf } from '../model/export-pdf';
 import { generateAuditSnapshot, exportStructureBook, downloadMarkdown } from '@shared/lib/engine';
-import { Sun, Moon, Globe, ShieldCheck, LayoutDashboard, FileText, Download, FileJson, FileImage, Undo2, Redo2, Plus, FileUp, Files, Settings } from 'lucide-react';
+import { Sun, Moon, Globe, ShieldCheck, LayoutDashboard, FileText, Download, FileJson, FileImage, Undo2, Redo2, Plus, FileUp, Files, Settings, Sparkles } from 'lucide-react';
 import { activeTabAtom } from '@features/canvas/model/project-atom';
+import { copilotOpenAtom } from '@features/ai-copilot/model/atoms';
 import { syncStatusAtom } from '@shared/hooks/sync-status-atom';
 import { showNotificationAtom } from '@features/canvas/model/notification-atom';
 import { ProjectDashboard } from './ProjectDashboard';
@@ -193,6 +194,7 @@ export function ProjectHeader() {
 
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useAtom(copilotOpenAtom);
   const [auditLoading, setAuditLoading] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
@@ -279,7 +281,7 @@ export function ProjectHeader() {
 
   return (
     <div
-      className="exclude-from-export fixed top-0 left-0 w-full h-[54px] bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border-b border-black/5 dark:border-white/5 flex items-center justify-between px-5 z-[100] text-slate-800 dark:text-slate-200"
+      className="exclude-from-export flex-none w-full h-[54px] bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border-b border-black/5 dark:border-white/5 flex items-center justify-between px-5 z-[100] text-slate-800 dark:text-slate-200"
     >
       {/* Left: branding + title + base currency */}
       <div className="flex items-center gap-3">
@@ -398,6 +400,16 @@ export function ProjectHeader() {
         {/* Settings toggle */}
         <Button variant="ghost" size="icon" onClick={() => setSettingsOpen(true)} className="text-slate-500 rounded-full hover:bg-black/5 dark:hover:bg-white/10">
           <Settings size={16} />
+        </Button>
+
+        {/* AI Copilot toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setCopilotOpen((o) => !o)}
+          className={`rounded-full hover:bg-black/5 dark:hover:bg-white/10 ${copilotOpen ? 'text-indigo-500' : 'text-slate-500'}`}
+        >
+          <Sparkles size={16} />
         </Button>
       </div>
 
