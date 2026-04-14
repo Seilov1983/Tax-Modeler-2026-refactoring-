@@ -406,11 +406,9 @@ function NodeEditor({
         <Field label={t('etrManual')}>
           <div className="relative">
             <Input
-              type="number"
-              step="0.01"
-              min={0}
-              max={1}
-              className="pr-14"
+              type="text"
+              inputMode="decimal"
+              className="pr-14 tabular-nums"
               {...register('etr', { valueAsNumber: true })}
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">0–1</span>
@@ -429,114 +427,111 @@ function NodeEditor({
           <Field label={t('passiveIncomeShare')}>
             <div className="relative">
               <Input
-                type="number"
-                step="1"
-                min={0}
-                max={100}
-                className="pr-8"
+                type="text"
+                inputMode="numeric"
+                className="pr-8 tabular-nums"
                 {...register('passiveIncomeShare', { valueAsNumber: true })}
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">%</span>
             </div>
           </Field>
  
-          {/* Compliance toggles — always visible for Astana Hub / AIFC companies */}
-          {isSubstanceZone && (
-            <div className="ml-1 mb-4 space-y-3 rounded-xl border border-amber-400/30 bg-amber-50/50 dark:bg-amber-900/10 p-3">
-              <Field label={t('isIPIncome')}>
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-[12px] font-medium text-slate-700 dark:text-slate-300">
-                      {t('isIPIncome')}
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <Controller
-                        name="isIPIncome"
-                        control={control}
-                        render={({ field }) => (
-                          <Switch checked={field.value} onCheckedChange={field.onChange} />
-                        )}
-                      />
-                    </div>
+          {/* Compliance toggles — unconditional for ALL company nodes */}
+          <div className="ml-1 mb-4 space-y-3 rounded-xl border border-amber-400/30 bg-amber-50/50 dark:bg-amber-900/10 p-3">
+            <Field label={t('isIPIncome')}>
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-medium text-slate-700 dark:text-slate-300">
+                    {t('isIPIncome')}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <Controller
+                      name="isIPIncome"
+                      control={control}
+                      render={({ field }) => (
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      )}
+                    />
                   </div>
-                  {nexusFraction !== null && (
-                    <div className="flex flex-col items-end">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{t('nexusFraction')}</span>
-                      <Badge variant="outline" className="bg-blue-500/10 border-blue-500/20 text-blue-600 font-mono">
-                        {fmtPercent(nexusFraction, 1)}
-                      </Badge>
-                    </div>
-                  )}
                 </div>
-              </Field>
+                {nexusFraction !== null && (
+                  <div className="flex flex-col items-end">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{t('nexusFraction')}</span>
+                    <Badge variant="outline" className="bg-blue-500/10 border-blue-500/20 text-blue-600 font-mono">
+                      {fmtPercent(nexusFraction, 1)}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+            </Field>
 
-              <Field label={t('hasSubstance')}>
-                <Controller
-                  name="hasSubstance"
-                  control={control}
-                  render={({ field }) => (
-                    <div className="flex items-center justify-between">
-                      <span className="text-[12px] text-slate-600 dark:text-slate-400">{t('hasSubstance')}</span>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </div>
-                  )}
-                />
-              </Field>
+            <Field label={t('hasSubstance')}>
+              <Controller
+                name="hasSubstance"
+                control={control}
+                render={({ field }) => (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] text-slate-600 dark:text-slate-400">{t('hasSubstance')}</span>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </div>
+                )}
+              />
+            </Field>
 
-              <Field label={t('hasSeparateAccounting')}>
-                <Controller
-                  name="hasSeparateAccounting"
-                  control={control}
-                  render={({ field }) => (
-                    <div className="flex items-center justify-between">
-                      <span className="text-[12px] text-slate-600 dark:text-slate-400">{t('hasSeparateAccounting')}</span>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </div>
-                  )}
-                />
-              </Field>
+            <Field label={t('hasSeparateAccounting')}>
+              <Controller
+                name="hasSeparateAccounting"
+                control={control}
+                render={({ field }) => (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[12px] text-slate-600 dark:text-slate-400">{t('hasSeparateAccounting')}</span>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </div>
+                )}
+              />
+            </Field>
 
-              {watchSubstance && (
-                <>
-                  <Field label={t('headcount')}>
-                    <Input
-                      type="number"
-                      {...register('headcount', { valueAsNumber: true })}
-                      className={GLASS_INPUT}
-                    />
-                  </Field>
-                  <Field label={t('operationalExpenses')}>
-                    <Controller
-                      name="operationalExpenses"
-                      control={control}
-                      render={({ field }) => (
-                        <MaskedMoneyInput
-                          value={field.value}
-                          onChange={field.onChange}
-                          onBlur={field.onBlur}
-                          suffix={zone ? currencySymbol(zone.currency) : undefined}
-                        />
-                      )}
-                    />
-                  </Field>
-                  <Field label={t('payrollCosts')}>
-                    <Controller
-                      name="payrollCosts"
-                      control={control}
-                      render={({ field }) => (
-                        <MaskedMoneyInput
-                          value={field.value}
-                          onChange={field.onChange}
-                          onBlur={field.onBlur}
-                          suffix={zone ? currencySymbol(zone.currency) : undefined}
-                        />
-                      )}
-                    />
-                  </Field>
-                </>
-              )}
-            </div>
-          )}
+            {watchSubstance && (
+              <>
+                <Field label={t('headcount')}>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    {...register('headcount', { valueAsNumber: true })}
+                    className={GLASS_INPUT}
+                  />
+                </Field>
+                <Field label={t('operationalExpenses')}>
+                  <Controller
+                    name="operationalExpenses"
+                    control={control}
+                    render={({ field }) => (
+                      <MaskedMoneyInput
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        suffix={zone ? currencySymbol(zone.currency) : undefined}
+                      />
+                    )}
+                  />
+                </Field>
+                <Field label={t('payrollCosts')}>
+                  <Controller
+                    name="payrollCosts"
+                    control={control}
+                    render={({ field }) => (
+                      <MaskedMoneyInput
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        suffix={zone ? currencySymbol(zone.currency) : undefined}
+                      />
+                    )}
+                  />
+                </Field>
+              </>
+            )}
+          </div>
 
           <Field label={t('legalForm')}>
             <Controller
@@ -842,7 +837,7 @@ export function EditorModal() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto flex flex-col gap-0">
+        <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-0">
           {isMultiNode ? (
             <div className="rounded-2xl bg-blue-500/6 p-3.5 text-[13px] text-blue-600">
               <strong>{selection?.type === 'node' ? selection.ids.length : 0} {t('nodes')}</strong> {t('selected')}.

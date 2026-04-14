@@ -222,22 +222,20 @@ export function NodePropertiesDrawer() {
             />
           </div>
 
-          {/* hasSeparateAccounting (for AIFC) */}
-          {zone?.code === 'KZ_AIFC' && (
-            <div className="flex items-center justify-between py-1.5">
-              <Label className="text-[12px] font-medium text-slate-600 dark:text-slate-400 cursor-pointer">
-                {t('separateAccounting')}
-              </Label>
-              <Switch
-                checked={!!node.hasSeparateAccounting}
-                onCheckedChange={toggleSeparateAccounting}
-              />
-            </div>
-          )}
+          {/* hasSeparateAccounting — unconditional */}
+          <div className="flex items-center justify-between py-1.5">
+            <Label className="text-[12px] font-medium text-slate-600 dark:text-slate-400 cursor-pointer">
+              {t('separateAccounting')}
+            </Label>
+            <Switch
+              checked={!!node.hasSeparateAccounting}
+              onCheckedChange={toggleSeparateAccounting}
+            />
+          </div>
         </div>
 
-        {/* ── Substance Metrics (conditional) ────────────────────────── */}
-        {node.hasSubstance && isHubOrAifc && (
+        {/* ── Substance Metrics (conditional on hasSubstance only) ──── */}
+        {node.hasSubstance && (
           <div className={SECTION}>
             <div className="flex items-center gap-2 mb-1">
               <FlaskConical size={14} className="text-emerald-500" />
@@ -250,9 +248,8 @@ export function NodePropertiesDrawer() {
             <div>
               <Label className={LABEL}>{t('headcount')}</Label>
               <Input
-                type="number"
-                min={0}
-                step={1}
+                type="text"
+                inputMode="numeric"
                 value={sm.headcount || ''}
                 onChange={(e) => updateSubstanceMetric('headcount', parseInt(e.target.value) || 0)}
                 placeholder="0"
