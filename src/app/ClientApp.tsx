@@ -15,12 +15,15 @@
  *   - fetch throws (no server — Electron static bundle, file:// etc.)
  */
 
-import { Provider, useSetAtom } from 'jotai';
+import { Provider, useSetAtom, useAtomValue } from 'jotai';
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { hydrateProjectAtom } from '@features/canvas';
+import { hydrateProjectAtom, activeTabAtom } from '@features/canvas';
 import { defaultProject } from '@entities/project';
 import { useDebouncedCloudSync } from '@shared/hooks/useDebouncedCloudSync';
+import { isSidebarOpenAtom } from '@features/master-data-sidebar';
+import { copilotOpenAtom } from '@features/ai-copilot';
+import { selectionAtom } from '@features/entity-editor';
 
 const CanvasBoard = dynamic(
   () => import('@widgets/canvas-board').then((mod) => ({ default: mod.CanvasBoard })),
@@ -28,6 +31,22 @@ const CanvasBoard = dynamic(
 );
 const MasterDataSidebar = dynamic(
   () => import('@features/master-data-sidebar').then((mod) => ({ default: mod.MasterDataSidebar })),
+  { ssr: false },
+);
+const ReportsBuilder = dynamic(
+  () => import('@widgets/reports-builder').then((mod) => ({ default: mod.ReportsBuilder })),
+  { ssr: false },
+);
+const AICopilotChat = dynamic(
+  () => import('@features/ai-copilot').then((mod) => ({ default: mod.AICopilotChat })),
+  { ssr: false },
+);
+const NodePropertiesDrawer = dynamic(
+  () => import('@features/entity-editor').then((mod) => ({ default: mod.NodePropertiesDrawer })),
+  { ssr: false },
+);
+const ProjectHeader = dynamic(
+  () => import('@features/project-management').then((mod) => ({ default: mod.ProjectHeader })),
   { ssr: false },
 );
 import {
@@ -144,11 +163,32 @@ function AppContent() {
     return () => { cancelled = true; };
   }, [hydrate, remoteProjectIdRef, isOfflineModeRef]);
 
+  const activeTab = useAtomValue(activeTabAtom);
+  const isSidebarOpen = useAtomValue(isSidebarOpenAtom);
+  const isCopilotOpen = useAtomValue(copilotOpenAtom);
+  const selection = useAtomValue(selectionAtom);
+  const showPropertiesDrawer = activeTab === 'canvas' && selection?.type === 'node' && selection.ids.length === 1;
+
   return (
-    <>
-      <MasterDataSidebar />
-      <CanvasBoard />
-    </>
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-white dark:bg-slate-950">
+      {/* ─── Top Bar (flex-none) ──────────────────────────────────────── */}
+      <ProjectHeader />
+
+      {/* ─── Middle working area (flex-1) ─────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left sidebar — docked flex sibling */}
+        {isSidebarOpen && <MasterDataSidebar />}
+
+        {/* Central content — fills remaining space */}
+        <main className="flex-1 h-full relative overflow-hidden">
+          {activeTab === 'reports' ? <ReportsBuilder /> : <CanvasBoard />}
+        </main>
+
+        {/* Right panels — docked flex siblings */}
+        {showPropertiesDrawer && <NodePropertiesDrawer />}
+        {isCopilotOpen && <AICopilotChat />}
+      </div>
+    </div>
   );
 }
 
