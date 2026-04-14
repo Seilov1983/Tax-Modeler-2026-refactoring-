@@ -17,6 +17,7 @@ import type { FlowDTO, NodeDTO } from '@shared/types';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { canvasFilterAtom } from '../model/canvas-filter-atom';
+import { fmtMoney, fmtPercent } from '@shared/lib/engine/utils';
 
 // ─── Bezier path builder (reused for draft connections) ─────────────────────
 
@@ -28,12 +29,19 @@ export function buildBezierPath(x1: number, y1: number, x2: number, y2: number):
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
+// ─── Parallel Edge Nudging ───────────────────────────────────────────────────
+const NUDGE_PX = 20;
+
 interface CanvasFlowProps {
   flow: FlowDTO;
   nodes: NodeDTO[];
+  /** Index of this flow within its parallel bundle (0-based). */
+  parallelIndex?: number;
+  /** Total flows in this parallel bundle. */
+  parallelCount?: number;
 }
 
-export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowProps) {
+export const CanvasFlow = memo(function CanvasFlow({ flow, nodes, parallelIndex = 0, parallelCount = 1 }: CanvasFlowProps) {
   const fromNode = nodes.find((n) => n.id === flow.fromId);
   const toNode = nodes.find((n) => n.id === flow.toId);
   const [selection, setSelection] = useAtom(selectionAtom);
@@ -58,11 +66,16 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowPr
 
   if (!fromNode || !toNode) return null;
 
-  // Anchor: right-edge center of source → left-edge center of target
+  // Parallel edge nudge: offset perpendicular to flow direction
+  const nudge = parallelCount > 1
+    ? (parallelIndex - (parallelCount - 1) / 2) * NUDGE_PX
+    : 0;
+
+  // Anchor: right-edge center of source → left-edge center of target (+ nudge)
   const x1 = fromNode.x + fromNode.w;
-  const y1 = fromNode.y + fromNode.h / 2;
+  const y1 = fromNode.y + fromNode.h / 2 + nudge;
   const x2 = toNode.x;
-  const y2 = toNode.y + toNode.h / 2;
+  const y2 = toNode.y + toNode.h / 2 + nudge;
 
   const dx = Math.abs(x2 - x1);
   const cpOffset = Math.max(dx * 0.45, 50);
@@ -70,7 +83,7 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowPr
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
 
-  const label = `${flow.flowType}${flow.grossAmount > 0 ? ' ' + flow.grossAmount.toLocaleString('ru-RU') : ''}`;
+  const label = `${flow.flowType}${flow.grossAmount > 0 ? ' ' + fmtMoney(flow.grossAmount) : ''}`;
 
   return (
     <Group onClick={handleClick} onTap={handleClick} opacity={isGhosted ? 0.15 : 1} listening={!isGhosted}>
@@ -139,7 +152,7 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes }: CanvasFlowPr
           <Text
             x={3}
             y={3}
-            text={`WHT: ${flow.whtRate}%`}
+            text={`WHT: ${fmtPercent(flow.whtRate / 100)}`}
             fontSize={9}
             fill="#9a3412"
             width={54}

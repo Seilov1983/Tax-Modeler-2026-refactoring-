@@ -15,6 +15,7 @@ import { Group, Shape, Text, Rect } from 'react-konva';
 import type { OwnershipEdge, NodeDTO } from '@shared/types';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
+import { bankersRound2 } from '@shared/lib/engine/utils';
 
 // ─── Vertical Bezier path builder ───────────────────────────────────────────
 
@@ -103,7 +104,7 @@ export const CanvasOwnership = memo(function CanvasOwnership({ edge, nodes }: Ca
         <Text
           x={2}
           y={3}
-          text={`${edge.percent}%`}
+          text={`${bankersRound2(edge.percent)}%`}
           fontSize={10}
           fontStyle="bold"
           fill="#7c3aed"

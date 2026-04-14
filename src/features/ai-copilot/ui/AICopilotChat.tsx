@@ -18,15 +18,18 @@
 
 import { useChat } from '@ai-sdk/react';
 import { useState, useRef, useEffect, useCallback, type FormEvent } from 'react';
-import { useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { copilotOpenAtom, aiChatHistoryAtom } from '../model/atoms';
 import { nodesAtom } from '@entities/node';
 import { zonesAtom } from '@entities/zone';
 import { flowsAtom } from '@entities/flow';
 import { projectAtom } from '@features/canvas';
 import { generateAuditSnapshot } from '@shared/lib/engine';
-import { MessageSquare, X, Send, Sparkles, AlertTriangle, Check } from 'lucide-react';
+import { MessageSquare, X, Send, Sparkles, AlertTriangle, Check, Zap, ArrowRight } from 'lucide-react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { useTranslation } from '@shared/lib/i18n';
+import { fmtMoney } from '@shared/lib/engine/utils';
+import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
 
 /** Extract concatenated text from UIMessage parts. */
 function getMessageText(msg: UIMessage): string {
@@ -71,6 +74,10 @@ const TOOL_LABELS: Record<string, { active: string; done: string }> = {
     active: '\u{1F9EE} \u0421\u0438\u043C\u0443\u043B\u044F\u0446\u0438\u044F \u043D\u0430\u043B\u043E\u0433\u043E\u0432\u044B\u0445 \u043F\u043E\u0442\u043E\u043A\u043E\u0432...',
     done: '\u2705 \u0420\u0430\u0441\u0447\u0451\u0442 \u0437\u0430\u0432\u0435\u0440\u0448\u0451\u043D',
   },
+  propose_structural_change: {
+    active: '\u26A1 Preparing recommendation...',
+    done: '\u2705 Recommendation ready',
+  },
 };
 
 function toolActiveLabel(part: ToolPart): string {
@@ -84,7 +91,92 @@ function toolDoneLabel(part: ToolPart): string {
 /** Format a currency value for display in tool result cards. */
 function fmtToolAmount(val: unknown): string {
   if (typeof val !== 'number') return String(val ?? '-');
-  return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return fmtMoney(val);
+}
+
+// ─── ActionCard — Generative UI for propose_structural_change ────────────────
+
+const ACTION_SEVERITY_STYLES = {
+  HIGH: {
+    border: 'border-red-500/30 dark:border-red-500/20',
+    badge: 'bg-red-500/10 text-red-600 dark:text-red-400',
+    icon: 'text-red-500',
+  },
+  MEDIUM: {
+    border: 'border-amber-500/30 dark:border-amber-500/20',
+    badge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    icon: 'text-amber-500',
+  },
+  LOW: {
+    border: 'border-emerald-500/30 dark:border-emerald-500/20',
+    badge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+    icon: 'text-emerald-500',
+  },
+};
+
+interface Proposal {
+  title: string;
+  description: string;
+  actionType: string;
+  targetNodeId: string | null;
+  targetFlowId: string | null;
+  params: Record<string, unknown>;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+function ActionCard({
+  proposal,
+  onApply,
+}: {
+  proposal: Proposal;
+  onApply: (p: Proposal) => void;
+}) {
+  const [applied, setApplied] = useState(false);
+  const severity = ACTION_SEVERITY_STYLES[proposal.severity] ?? ACTION_SEVERITY_STYLES.LOW;
+
+  const handleApply = useCallback(() => {
+    onApply(proposal);
+    setApplied(true);
+  }, [proposal, onApply]);
+
+  return (
+    <div className={`mt-2 rounded-xl border ${severity.border} bg-white/60 dark:bg-slate-900/60 backdrop-blur-md overflow-hidden shadow-sm`}>
+      <div className="px-3.5 py-3">
+        <div className="flex items-start gap-2.5">
+          <Zap size={16} className={`${severity.icon} shrink-0 mt-0.5`} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[13px] font-bold text-slate-800 dark:text-slate-200 leading-tight">
+                {proposal.title}
+              </span>
+              <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${severity.badge}`}>
+                {proposal.severity}
+              </span>
+            </div>
+            <p className="text-[12px] text-slate-600 dark:text-slate-400 leading-relaxed m-0">
+              {proposal.description}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="px-3.5 py-2 bg-black/[0.02] dark:bg-white/[0.02] border-t border-black/5 dark:border-white/5 flex items-center justify-end gap-2">
+        {applied ? (
+          <span className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">
+            <Check size={14} />
+            Applied
+          </span>
+        ) : (
+          <button
+            onClick={handleApply}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-600 active:scale-[0.97] text-white text-[12px] font-bold border-none cursor-pointer transition-all shadow-sm shadow-indigo-500/20"
+          >
+            Apply
+            <ArrowRight size={12} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** Map error messages to user-friendly descriptions. */
@@ -106,7 +198,9 @@ function friendlyErrorMessage(error: Error | undefined): string | null {
 }
 
 export function AICopilotChat() {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useAtom(copilotOpenAtom);
+  const chatHistory = useAtomValue(aiChatHistoryAtom);
+  const setChatHistory = useSetAtom(aiChatHistoryAtom);
   const [inputValue, setInputValue] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const { t } = useTranslation();
@@ -114,7 +208,8 @@ export function AICopilotChat() {
   const nodes = useAtomValue(nodesAtom);
   const zones = useAtomValue(zonesAtom);
   const flows = useAtomValue(flowsAtom);
-  const project = useAtomValue(projectAtom);
+  const [project, setProject] = useAtom(projectAtom);
+  const commitHistory = useSetAtom(commitHistoryAtom);
 
   // ─── Smart Context Sync: hash-based canvas snapshot ─────────────────────
   const [canvasHash, setCanvasHash] = useState<string | null>(null);
@@ -155,12 +250,19 @@ export function AICopilotChat() {
     },
   }));
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, setMessages, sendMessage, status, error } = useChat({
+    id: 'ai-copilot',
+    messages: chatHistory.length > 0 ? chatHistory : undefined,
     transport: transportRef.current,
     onError: (err) => {
       console.warn('[AICopilot] Chat error:', err.message);
     },
   });
+
+  // Persist messages to Jotai atom — survives panel unmount/remount
+  useEffect(() => {
+    setChatHistory(messages);
+  }, [messages, setChatHistory]);
 
   const isLoading = status === 'streaming' || status === 'submitted';
   const isError = status === 'error';
@@ -184,21 +286,89 @@ export function AICopilotChat() {
     [inputValue, isLoading, sendMessage],
   );
 
-  if (!isOpen) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        title={t('askAiCopilot')}
-        className="fixed bottom-12 right-6 z-50 w-12 h-12 rounded-full bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-[0_8px_32px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] flex items-center justify-center text-indigo-500 cursor-pointer transition-all hover:scale-105 hover:shadow-[0_12px_40px_rgba(0,0,0,0.16),0_4px_12px_rgba(0,0,0,0.08)] active:scale-95"
-      >
-        <Sparkles size={22} />
-      </button>
-    );
-  }
+  // ─── Apply AI-proposed structural changes to the project ──────────────────
+  const handleApplyProposal = useCallback(
+    (proposal: Proposal) => {
+      if (!project) return;
+      commitHistory();
+      setProject((prev) => {
+        if (!prev) return prev;
+        switch (proposal.actionType) {
+          case 'increase_opex':
+          case 'decrease_opex': {
+            const targetId = proposal.targetNodeId;
+            const delta = Number(proposal.params?.amount ?? proposal.params?.opex ?? 0);
+            if (!targetId || !delta) return prev;
+            return {
+              ...prev,
+              nodes: prev.nodes.map((n) => {
+                if (n.id !== targetId) return n;
+                const sm = n.substanceMetrics ?? { headcount: 0, operationalExpenses: 0, payrollCosts: 0 };
+                return {
+                  ...n,
+                  substanceMetrics: {
+                    ...sm,
+                    operationalExpenses: sm.operationalExpenses + (proposal.actionType === 'increase_opex' ? delta : -delta),
+                  },
+                };
+              }),
+            };
+          }
+          case 'adjust_wht': {
+            const flowId = proposal.targetFlowId;
+            const rate = Number(proposal.params?.whtRate ?? 0);
+            if (!flowId) return prev;
+            return {
+              ...prev,
+              flows: prev.flows.map((f) =>
+                f.id === flowId ? { ...f, whtRate: rate } : f,
+              ),
+            };
+          }
+          case 'apply_dtt': {
+            const flowId = proposal.targetFlowId;
+            if (!flowId) return prev;
+            return {
+              ...prev,
+              flows: prev.flows.map((f) =>
+                f.id === flowId ? { ...f, applyDTT: true } : f,
+              ),
+            };
+          }
+          case 'increase_substance': {
+            const targetId = proposal.targetNodeId;
+            const payroll = Number(proposal.params?.payrollCosts ?? 0);
+            const opex = Number(proposal.params?.opex ?? 0);
+            if (!targetId) return prev;
+            return {
+              ...prev,
+              nodes: prev.nodes.map((n) => {
+                if (n.id !== targetId) return n;
+                const sm = n.substanceMetrics ?? { headcount: 0, operationalExpenses: 0, payrollCosts: 0 };
+                return {
+                  ...n,
+                  substanceMetrics: {
+                    ...sm,
+                    ...(payroll ? { payrollCosts: sm.payrollCosts + payroll } : {}),
+                    ...(opex ? { operationalExpenses: sm.operationalExpenses + opex } : {}),
+                  },
+                };
+              }),
+            };
+          }
+          default:
+            // Other action types (reroute_flow, change_zone, add_entity, remove_entity, restructure)
+            // are informational — no automatic mutation.
+            return prev;
+        }
+      });
+    },
+    [project, commitHistory, setProject],
+  );
 
   return (
-    <div
-      className="fixed bottom-12 right-6 z-50 w-[380px] h-[520px] flex flex-col bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-2xl rounded-[20px] overflow-hidden"
+    <aside
+      className="flex-none w-[380px] h-full flex flex-col bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border-l border-black/5 dark:border-white/5 shadow-2xl overflow-hidden"
       onPointerDown={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}
     >
@@ -286,6 +456,18 @@ export function AICopilotChat() {
                       </svg>
                       {toolActiveLabel(part)}
                     </div>
+                  );
+                }
+
+                // ── Complete: ActionCard for propose_structural_change ──
+                if (output && output.success && part.toolName === 'propose_structural_change' && output.proposal) {
+                  const proposal = output.proposal as Proposal;
+                  return (
+                    <ActionCard
+                      key={part.toolCallId}
+                      proposal={proposal}
+                      onApply={handleApplyProposal}
+                    />
                   );
                 }
 
@@ -407,6 +589,6 @@ export function AICopilotChat() {
           <Send size={16} className={inputValue.trim() ? "ml-[2px]" : ""} />
         </button>
       </form>
-    </div>
+    </aside>
   );
 }

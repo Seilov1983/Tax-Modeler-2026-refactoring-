@@ -49,12 +49,8 @@ import { addNodeAtom, addZoneAtom, NODE_WIDTH, NODE_HEIGHT } from '@features/can
 import { spawnCoordinatesAtom } from '@features/canvas/model/spawn-coordinates-atom';
 import { notificationAtom } from '@features/canvas/model/notification-atom';
 import { GlobalSummaryWidget } from '@features/analytics-dashboard/ui/GlobalSummaryWidget';
-import { AICopilotChat } from '@features/ai-copilot/ui/AICopilotChat';
 import { CanvasFilterPanel } from './CanvasFilterPanel';
-import { ProjectHeader } from '@features/project-management';
 import { isSidebarOpenAtom, sidebarContextAtom } from '@features/master-data-sidebar';
-import { activeTabAtom } from '@features/canvas/model/project-atom';
-import { ReportsBuilder } from '@widgets/reports-builder';
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
 import type { JurisdictionCode, CurrencyCode, Zone, NodeDTO } from '@shared/types';
 import { useTranslation } from '@shared/lib/i18n';
@@ -214,13 +210,29 @@ function GridBackground({ width, height }: { width: number; height: number }) {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export function CanvasBoard() {
-  const activeTab = useAtomValue(activeTabAtom);
   const { t } = useTranslation();
   const zones = useAtomValue(zonesAtom);
   const nodeAtoms = useAtomValue(nodeAtomsAtom);
   const nodes = useAtomValue(nodesAtom);
   const flows = useAtomValue(flowsAtom);
   const ownership = useAtomValue(ownershipAtom);
+
+  // ─── Parallel edge bundle detection ─────────────────────────────────
+  const flowParallelInfo = useMemo(() => {
+    const groups = new Map<string, string[]>();
+    for (const f of flows) {
+      const key = [f.fromId, f.toId].sort().join('::');
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(f.id);
+    }
+    const info = new Map<string, { index: number; count: number }>();
+    for (const ids of groups.values()) {
+      for (let i = 0; i < ids.length; i++) {
+        info.set(ids[i], { index: i, count: ids.length });
+      }
+    }
+    return info;
+  }, [flows]);
 
   const [currentSelection, setSelection] = useAtom(selectionAtom);
   const selectionRef = useRef(currentSelection);
@@ -245,19 +257,22 @@ export function CanvasBoard() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [stageSize, setStageSize] = useState({ width: 1200, height: 800 });
 
-  // Resize Stage to fill viewport
+  // Resize Stage to fill parent <main> — handles window resize AND sidebar squeeze
   useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
     const updateSize = () => {
-      if (containerRef.current) {
-        setStageSize({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
-      }
+      setStageSize({
+        width: container.clientWidth,
+        height: container.clientHeight,
+      });
     };
     updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+
+    const ro = new ResizeObserver(updateSize);
+    ro.observe(container);
+    return () => ro.disconnect();
   }, []);
 
   // ─── Force Konva redraw after React commits new entities ────────────────
@@ -718,29 +733,14 @@ export function CanvasBoard() {
     return map;
   }, [zones]);
 
-  // (menu styles moved inline to Apple Liquid Glass redesign below)
-
-  // ─── Reports tab: render ReportsBuilder instead of Canvas ────────────
-  if (activeTab === 'reports') {
-    return (
-      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-        <ProjectHeader />
-        <ReportsBuilder />
-      </div>
-    );
-  }
-
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <ProjectHeader />
-
-      <div
-        id="canvas-render-area"
-        ref={containerRef}
-        style={{ position: 'fixed', top: '54px', left: 0, right: 0, bottom: 0, overflow: 'hidden' }}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-      >
+    <div
+      id="canvas-render-area"
+      ref={containerRef}
+      className="w-full h-full overflow-hidden relative"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
         <Stage
           ref={stageRef}
           width={stageSize.width}
@@ -794,9 +794,18 @@ export function CanvasBoard() {
               Static layer, re-renders only on data change.
               Includes hitStrokeWidth={20} on flows for easy selection. */}
           <Layer>
-            {flows.map((flow) => (
-              <CanvasFlow key={flow.id} flow={flow} nodes={nodes} />
-            ))}
+            {flows.map((flow) => {
+              const par = flowParallelInfo.get(flow.id);
+              return (
+                <CanvasFlow
+                  key={flow.id}
+                  flow={flow}
+                  nodes={nodes}
+                  parallelIndex={par?.index}
+                  parallelCount={par?.count}
+                />
+              );
+            })}
 
             {ownership.map((edge) => (
               <CanvasOwnership key={edge.id} edge={edge} nodes={nodes} />
@@ -860,7 +869,6 @@ export function CanvasBoard() {
         <FlowModal />
         <EditorModal />
         <NotificationToast />
-        <AICopilotChat />
 
         {/* Add Node Menu — Apple Liquid Glass floating popover.
             Rendered as DOM overlay OUTSIDE Konva to avoid canvas clipping.
@@ -968,6 +976,5 @@ export function CanvasBoard() {
           </div>
         )}
       </div>
-    </div>
   );
 }

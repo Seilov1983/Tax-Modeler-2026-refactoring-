@@ -566,6 +566,28 @@ export function effectiveEtrForCompany(p: Project, co: NodeDTO): number {
       return 0;
     }
 
+    // ── HK FSIE: Foreign Sourced Income Exemption (IRO s.15H-15T, effective 2023-01-01) ──
+    // Passive income (dividends, interest, royalties, IP) from offshore sources
+    // is exempt from profits tax IF the entity has adequate substance in HK.
+    // Without substance, the income is taxable at the standard HK rate.
+    if (z.jurisdiction === 'HK' && co?.hasSubstance) {
+      // Check if income is predominantly foreign-sourced (via isOffshoreSource flows)
+      const offshoreFlows = p.flows.filter(
+        (f) => f.toId === co.id && f.isOffshoreSource &&
+          ['Dividends', 'Interest', 'Royalties'].includes(f.flowType),
+      );
+      const totalOffshoreIncome = offshoreFlows.reduce(
+        (sum, f) => sum + convert(p, Number(f.grossAmount || 0), f.currency, z.currency), 0,
+      );
+      const totalIncome = Number(co.annualIncome || 0);
+      if (totalIncome > 0 && totalOffshoreIncome > 0) {
+        // Blended rate: exempt portion at 0%, remainder at standard HK rate
+        const exemptFraction = Math.min(1, totalOffshoreIncome / totalIncome);
+        const hkCitRate = getEffectiveRate('HK', 'cit', p.fx?.fxDate || '2026-01-01') ?? 0.165;
+        return bankersRound2(hkCitRate * (1 - exemptFraction) * 10000) / 10000;
+      }
+    }
+
     const tx = effectiveZoneTax(p, z);
     const cit = tx?.cit as CITConfig | undefined;
     if (cit?.mode) {
@@ -694,6 +716,24 @@ export function computeCYDeductionDenial(
   }
 
   return bankersRound2(totalDenied);
+}
+
+/** Map jurisdiction code → domestic WHT law reference. */
+function _domesticWhtLawRef(jurisdiction: string | null): string | null {
+  if (!jurisdiction) return null;
+  const refs: Record<string, string> = {
+    KZ: 'НК РК 2025 ст. 645-655 (ИПН у источника)',
+    CY: 'CY Income Tax Law s.37(1)',
+    HK: 'HK IRO s.20A-20AC',
+    SG: 'SG ITA s.45',
+    UK: 'UK ITA 2007 Part 15',
+    US: 'US IRC §1441-1446',
+    UAE: 'UAE CT Law Art. 45',
+    BVI: 'BVI Business Companies Act 2004 (no WHT)',
+    CAY: 'Cayman Islands — no WHT regime',
+    SEY: 'Seychelles Business Tax Act 2009 s.35',
+  };
+  return refs[jurisdiction] ?? `${jurisdiction} domestic WHT`;
 }
 
 // ─── Consolidated Group Tax Computation (LEGAL LAYER) ────────────────────────
@@ -858,10 +898,10 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
       toNodeId: flow.toId,
       grossAmount: gross,
       originalCurrency: flow.currency,
-      whtRatePercent: Math.round((whtAmtOrig / gross) * 10000) / 100,
+      whtRatePercent: bankersRound2((whtAmtOrig / gross) * 100),
       whtAmountOriginal: whtAmtOrig,
       whtAmountBase: whtBase,
-      lawRef: whtRes.appliedLawRef ?? (payerZone ? `DOMESTIC_WHT_${payerZone.jurisdiction}` : null),
+      lawRef: whtRes.appliedLawRef ?? _domesticWhtLawRef(payerZone?.jurisdiction ?? null),
     });
   }
 

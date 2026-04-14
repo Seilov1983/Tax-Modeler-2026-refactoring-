@@ -1,6 +1,6 @@
 {
   "$schema": "zone-rules-schema",
-  "$version": "2026-03-26",
+  "$version": "2026-04-14",
   "$description": "Declarative zone tax overrides — Law-as-Code. AI Legal Parser can update this file when legislation changes without touching engine code.",
 
   "zoneOverrides": {
@@ -12,7 +12,7 @@
         "wht": { "dividends": 0.05, "interest": 0.00, "royalties": 0.00, "services": 0.00 },
         "payroll": { "pitRate": 0.00, "socialTaxEmployerRate": 0.00 }
       },
-      "lawRef": "KZ_ASTANA_HUB_2026",
+      "lawRef": "НК РК 2025 ст. 738-740 (Astana Hub, КИТ-парк)",
       "effectiveFrom": "2018-01-01",
       "effectiveTo": null
     },
@@ -22,7 +22,7 @@
         "vatRate": 0.00,
         "cit": { "mode": "flat", "rate": 0.00 }
       },
-      "lawRef": "KZ_AIFC_ACT_2026",
+      "lawRef": "Конституционный закон о МФЦА, ст. 6 (налоговые льготы)",
       "effectiveFrom": "2018-01-01",
       "effectiveTo": "2066-01-01"
     },
@@ -31,7 +31,7 @@
       "taxOverride": {
         "cit": { "mode": "qfzp", "qualifyingRate": 0.00, "nonQualifyingRate": 0.09, "currency": "AED" }
       },
-      "lawRef": "UAE_CT_LAW_2023_QFZP",
+      "lawRef": "UAE Federal Decree-Law No. 47/2022 Art. 18 (QFZP)",
       "effectiveFrom": "2024-06-01",
       "effectiveTo": null
     },
@@ -40,7 +40,7 @@
       "taxOverride": {
         "cit": { "mode": "threshold", "zeroUpTo": 375000, "zeroRate": 0.00, "mainRate": 0.09, "currency": "AED" }
       },
-      "lawRef": "UAE_CT_LAW_2023_NONQFZP",
+      "lawRef": "UAE Federal Decree-Law No. 47/2022 Art. 3 (standard CIT)",
       "effectiveFrom": "2024-06-01",
       "effectiveTo": null
     },
@@ -49,7 +49,7 @@
       "taxOverride": {
         "cit": { "mode": "flat", "rate": 0.00, "currency": "HKD" }
       },
-      "lawRef": "HK_IRO_S14_OFFSHORE_CLAIM",
+      "lawRef": "HK IRO s.14(1) (offshore profits claim)",
       "effectiveFrom": "1997-07-01",
       "effectiveTo": null
     }
@@ -63,7 +63,7 @@
       },
       "effect": {
         "rate": 0,
-        "lawRef": "KZ_NK_2026_ART_680_P1_S4"
+        "lawRef": "НК РК 2025 ст. 645 п.1 пп.4 (освобождение от ИПН)"
       },
       "validFrom": "2026-01-01",
       "validTo": null
@@ -75,7 +75,7 @@
       },
       "effect": {
         "rate": 0,
-        "lawRef": "DOMESTIC_WHT_EXEMPTION"
+        "lawRef": "Внутренний платёж — WHT не применяется"
       },
       "validFrom": "2000-01-01",
       "validTo": null
@@ -86,7 +86,7 @@
     "zoneCode": "KZ_AIFC",
     "condition": "usesCITBenefit && !cigaInZone && (!hasSubstance || !hasSeparateAccounting)",
     "fallbackCitRate": 0.20,
-    "lawRef": "APP_G_G4_AIFC_PRESENCE",
+    "lawRef": "AIFC Tax Rules 2018, Rule 4.3 (CIGA presence)",
     "validFrom": "2018-01-01",
     "validTo": "2066-01-01"
   }

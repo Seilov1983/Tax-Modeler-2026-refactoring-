@@ -18,6 +18,7 @@ import { deleteNodesAtom, deleteOwnershipAtom, updateNodeAtom, updateOwnershipAt
 import { useTranslation, localizedName, t } from '@shared/lib/i18n';
 import type { NodeDTO, OwnershipEdge, NodeType, Zone, Project } from '@shared/types';
 import { computeNexusFractionFromFlows } from '@shared/lib/engine/engine-tax';
+import { fmtMoney, fmtPercent, fmtInputDisplay, parseInputDisplay, currencySymbol } from '@shared/lib/engine/utils';
 import {
   Dialog,
   DialogContent,
@@ -47,6 +48,65 @@ const GLASS_INPUT = '';
 const GLASS_SELECT = '';
 const GLASS_LABEL = 'text-[12px] font-semibold text-slate-500 dark:text-slate-400 tracking-wider uppercase mb-1.5 block ml-1';
 const GLASS_PANEL = 'rounded-2xl bg-white/40 dark:bg-black/30 border border-white/50 dark:border-white/10 backdrop-blur-md shadow-sm';
+
+// ─── Risk type → i18n key mapping ────────────────────────────────────────────
+const RISK_TYPE_I18N: Record<string, string> = {
+  CFC_RISK: 'riskCfc',
+  SUBSTANCE_BREACH: 'riskSubstanceBreach',
+  AIFC_PRESENCE_BREACH: 'riskAifcPresence',
+  PILLAR2_LOW_ETR: 'riskPillar2LowEtr',
+  PILLAR2_TOPUP_RISK: 'riskPillar2Topup',
+  PILLAR2_TRIGGER: 'riskPillar2Trigger',
+  TRANSFER_PRICING_RISK: 'riskTransferPricing',
+  CASH_LIMIT_EXCEEDED: 'riskCashLimit',
+  INTERIM_DIVIDENDS_RISK: 'riskInterimDividends',
+  CONSTRUCTIVE_DIVIDEND: 'riskConstructiveDividend',
+  NO_JURISDICTION: 'riskNoJurisdiction',
+  CAPITAL_ANOMALY: 'riskCapitalAnomaly',
+  SUBSTANCE_EXPENSE_MISMATCH: 'riskSubstanceExpenseMismatch',
+  FSIE_SUBSTANCE: 'riskFsieSubstance',
+  ADVANCE_RULING: 'riskAdvanceRuling',
+  SEPARATE_ACCOUNTING: 'riskSeparateAccounting',
+  NON_DEDUCTIBLE_EXPENSE: 'riskNonDeductibleExpense',
+};
+
+// ─── Masked Money Input ─────────────────────────────────────────────────────
+function MaskedMoneyInput({
+  value,
+  onChange,
+  onBlur,
+  suffix,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  onBlur?: () => void;
+  suffix?: string;
+}) {
+  const [raw, setRaw] = useState('');
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <div className="relative">
+      <Input
+        type="text"
+        inputMode="decimal"
+        value={focused ? raw : fmtInputDisplay(value)}
+        onChange={(e) => {
+          const v = e.target.value.replace(/[^\d.\s]/g, '');
+          setRaw(v);
+          const n = parseInputDisplay(v);
+          onChange(n);
+        }}
+        onFocus={() => { setFocused(true); setRaw(value ? String(value) : ''); }}
+        onBlur={() => { setFocused(false); onBlur?.(); }}
+        className={suffix ? 'pr-10' : ''}
+      />
+      {suffix && (
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">{suffix}</span>
+      )}
+    </div>
+  );
+}
 
 // ─── Form types ──────────────────────────────────────────────────────────────
 
@@ -227,7 +287,7 @@ function ShareholdersSection({
             : 'bg-emerald-500/10 text-emerald-600'
       }`}>
         <span>{t('total')}</span>
-        <span>{total.toFixed(2)}%</span>
+        <span>{fmtPercent(total / 100)}</span>
       </div>
 
       {isOver100 && (
@@ -328,24 +388,33 @@ function NodeEditor({
       </Field>
 
       <Field label={t('annualIncome')}>
-        <Input
-          type="number"
-          step="any"
-          className={GLASS_INPUT}
-          {...register('annualIncome', { valueAsNumber: true })}
+        <Controller
+          name="annualIncome"
+          control={control}
+          render={({ field }) => (
+            <MaskedMoneyInput
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              suffix={zone ? currencySymbol(zone.currency) : undefined}
+            />
+          )}
         />
       </Field>
 
       {watchType === 'company' && (
         <Field label={t('etrManual')}>
-          <Input
-            type="number"
-            step="0.01"
-            min={0}
-            max={1}
-            className={GLASS_INPUT}
-            {...register('etr', { valueAsNumber: true })}
-          />
+          <div className="relative">
+            <Input
+              type="number"
+              step="0.01"
+              min={0}
+              max={1}
+              className="pr-14"
+              {...register('etr', { valueAsNumber: true })}
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">0–1</span>
+          </div>
         </Field>
       )}
 
@@ -358,14 +427,17 @@ function NodeEditor({
       {watchType === 'company' && (
         <>
           <Field label={t('passiveIncomeShare')}>
-            <Input
-              type="number"
-              step="1"
-              min={0}
-              max={100}
-              className={GLASS_INPUT}
-              {...register('passiveIncomeShare', { valueAsNumber: true })}
-            />
+            <div className="relative">
+              <Input
+                type="number"
+                step="1"
+                min={0}
+                max={100}
+                className="pr-8"
+                {...register('passiveIncomeShare', { valueAsNumber: true })}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">%</span>
+            </div>
           </Field>
  
           {/* Compliance toggles — always visible for Astana Hub / AIFC companies */}
@@ -391,7 +463,7 @@ function NodeEditor({
                     <div className="flex flex-col items-end">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{t('nexusFraction')}</span>
                       <Badge variant="outline" className="bg-blue-500/10 border-blue-500/20 text-blue-600 font-mono">
-                        {(nexusFraction * 100).toFixed(1)}%
+                        {fmtPercent(nexusFraction, 1)}
                       </Badge>
                     </div>
                   )}
@@ -434,17 +506,31 @@ function NodeEditor({
                     />
                   </Field>
                   <Field label={t('operationalExpenses')}>
-                    <Input
-                      type="number"
-                      {...register('operationalExpenses', { valueAsNumber: true })}
-                      className={GLASS_INPUT}
+                    <Controller
+                      name="operationalExpenses"
+                      control={control}
+                      render={({ field }) => (
+                        <MaskedMoneyInput
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          suffix={zone ? currencySymbol(zone.currency) : undefined}
+                        />
+                      )}
                     />
                   </Field>
                   <Field label={t('payrollCosts')}>
-                    <Input
-                      type="number"
-                      {...register('payrollCosts', { valueAsNumber: true })}
-                      className={GLASS_INPUT}
+                    <Controller
+                      name="payrollCosts"
+                      control={control}
+                      render={({ field }) => (
+                        <MaskedMoneyInput
+                          value={field.value}
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          suffix={zone ? currencySymbol(zone.currency) : undefined}
+                        />
+                      )}
                     />
                   </Field>
                 </>
@@ -483,7 +569,7 @@ function NodeEditor({
               <div className={GLASS_PANEL + ' p-3'}>
                 <span className="text-[10px] text-slate-500 block mb-1">{t('effectiveETR')}</span>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-xl font-mono font-bold">{(node.etr * 100).toFixed(1)}%</span>
+                  <span className="text-xl font-mono font-bold">{fmtPercent(node.etr, 1)}</span>
                   {node.etr < 0.15 && (
                     <Badge variant="outline" className="text-[9px] bg-red-500/10 text-red-600 border-red-500/20">
                       {t('pillar2Risk')}
@@ -500,17 +586,21 @@ function NodeEditor({
 
             {node.riskFlags && node.riskFlags.length > 0 && (
               <div className="space-y-2">
-                {node.riskFlags.map((flag, idx) => (
-                  <div key={idx} className="flex items-start gap-2 rounded-lg bg-orange-500/5 p-2 border border-orange-500/10">
-                    <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
-                    <div>
-                      <p className="text-[11px] font-bold text-orange-700 dark:text-orange-400 leading-tight">
-                        {String(flag.type).replace(/_/g, ' ')}
-                      </p>
-                      {!!flag.message && <p className="text-[10px] text-slate-500 mt-0.5">{String(flag.message)}</p>}
+                {node.riskFlags.map((flag, idx) => {
+                  const labelKey = RISK_TYPE_I18N[flag.type];
+                  const label = labelKey ? t(labelKey as any) : String(flag.type).replace(/_/g, ' ');
+                  return (
+                    <div key={idx} className="flex items-start gap-2 rounded-lg bg-orange-500/5 dark:bg-orange-500/10 p-2 border border-orange-500/10">
+                      <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
+                      <div>
+                        <p className="text-[11px] font-bold text-orange-700 dark:text-orange-400 leading-tight">
+                          {label}
+                        </p>
+                        {!!flag.message && <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{t(String(flag.message) as any)}</p>}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -530,8 +620,8 @@ function NodeEditor({
           <p><span className="text-slate-500 dark:text-slate-400">ID:</span> {node.id}</p>
           <p><span className="text-slate-500 dark:text-slate-400">{t('type')}:</span> {node.type}</p>
           <p><span className="text-slate-500 dark:text-slate-400">{t('frozen')}:</span> {node.frozen ? t('yes') : t('no')}</p>
-          {node.computedEtr != null && <p><span className="text-slate-500 dark:text-slate-400">{t('computedEtr')}:</span> {(node.computedEtr * 100).toFixed(2)}%</p>}
-          {node.computedCitKZT != null && <p><span className="text-slate-500 dark:text-slate-400">{t('computedCitKzt')}:</span> {node.computedCitKZT.toLocaleString('ru-RU')}</p>}
+          {node.computedEtr != null && <p><span className="text-slate-500 dark:text-slate-400">{t('computedEtr')}:</span> {fmtPercent(node.computedEtr)}</p>}
+          {node.computedCitKZT != null && <p><span className="text-slate-500 dark:text-slate-400">{t('computedCitKzt')}:</span> {fmtMoney(node.computedCitKZT)}</p>}
         </div>
       </div>
     </>
@@ -549,22 +639,28 @@ function OwnershipEditor({
   return (
     <>
       <Field label={t('ownershipPercent')}>
-        <Input
-          type="number"
-          step="0.01"
-          min={0}
-          max={100}
-          className={GLASS_INPUT}
-          {...register('percent', { valueAsNumber: true })}
-        />
+        <div className="relative">
+          <Input
+            type="number"
+            step="0.01"
+            min={0}
+            max={100}
+            className="pr-8"
+            {...register('percent', { valueAsNumber: true })}
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">%</span>
+        </div>
       </Field>
       <Field label={t('manualAdjustment')}>
-        <Input
-          type="number"
-          step="0.01"
-          className={GLASS_INPUT}
-          {...register('manualAdjustment', { valueAsNumber: true })}
-        />
+        <div className="relative">
+          <Input
+            type="number"
+            step="0.01"
+            className="pr-8"
+            {...register('manualAdjustment', { valueAsNumber: true })}
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">%</span>
+        </div>
       </Field>
       <div className="mt-4 rounded-xl bg-black/[0.03] p-3 text-[11px] text-gray-500">
         ID: {edge.id}<br />{t('parent')}: {edge.fromId}<br />{t('subsidiary')}: {edge.toId}

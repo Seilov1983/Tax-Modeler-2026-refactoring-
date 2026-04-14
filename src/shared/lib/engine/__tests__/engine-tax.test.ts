@@ -330,7 +330,7 @@ describe('computeWht', () => {
     const result = computeWht(p, flow);
     // Services exempt by zone-rules.json whtExemptionRules
     expect(result.amountOriginal).toBe(0);
-    expect(result.appliedLawRef).toBe('KZ_NK_2026_ART_680_P1_S4');
+    expect(result.appliedLawRef).toBe('НК РК 2025 ст. 645 п.1 пп.4 (освобождение от ИПН)');
   });
 
   it('exempts same-jurisdiction flows from WHT', () => {
@@ -348,7 +348,7 @@ describe('computeWht', () => {
 
     const result = computeWht(p, flow);
     expect(result.amountOriginal).toBe(0);
-    expect(result.appliedLawRef).toBe('DOMESTIC_WHT_EXEMPTION');
+    expect(result.appliedLawRef).toBe('Внутренний платёж — WHT не применяется');
   });
 
   it('returns 0 when payer node not found', () => {
@@ -795,8 +795,8 @@ describe('recomputeRisks — CFC & Substance & TP', () => {
     expect(hkCfc).toHaveLength(0);
 
     // No SUBSTANCE_BREACH from CFC check either
-    const bviSub = bviCo.riskFlags.filter((r: any) => r.type === 'SUBSTANCE_BREACH' && r.lawRef === 'KZ_CFC_SUBSTANCE');
-    const hkSub = hkCo.riskFlags.filter((r: any) => r.type === 'SUBSTANCE_BREACH' && r.lawRef === 'KZ_CFC_SUBSTANCE');
+    const bviSub = bviCo.riskFlags.filter((r: any) => r.type === 'SUBSTANCE_BREACH' && r.lawRef === 'НК РК 2025 ст. 294 п.4 (субстанция КИК)');
+    const hkSub = hkCo.riskFlags.filter((r: any) => r.type === 'SUBSTANCE_BREACH' && r.lawRef === 'НК РК 2025 ст. 294 п.4 (субстанция КИК)');
     expect(bviSub).toHaveLength(0);
     expect(hkSub).toHaveLength(0);
   });
@@ -1253,7 +1253,7 @@ describe('recomputeRisks — Pillar Two PILLAR2_TRIGGER', () => {
     // Project-level flag should be PILLAR2_TRIGGER
     const trigger = p.projectRiskFlags.find((r) => r.type === 'PILLAR2_TRIGGER');
     expect(trigger).toBeDefined();
-    expect(trigger!.lawRef).toBe('APP_G_G5_PILLAR2');
+    expect(trigger!.lawRef).toBe('OECD GloBE Model Rules (2021) Art. 2.1, 5.2');
 
     // Entity-level flag remains PILLAR2_LOW_ETR
     const lowEtr = co.riskFlags.find((r) => r.type === 'PILLAR2_LOW_ETR');
@@ -1283,7 +1283,7 @@ describe('recomputeRisks — SUBSTANCE_BREACH on CAY/SEY (not just BVI)', () => 
 
     const substance = co.riskFlags.filter((r) => r.type === 'SUBSTANCE_BREACH');
     expect(substance.length).toBeGreaterThanOrEqual(1);
-    expect(substance[0].lawRef).toBe('OFFSHORE_SUBSTANCE_CAY');
+    expect(substance[0].lawRef).toBe('Cayman International Tax Co-operation (ES) Act 2018 s.4');
   });
 
   it('flags SUBSTANCE_BREACH on SEY entity with hasSubstance === false', () => {
@@ -1303,7 +1303,7 @@ describe('recomputeRisks — SUBSTANCE_BREACH on CAY/SEY (not just BVI)', () => 
 
     const substance = co.riskFlags.filter((r) => r.type === 'SUBSTANCE_BREACH');
     expect(substance.length).toBeGreaterThanOrEqual(1);
-    expect(substance[0].lawRef).toBe('OFFSHORE_SUBSTANCE_SEY');
+    expect(substance[0].lawRef).toBe('Seychelles Companies Act 2021 s.308A');
   });
 
   it('does NOT flag SUBSTANCE_BREACH on CAY entity with hasSubstance === true', () => {
@@ -1322,7 +1322,7 @@ describe('recomputeRisks — SUBSTANCE_BREACH on CAY/SEY (not just BVI)', () => 
     recomputeRisks(p);
 
     const substance = co.riskFlags.filter(
-      (r) => r.type === 'SUBSTANCE_BREACH' && r.lawRef === 'OFFSHORE_SUBSTANCE_CAY',
+      (r) => r.type === 'SUBSTANCE_BREACH' && r.lawRef === 'Cayman International Tax Co-operation (ES) Act 2018 s.4',
     );
     expect(substance).toHaveLength(0);
   });

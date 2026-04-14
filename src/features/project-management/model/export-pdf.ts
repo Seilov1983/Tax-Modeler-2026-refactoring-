@@ -15,18 +15,15 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { generateAuditSnapshot } from '@shared/lib/engine';
 import { effectiveEtrForCompany } from '@shared/lib/engine/engine-tax';
+import { fmtMoney, fmtPercent, bankersRound2 } from '@shared/lib/engine/utils';
 import { saveFile } from '@shared/lib/download';
 import type { Project } from '@shared/types';
 
+// Aliases: keep short names in PDF table generation code for readability.
+const fmt = fmtMoney;
+const pct = fmtPercent;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function fmt(n: number): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function pct(n: number): string {
-  return (n * 100).toFixed(2) + '%';
-}
 
 /** Convert ArrayBuffer to base64 string (browser-safe). */
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -206,8 +203,8 @@ export async function exportReportPdf(project: Project): Promise<void> {
       const gross = Number(f.grossAmount || 0);
       // Use engine-computed WHT from audit snapshot; fall back to flow's stored rate
       const whtEntry = whtByFlowId.get(f.id);
-      const whtAmount = whtEntry?.amount ?? Math.round(gross * (Number(f.whtRate || 0) / 100) * 100) / 100;
-      const net = Math.round((gross - whtAmount) * 100) / 100;
+      const whtAmount = whtEntry?.amount ?? bankersRound2(gross * (Number(f.whtRate || 0) / 100));
+      const net = bankersRound2(gross - whtAmount);
       const status = f.compliance?.exceeded ? 'Violation' : 'OK';
       
       // Look up LawRef from the whtLiabilities in the snapshot
@@ -286,10 +283,11 @@ export async function exportReportPdf(project: Project): Promise<void> {
         : (['SUBSTANCE_BREACH', 'TRANSFER_PRICING_RISK'].includes(flag.type))
           ? 'MEDIUM'
           : 'LOW';
+      const friendlyType = flag.type.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
       riskRows.push([
         entry.entityName,
         entry.jurisdiction,
-        flag.type,
+        friendlyType,
         severity,
         flag.lawRef ?? '-',
       ]);

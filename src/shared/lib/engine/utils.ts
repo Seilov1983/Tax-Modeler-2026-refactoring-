@@ -41,11 +41,19 @@ export const numOrNull = (v: unknown): number | null => {
 };
 
 // ─── Formatting ──────────────────────────────────────────────────────────────
+// Single source of truth for financial number display across the entire app.
+// All money amounts: thousands-separated, exactly 2 decimal places.
+// All percentages: 1–2 decimal places, trailing "%" suffix.
 
-export const fmtMoney = (n: number): string => {
+/**
+ * Format a monetary amount with thousands separators and exactly 2 decimals.
+ * Uses banker's rounding before display. Locale defaults to `en-US` (comma
+ * thousands, period decimal); pass `'ru-RU'` for space thousands/comma decimal.
+ */
+export const fmtMoney = (n: number, locale: string = 'en-US'): string => {
   const v = bankersRound2(n);
   try {
-    return new Intl.NumberFormat('ru-RU', {
+    return new Intl.NumberFormat(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(v);
@@ -54,13 +62,50 @@ export const fmtMoney = (n: number): string => {
   }
 };
 
-export const formatMoney = (n: number | undefined | null): string => {
+/**
+ * Loose money formatter — handles null/undefined, 0–2 fraction digits.
+ * Useful for optional fields in master data and sidebar summaries.
+ */
+export const formatMoney = (n: number | undefined | null, locale: string = 'en-US'): string => {
   const x = Number(n || 0);
   if (!isFinite(x)) return '0';
-  return x.toLocaleString('ru-RU', {
-    maximumFractionDigits: 2,
+  return new Intl.NumberFormat(locale, {
     minimumFractionDigits: 0,
-  });
+    maximumFractionDigits: 2,
+  }).format(x);
+};
+
+/**
+ * Format a rate (0–1 decimal fraction) as a human-readable percentage string.
+ * E.g. `fmtPercent(0.2045)` → `"20.45%"`, `fmtPercent(0.2, 1)` → `"20.0%"`.
+ */
+export const fmtPercent = (rate: number, decimals: number = 2): string => {
+  const pct = rate * 100;
+  return `${pct.toFixed(decimals)}%`;
+};
+
+/**
+ * Format a number with space-grouping for masked input display (no currency symbol).
+ * Shows "1 234 567.89" when the input is not focused. Returns '' for 0/NaN.
+ */
+export const fmtInputDisplay = (n: number): string => {
+  if (!isFinite(n) || n === 0) return '';
+  try {
+    return new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+      useGrouping: true,
+    }).format(n).replace(/,/g, ' ');
+  } catch {
+    return String(n);
+  }
+};
+
+/** Parse a space-formatted input string back to a raw number. */
+export const parseInputDisplay = (s: string): number => {
+  const cleaned = s.replace(/[\s\u00A0]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
 };
 
 /** Map currency code → compact symbol for badge display. */

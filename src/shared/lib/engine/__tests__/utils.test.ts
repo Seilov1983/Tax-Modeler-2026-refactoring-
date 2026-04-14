@@ -101,21 +101,26 @@ describe('numOrNull', () => {
 // ─── Formatting ─────────────────────────────────────────────────────────────
 
 describe('fmtMoney', () => {
-  it('formats positive number with 2 decimal places', () => {
+  it('formats positive number with 2 decimal places (en-US default)', () => {
     const result = fmtMoney(1234.5);
-    // ru-RU uses non-breaking space as thousands separator and comma for decimals
-    expect(result).toMatch(/1[\s\u00a0]?234,50/);
+    // en-US uses comma thousands, period decimal
+    expect(result).toBe('1,234.50');
   });
 
   it('formats zero', () => {
-    expect(fmtMoney(0)).toMatch(/0,00/);
+    expect(fmtMoney(0)).toBe('0.00');
+  });
+
+  it('respects locale override (ru-RU)', () => {
+    const result = fmtMoney(1234.5, 'ru-RU');
+    expect(result).toMatch(/1[\s\u00a0]?234,50/);
   });
 });
 
 describe('formatMoney', () => {
-  it('formats number with ru-RU locale', () => {
+  it('formats number with en-US default locale', () => {
     const result = formatMoney(1234);
-    expect(result).toMatch(/1[\s\u00a0]?234/);
+    expect(result).toBe('1,234');
   });
 
   it('handles null/undefined → "0"', () => {

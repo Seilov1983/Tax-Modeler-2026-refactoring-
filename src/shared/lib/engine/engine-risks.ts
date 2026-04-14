@@ -127,7 +127,7 @@ export function recomputeRisks(p: Project): void {
       n.riskFlags.push({
         type: 'NO_JURISDICTION',
         severity: 'CRITICAL',
-        message: 'Node is outside any tax jurisdiction.',
+        message: 'ERROR_NO_JURISDICTION',
       });
     }
   }
@@ -173,9 +173,9 @@ export function recomputeRisks(p: Project): void {
         if (etr >= etrThr) return;
         // Safe Harbor: real economic substance exempts from CFC rules
         if (co.hasSubstance) return;
-        co.riskFlags.push({ type: 'CFC_RISK', byPersonId: per.id, control: cf, incomeKZT, etr, incomeThrMRP: cfcIncomeExemptionMRP, mrpValue, lawRef: 'KZ_CFC_MVP' });
+        co.riskFlags.push({ type: 'CFC_RISK', byPersonId: per.id, control: cf, incomeKZT, etr, incomeThrMRP: cfcIncomeExemptionMRP, mrpValue, lawRef: 'НК РК 2025 ст. 294, 297 (КИК)' });
         // hasSubstance === false → flag substance breach on the CFC entity
-        co.riskFlags.push({ type: 'SUBSTANCE_BREACH', byPersonId: per.id, lawRef: 'KZ_CFC_SUBSTANCE', message: 'CFC entity lacks economic substance.' });
+        co.riskFlags.push({ type: 'SUBSTANCE_BREACH', byPersonId: per.id, lawRef: 'НК РК 2025 ст. 294 п.4 (субстанция КИК)', message: 'ERROR_CFC_SUBSTANCE' });
       });
     });
   }
@@ -188,22 +188,32 @@ export function recomputeRisks(p: Project): void {
     const comp = co.complianceData;
 
     // BVI-specific substance check (detailed: relevant activity + employees + office)
+    // BVI Economic Substance Act 2018 (amended 2023), sections 3-4
     if (z.jurisdiction === 'BVI' && comp?.bvi) {
       if (comp.bvi.relevantActivity && (Number(comp.bvi.employees || 0) <= 0 || !comp.bvi.office)) {
-        co.riskFlags.push({ type: 'SUBSTANCE_BREACH', lawRef: 'APP_G_G1_BVI_SUBSTANCE', penaltyUsd: 20000 });
+        co.riskFlags.push({ type: 'SUBSTANCE_BREACH', lawRef: 'BVI Economic Substance Act 2018 ss.3-4', penaltyUsd: 20000 });
       }
     }
 
     // Generic offshore substance check: any node in offshore jurisdiction without proven substance
+    const offshoreSubstanceLawRefs: Record<string, string> = {
+      BVI: 'BVI Economic Substance Act 2018 ss.3-4',
+      CAY: 'Cayman International Tax Co-operation (ES) Act 2018 s.4',
+      SEY: 'Seychelles Companies Act 2021 s.308A',
+      HK: 'HK IRO s.14, FSIE regime (2023) s.15H-15T',
+    };
     if (offshoreSubstanceJurisdictions.includes(z.jurisdiction) && !co.hasSubstance) {
       const alreadyFlagged = co.riskFlags.some(
-        (r) => r.type === 'SUBSTANCE_BREACH' && (r.lawRef === 'APP_G_G1_BVI_SUBSTANCE' || r.lawRef === 'KZ_CFC_SUBSTANCE'),
+        (r) => r.type === 'SUBSTANCE_BREACH' && (
+          r.lawRef === 'BVI Economic Substance Act 2018 ss.3-4' ||
+          r.lawRef?.startsWith('НК РК')
+        ),
       );
       if (!alreadyFlagged) {
         co.riskFlags.push({
           type: 'SUBSTANCE_BREACH',
-          lawRef: `OFFSHORE_SUBSTANCE_${z.jurisdiction}`,
-          message: `Entity in ${z.jurisdiction} lacks real economic substance (office/staff).`,
+          lawRef: offshoreSubstanceLawRefs[z.jurisdiction] ?? `Substance requirement — ${z.jurisdiction}`,
+          message: 'ERROR_OFFSHORE_SUBSTANCE',
         });
       }
     }
@@ -211,7 +221,7 @@ export function recomputeRisks(p: Project): void {
     // AIFC presence breach
     if (z.code === 'KZ_AIFC' && comp?.aifc) {
       if (comp.aifc.usesCITBenefit && !comp.aifc.cigaInZone) {
-        co.riskFlags.push({ type: 'AIFC_PRESENCE_BREACH', lawRef: 'APP_G_G4_AIFC_PRESENCE', effectiveCitRate: 0.20 });
+        co.riskFlags.push({ type: 'AIFC_PRESENCE_BREACH', lawRef: 'AIFC Tax Rules 2018, Rule 4.3 (CIGA presence)', effectiveCitRate: 0.20 });
       }
     }
   });
@@ -225,12 +235,12 @@ export function recomputeRisks(p: Project): void {
       const etr = effectiveEtrForCompany(p, co);
       if (etr < 0.15) {
         low.push({ companyId: co.id, etr });
-        co.riskFlags.push({ type: 'PILLAR2_LOW_ETR', lawRef: 'APP_G_G5_PILLAR2', etr, minEtr: 0.15 });
+        co.riskFlags.push({ type: 'PILLAR2_LOW_ETR', lawRef: 'OECD GloBE Model Rules (2021) Art. 5.2', etr, minEtr: 0.15 });
       }
     });
     if (low.length) {
       p.projectRiskFlags.push({
-        type: 'PILLAR2_TRIGGER', lawRef: 'APP_G_G5_PILLAR2',
+        type: 'PILLAR2_TRIGGER', lawRef: 'OECD GloBE Model Rules (2021) Art. 2.1, 5.2',
         consolidatedRevenueEur: rev, isPillarTwoScope: !!p.isPillarTwoScope,
         minEtr: 0.15, affectedCount: low.length,
       });
@@ -275,8 +285,8 @@ export function recomputeRisks(p: Project): void {
           available: bankersRound2(available),
           outgoing: bankersRound2(totalOutgoing),
           deficit: bankersRound2(totalOutgoing - available),
-          lawRef: 'CAPITAL_ANOMALY_DETECTION',
-          message: `Outgoing flows (${bankersRound2(totalOutgoing)}) exceed available capital after estimated CIT (${bankersRound2(available)}).`,
+          lawRef: 'НК РК 2025 ст. 246 (достаточность капитала)',
+          message: 'ERROR_CAPITAL_ANOMALY',
         });
       }
     }
@@ -299,10 +309,11 @@ export function recomputeRisks(p: Project): void {
         totalIncome = Math.max(0, totalIncome);
       }
       if (totalIncome > opex * 100) {
+        const ratio = bankersRound2(totalIncome / opex);
         co.riskFlags.push({
           type: 'SUBSTANCE_EXPENSE_MISMATCH',
-          ratio: Math.round(totalIncome / opex),
-          message: `Income (${bankersRound2(totalIncome)}) is ${Math.round(totalIncome / opex)}x OPEX (${bankersRound2(opex)}).`,
+          ratio,
+          message: 'ERROR_SUBSTANCE_EXPENSE_MISMATCH',
         });
       }
     }
@@ -314,7 +325,7 @@ export function recomputeRisks(p: Project): void {
       const pZ = getZone(p, getNode(p, f.fromId)?.zoneId);
       const payeeZ = getZone(p, getNode(p, f.toId)?.zoneId);
       if (pZ && payeeZ && pZ.jurisdiction !== payeeZ.jurisdiction) {
-        getNode(p, f.fromId)?.riskFlags.push({ type: 'TRANSFER_PRICING_RISK', lawRef: 'KZ_LAW_ON_TP', flowId: f.id });
+        getNode(p, f.fromId)?.riskFlags.push({ type: 'TRANSFER_PRICING_RISK', lawRef: 'НК РК 2025 ст. 351-362 (ТЦО)', flowId: f.id });
       }
     }
   });
@@ -330,10 +341,11 @@ export function recomputeRisks(p: Project): void {
     });
     const income = Number(co.annualIncome || 0);
     if (income > 0 && totalServiceOut > income * 0.3) {
+      const ratio = bankersRound2((totalServiceOut / income) * 100);
       co.riskFlags.push({
-        type: 'TRANSFER_PRICING_RISK', lawRef: 'HK_IR_DIPN_46',
-        ratio: Math.round((totalServiceOut / income) * 100),
-        message: `High Service/Income Ratio (${Math.round((totalServiceOut / income) * 100)}%).`,
+        type: 'TRANSFER_PRICING_RISK', lawRef: 'HK IRO DIPN No. 46, s.16(1)',
+        ratio,
+        message: 'ERROR_HK_SERVICE_RATIO',
       });
     }
   });
@@ -357,8 +369,8 @@ export function recomputeRisks(p: Project): void {
           f.compliance.violationType = (f.compliance.violationType ? f.compliance.violationType + ' & ' : '') + 'TP_ARM_LENGTH_POTENTIAL_BREACH';
           payer.riskFlags.push({
             type: 'TRANSFER_PRICING_RISK',
-            lawRef: 'OECD_TP_GUIDELINES_CH1',
-            message: `Cross-border service flow (>1M) without documented pricing policy (dealTag).`,
+            lawRef: 'OECD TP Guidelines 2022 Ch.I §1.33-1.35',
+            message: 'ERROR_TP_ARM_LENGTH',
             flowId: f.id
           });
         }
@@ -476,9 +488,9 @@ export function updateFlowCompliance(p: Project, flow: FlowDTO): void {
   if (flow.isOffshoreSource && toNode) {
     toNode.riskFlags = toNode.riskFlags || [];
     const flags = [
-      { type: 'FSIE_SUBSTANCE', lawRef: 'FSIE_SUBSTANCE_RULE' },
-      { type: 'ADVANCE_RULING', lawRef: 'ADVANCE_RULING_RULE' },
-      { type: 'SEPARATE_ACCOUNTING', lawRef: 'SEPARATE_ACCOUNTING_RULE' },
+      { type: 'FSIE_SUBSTANCE', lawRef: 'HK IRO s.15H-15T (FSIE substance test)' },
+      { type: 'ADVANCE_RULING', lawRef: 'HK IRO s.88A (advance ruling)' },
+      { type: 'SEPARATE_ACCOUNTING', lawRef: 'HK IRO s.15F (separate accounting requirement)' },
     ];
     flags.forEach((flag) => {
       if (!toNode.riskFlags.some((r) => r.type === flag.type)) {
@@ -491,7 +503,7 @@ export function updateFlowCompliance(p: Project, flow: FlowDTO): void {
   if (flow.isDirectExemptExpense && fromNode) {
     fromNode.riskFlags = fromNode.riskFlags || [];
     if (!fromNode.riskFlags.some((r) => r.type === 'NON_DEDUCTIBLE_EXPENSE')) {
-      fromNode.riskFlags.push({ type: 'NON_DEDUCTIBLE_EXPENSE', lawRef: 'KZ_NK_2026_NON_DEDUCTIBLE' });
+      fromNode.riskFlags.push({ type: 'NON_DEDUCTIBLE_EXPENSE', lawRef: 'НК РК 2025 ст. 264 (невычитаемые расходы)' });
     }
   }
 }

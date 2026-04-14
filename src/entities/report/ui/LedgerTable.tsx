@@ -12,6 +12,7 @@
 
 import { useMemo } from 'react';
 import { useTranslation, localizedName } from '@shared/lib/i18n';
+import { fmtMoney } from '@shared/lib/engine/utils';
 
 // ─── Inline Types ────────────────────────────────────────────────────────────
 
@@ -36,19 +37,12 @@ type LedgerRow = {
 // ─── Tailwind Classes ────────────────────────────────────────────────────────
 const twContainer = "overflow-auto flex-1 font-sans";
 const twTable = "w-full text-[12px] text-left border-collapse";
-const twTh = "px-3 py-2 border-b-2 border-black/10 dark:border-white/10 font-bold whitespace-nowrap text-slate-500 shrink-0 text-[10px] uppercase tracking-widest sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md z-10";
+const twTh = "px-3 py-2 border-b-2 border-black/10 dark:border-white/10 font-bold whitespace-nowrap text-slate-500 shrink-0 text-[10px] uppercase tracking-widest sticky top-0 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm z-10";
 const twTd = "px-3 py-2 whitespace-nowrap border-b border-black/5 dark:border-white/5 text-slate-800 dark:text-slate-200 group-hover:bg-transparent";
 const twTdMoney = `${twTd} text-right tabular-nums font-mono font-medium`;
 const twEmpty = "p-10 text-center text-slate-500 text-[13px]";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function fmtMoney(n: number): string {
-  return n.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
 
 function fmtDate(iso: string): string {
   if (!iso) return '-';
@@ -111,7 +105,7 @@ export function LedgerTable(props: {
           {sorted.map((row) => (
             <tr
               key={row.flowId}
-              className="group odd:bg-black/[0.02] dark:odd:bg-white/[0.02] hover:bg-black-[0.04] dark:hover:bg-white-[0.04] transition-colors"
+              className="group odd:bg-black/[0.02] dark:odd:bg-white/[0.02] hover:bg-black/[0.04] dark:hover:bg-white/[0.04] transition-colors"
             >
               <td className={twTd}>{fmtDate(row.date)}</td>
               <td className={twTd}>{row.flowType}</td>

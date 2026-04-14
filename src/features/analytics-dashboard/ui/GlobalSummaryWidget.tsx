@@ -16,7 +16,7 @@ import { Suspense, useState, useCallback } from 'react';
 import { globalSummaryAtom } from '../model/atoms';
 import { riskCalculationAtom } from '@features/risk-analyzer/model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
-import { fmtMoney, currencySymbol } from '@shared/lib/engine/utils';
+import { fmtMoney, fmtPercent, currencySymbol } from '@shared/lib/engine/utils';
 import type { RiskFlag } from '@shared/types';
 import { useTranslation } from '@shared/lib/i18n';
 import type { Language } from '@shared/lib/i18n';
@@ -36,6 +36,12 @@ const RISK_LABEL_KEYS: Record<string, string> = {
   INTERIM_DIVIDENDS_RISK: 'riskInterimDividends',
   CONSTRUCTIVE_DIVIDEND: 'riskConstructiveDividend',
   NO_JURISDICTION: 'riskNoJurisdiction',
+  CAPITAL_ANOMALY: 'riskCapitalAnomaly',
+  SUBSTANCE_EXPENSE_MISMATCH: 'riskSubstanceExpenseMismatch',
+  FSIE_SUBSTANCE: 'riskFsieSubstance',
+  ADVANCE_RULING: 'riskAdvanceRuling',
+  SEPARATE_ACCOUNTING: 'riskSeparateAccounting',
+  NON_DEDUCTIBLE_EXPENSE: 'riskNonDeductibleExpense',
 };
 
 const RISK_ICONS: Record<string, string> = {
@@ -118,7 +124,7 @@ function SummaryContent() {
       <div className="flex justify-between items-end pb-4 border-b border-black/5 dark:border-white/5">
         <span className="text-[12px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">{t('globalEtr')}</span>
         <span className={`text-[32px] leading-none font-black tracking-tight ${s.globalEtr > 25 ? 'text-red-500' : s.globalEtr > 15 ? 'text-amber-500' : 'text-emerald-500'}`}>
-          {s.globalEtr.toFixed(2)}<span className="text-xl ml-0.5">%</span>
+          {fmtPercent(s.globalEtr / 100)}
         </span>
       </div>
 

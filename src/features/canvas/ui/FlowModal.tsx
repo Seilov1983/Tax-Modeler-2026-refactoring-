@@ -12,7 +12,7 @@
  */
 
 import { useAtom, useSetAtom } from 'jotai';
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
@@ -39,6 +39,48 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { fmtInputDisplay, parseInputDisplay, currencySymbol } from '@shared/lib/engine/utils';
+
+// ─── Masked Money Input ─────────────────────────────────────────────────────
+// Displays space-grouped number when blurred (1 234 567), raw number while focused.
+// Saves raw number to form state. Optional suffix adornment.
+
+function MaskedMoneyInput({
+  value,
+  onChange,
+  onBlur,
+  suffix,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  onBlur?: () => void;
+  suffix?: string;
+}) {
+  const [raw, setRaw] = useState('');
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <div className="relative">
+      <Input
+        type="text"
+        inputMode="decimal"
+        value={focused ? raw : fmtInputDisplay(value)}
+        onChange={(e) => {
+          const v = e.target.value.replace(/[^\d.\s]/g, '');
+          setRaw(v);
+          const n = parseInputDisplay(v);
+          onChange(n);
+        }}
+        onFocus={() => { setFocused(true); setRaw(value ? String(value) : ''); }}
+        onBlur={() => { setFocused(false); onBlur?.(); }}
+        className={suffix ? 'pr-10' : ''}
+      />
+      {suffix && (
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">{suffix}</span>
+      )}
+    </div>
+  );
+}
 
 const FLOW_TYPES: FlowType[] = [
   'Dividends', 'Royalties', 'Interest', 'Services', 'Salary', 'Goods', 'Equipment',
@@ -205,7 +247,18 @@ export function FlowModal() {
 
             <div>
               <Label className={GLASS_LABEL}>{t('grossAmount')}</Label>
-              <Input type="number" step="0.01" min="0" className={GLASS_INPUT} {...register('grossAmount')} />
+              <Controller
+                name="grossAmount"
+                control={control}
+                render={({ field }) => (
+                  <MaskedMoneyInput
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    suffix={currencySymbol(watch('currency'))}
+                  />
+                )}
+              />
               {errors.grossAmount && <p className="mt-1 text-xs text-red-500">{errors.grossAmount.message}</p>}
             </div>
 
@@ -231,7 +284,10 @@ export function FlowModal() {
 
             <div>
               <Label className={GLASS_LABEL}>{t('whtRate')}</Label>
-              <Input type="number" step="0.01" min="0" max="1" className={GLASS_INPUT} {...register('whtRate')} />
+              <div className="relative">
+                <Input type="number" step="0.01" min="0" max="100" className="pr-8" {...register('whtRate', { valueAsNumber: true })} />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">%</span>
+              </div>
               {errors.whtRate && <p className="mt-1 text-xs text-red-500">{errors.whtRate.message}</p>}
             </div>
 
@@ -301,15 +357,18 @@ export function FlowModal() {
             {watch('applyDTT') && (
               <div>
                 <Label className={GLASS_LABEL}>{t('customWhtRate')}</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  className={GLASS_INPUT}
-                  {...register('customWhtRate', { valueAsNumber: true })}
-                  placeholder="e.g. 5"
-                />
+                <div className="relative">
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    className="pr-8"
+                    {...register('customWhtRate', { valueAsNumber: true })}
+                    placeholder="e.g. 5"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">%</span>
+                </div>
               </div>
             )}
 
