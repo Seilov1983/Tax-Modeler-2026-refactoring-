@@ -167,7 +167,7 @@ function AppContent() {
   const isSidebarOpen = useAtomValue(isSidebarOpenAtom);
   const isCopilotOpen = useAtomValue(copilotOpenAtom);
   const selection = useAtomValue(selectionAtom);
-  const showPropertiesDrawer = activeTab === 'canvas' && selection?.type === 'node' && selection.ids.length === 1;
+  const showPropertiesDrawer = activeTab !== 'reports' && selection?.type === 'node' && selection.ids.length === 1;
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-white dark:bg-slate-950">
