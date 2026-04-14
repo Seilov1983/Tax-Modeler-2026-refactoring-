@@ -266,12 +266,15 @@ export function computeAstanaHubCIT(
   income: number,
   node: NodeDTO,
   baseCitRate: number,
+  project?: Project,
 ): number {
   if (income <= 0) return 0;
 
   // IP income: CIT reduction scaled by Nexus fraction
-  if (node.isIPIncome && node.nexusParams) {
-    const K = computeNexusFraction(node.nexusParams);
+  if (node.isIPIncome) {
+    const K = node.nexusParams
+      ? computeNexusFraction(node.nexusParams)
+      : (project ? computeNexusFractionFromFlows(project, node) : 0);
     // K determines the portion of income that gets the 0% CIT benefit
     // Taxable income = income * (1 - K)
     const taxableIncome = bankersRound2(income * (1 - K));
@@ -500,10 +503,20 @@ export function computeWht(p: Project, flow: FlowDTO, overrideRatePercent?: numb
 
   const zPayer = getZone(p, payer.zoneId);
   const zPayee = payee ? getZone(p, payee.zoneId) : null;
-  let rate =
-    overrideRatePercent === undefined || overrideRatePercent === null
-      ? Number(flow.whtRate || 0)
-      : Number(overrideRatePercent || 0);
+
+  // Rate resolution: override → flow-stored → master-data lookup for cross-border
+  let rate: number;
+  if (overrideRatePercent !== undefined && overrideRatePercent !== null) {
+    rate = Number(overrideRatePercent || 0);
+  } else if (Number(flow.whtRate || 0) > 0) {
+    rate = Number(flow.whtRate);
+  } else if (zPayer && zPayee && zPayer.jurisdiction !== zPayee.jurisdiction) {
+    // Cross-border flow with no explicit rate: resolve from payer zone master data
+    const zoneTax = effectiveZoneTax(p, zPayer);
+    rate = whtDefaultPercentForFlow(zoneTax, flow.flowType);
+  } else {
+    rate = Number(flow.whtRate || 0);
+  }
   let appliedLawRef: string | null = null;
 
   // Apply WHT exemption rules from declarative JSON (replaces hardcoded if-chains)
@@ -527,6 +540,11 @@ export function computeWht(p: Project, flow: FlowDTO, overrideRatePercent?: numb
       appliedLawRef = rule.effect.lawRef;
       break;
     }
+  }
+
+  // If no exemption matched and rate > 0, provide the payer jurisdiction's WHT lawRef
+  if (!appliedLawRef && rate > 0 && zPayer) {
+    appliedLawRef = _domesticWhtLawRef(zPayer.jurisdiction);
   }
 
   const gross = Number(flow.grossAmount || 0);
@@ -556,8 +574,10 @@ export function effectiveEtrForCompany(p: Project, co: NodeDTO): number {
     // ── Astana Hub: 100% CIT reduction for non-IP income (Chapter 82 NK RK 2026) ──
     // IP income uses Nexus fraction K to scale the exemption.
     if (z.code === 'KZ_HUB') {
-      if (co?.isIPIncome && co.nexusParams) {
-        const K = computeNexusFraction(co.nexusParams);
+      if (co?.isIPIncome) {
+        const K = co.nexusParams
+          ? computeNexusFraction(co.nexusParams)
+          : computeNexusFractionFromFlows(p, co);
         // Effective rate: baseCIT * (1 - K)
         const kzBaseCit = getEffectiveRate('KZ', 'cit', p.fx?.fxDate || '2026-01-01') ?? 0.20;
         return kzBaseCit * (1 - K);
@@ -760,12 +780,13 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
   const baseCurrency = project.baseCurrency;
   const graph = buildComputationGraph(project);
 
-  /** Compact money format for calculation breakdowns (e.g. "50,000,000" → "50M"). */
-  const fmtB = (n: number): string => {
-    if (Math.abs(n) >= 1_000_000) return `${bankersRound2(n / 1_000_000)}M`;
-    if (Math.abs(n) >= 1_000) return `${bankersRound2(n / 1_000)}K`;
-    return String(bankersRound2(n));
+  /** Format money for Evidence Trail (full precision, thousands separators). */
+  const fmtB = (n: number, ccy?: string): string => {
+    const formatted = n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return ccy ? `${formatted} ${ccy}` : formatted;
   };
+  /** Format rate as percentage for Evidence Trail. */
+  const fmtR = (rate: number): string => `${bankersRound2(rate * 100)}%`;
 
   // ── 1. CIT liabilities (company nodes only) ────────────────────────────────
   const citLiabilities: EntityCITLiability[] = [];
@@ -791,28 +812,30 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
     // ── Astana Hub: 100% CIT reduction (non-IP) or Nexus fraction (IP) ──
     if (zone && zone.code === 'KZ_HUB') {
       const kzBaseCit = getEffectiveRate('KZ', 'cit', fxDate) ?? 0.20;
-      citAmount = computeAstanaHubCIT(adjustedIncome, node, kzBaseCit);
-      if (node.isIPIncome && node.nexusParams) {
-        const K = computeNexusFraction(node.nexusParams);
-        citBreakdown = `Astana Hub IP: ${fmtB(adjustedIncome)} × (1 − ${(K * 100).toFixed(1)}% Nexus) × ${(kzBaseCit * 100).toFixed(0)}% = ${fmtB(citAmount)}`;
+      citAmount = computeAstanaHubCIT(adjustedIncome, node, kzBaseCit, project);
+      if (node.isIPIncome) {
+        const K = node.nexusParams
+          ? computeNexusFraction(node.nexusParams)
+          : computeNexusFractionFromFlows(project, node);
+        citBreakdown = `Astana Hub IP: ${fmtB(adjustedIncome, currency)} × (1 − ${fmtR(K)} Nexus) × ${fmtR(kzBaseCit)} = ${fmtB(citAmount, currency)}`;
       } else {
-        citBreakdown = `Astana Hub non-IP: 100% CIT reduction → ${fmtB(adjustedIncome)} × 0% = 0`;
+        citBreakdown = `Astana Hub non-IP: 100% CIT reduction → ${fmtB(adjustedIncome, currency)} × 0% = 0`;
       }
     } else {
       // Use the full CIT computation engine (handles all 6 CIT modes)
       citAmount = computeCITAmount(adjustedIncome, cn.effectiveTax.cit);
       const cit = cn.effectiveTax.cit as CITConfig;
       const mode = cit?.mode || 'flat';
-      const rateStr = mode === 'flat' ? `${((cit.rate || 0) * 100).toFixed(1)}%`
-        : mode === 'qfzp' ? `${((cit.qualifyingRate || 0) * 100).toFixed(1)}% (QFZP)`
-        : mode === 'threshold' ? `${((cit.mainRate || 0) * 100).toFixed(1)}% (threshold)`
-        : `${((cit.mainRate || 0) * 100).toFixed(1)}%`;
-      citBreakdown = `${fmtB(adjustedIncome)} × ${rateStr} [${mode}] = ${fmtB(citAmount)}`;
+      const rateStr = mode === 'flat' ? fmtR(cit.rate || 0)
+        : mode === 'qfzp' ? `${fmtR(cit.qualifyingRate || 0)} (QFZP)`
+        : mode === 'threshold' ? `${fmtR(cit.mainRate || 0)} (threshold)`
+        : fmtR(cit.mainRate || 0);
+      citBreakdown = `${fmtB(adjustedIncome, currency)} × ${rateStr} [${mode}] = ${fmtB(citAmount, currency)}`;
     }
 
     // Append deduction adjustments to breakdown if any
-    if (cashExclusion > 0) citBreakdown += ` (+${fmtB(cashExclusion)} cash discipline add-back)`;
-    if (cyDenial > 0) citBreakdown += ` (+${fmtB(cyDenial)} CY deduction denial)`;
+    if (cashExclusion > 0) citBreakdown += ` (+${fmtB(cashExclusion, currency)} cash discipline add-back)`;
+    if (cyDenial > 0) citBreakdown += ` (+${fmtB(cyDenial, currency)} CY deduction denial)`;
 
     // Resolve lawRef for the applicable zone override
     const zoneOverride = zone ? zoneRules.zoneOverrides[zone.code] : null;
@@ -879,7 +902,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
           whtAmountOriginal: whtOriginal,
           whtAmountBase: whtBase,
           lawRef: measures.lawRef,
-          calculationBreakdown: `CY Defensive: ${fmtB(gross)} × ${(penaltyRate * 100).toFixed(0)}% penalty WHT to LTJ (${payeeZone.jurisdiction}) = ${fmtB(whtOriginal)}`,
+          calculationBreakdown: `CY Defensive: ${fmtB(gross, flow.currency)} × ${fmtR(penaltyRate)} penalty WHT to LTJ (${payeeZone.jurisdiction}) = ${fmtB(whtOriginal, flow.currency)}`,
         });
         continue;
       }
@@ -905,7 +928,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
             whtAmountOriginal: whtAmount,
             whtAmountBase: whtBase,
             lawRef: 'KZ_NK_2026_PROGRESSIVE_WHT',
-            calculationBreakdown: `KZ Progressive WHT: ${fmtB(gross)} → eff. rate ${(effectiveRate * 100).toFixed(2)}% = ${fmtB(whtAmount)}`,
+            calculationBreakdown: `KZ Progressive WHT: ${fmtB(gross, flow.currency)} → eff. rate ${fmtR(effectiveRate)} = ${fmtB(whtAmount, flow.currency)}`,
           });
         }
         continue;
@@ -930,7 +953,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
       whtAmountOriginal: whtAmtOrig,
       whtAmountBase: whtBase,
       lawRef: whtRes.appliedLawRef ?? _domesticWhtLawRef(payerZone?.jurisdiction ?? null),
-      calculationBreakdown: `${fmtB(gross)} × ${bankersRound2((whtAmtOrig / gross) * 100)}% = ${fmtB(whtAmtOrig)}`,
+      calculationBreakdown: `${fmtB(gross, flow.currency)} × ${bankersRound2((whtAmtOrig / gross) * 100)}% = ${fmtB(whtAmtOrig, flow.currency)}`,
     });
   }
 
