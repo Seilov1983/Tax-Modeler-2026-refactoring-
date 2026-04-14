@@ -4,6 +4,9 @@
 @source "../shared";
 @source "../app";
 
+/* Override Tailwind v4 dark variant to use class strategy (next-themes sets .dark on <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ─── shadcn/ui CSS Variables ────────────────────────────────────────────── */
 
 :root {
@@ -178,6 +181,13 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-tertiary);
 }
+
+/* ─── Custom Scrollbar (opt-in thin scrollbar for panels & drawers) ─────── */
+
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: var(--surface-inset-hover); border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
 /* ─── Animations ─────────────────────────────────────────────────────────── */
 

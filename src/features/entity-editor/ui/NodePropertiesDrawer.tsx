@@ -164,8 +164,8 @@ export function NodePropertiesDrawer() {
         </button>
       </div>
 
-      {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Scrollable content — fixed header above, body scrolls independently */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
         {/* Zone info */}
         {zone && (
           <div className="px-4 py-2 bg-black/[0.02] dark:bg-white/[0.02] border-b border-black/5 dark:border-white/5">

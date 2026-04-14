@@ -34,8 +34,8 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        // Positioning + layout
-        "fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 p-6",
+        // Positioning + layout — flex col + max-h so header/footer stay fixed and body scrolls
+        "fixed left-1/2 top-1/2 z-50 flex flex-col w-full max-w-lg max-h-[85vh] -translate-x-1/2 -translate-y-1/2 gap-4 p-6 overflow-hidden",
         // Aeros Liquid Glass: extreme translucency + soft rim + hero blur
         "bg-white/40 dark:bg-black/40 backdrop-blur-md border border-white/50 dark:border-white/10 shadow-xl",
         "text-slate-900 dark:text-slate-100 sm:rounded-3xl",
