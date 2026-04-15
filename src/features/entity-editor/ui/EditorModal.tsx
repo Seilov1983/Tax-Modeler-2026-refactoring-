@@ -125,6 +125,7 @@ interface NodeFormValues {
   isIPIncome: boolean;
   hasSeparateAccounting: boolean;
   cigaInZone: boolean;
+  isQFZP: boolean;
   legalForm: string;
 }
 
@@ -496,6 +497,22 @@ function NodeEditor({
               />
             </Field>
 
+            {/* UAE QFZP toggle — only visible for UAE Free Zone entities */}
+            {zone?.jurisdiction === 'UAE' && (
+              <Field label={t('isQFZP')}>
+                <Controller
+                  name="isQFZP"
+                  control={control}
+                  render={({ field }) => (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-slate-600 dark:text-slate-400">{t('isQFZP')}</span>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </div>
+                  )}
+                />
+              </Field>
+            )}
+
             {watchSubstance && (
               <>
                 <Field label={t('headcount')}>
@@ -714,7 +731,7 @@ export function EditorModal() {
   const isOwnership = selection?.type === 'ownership';
 
   const nodeForm = useForm<NodeFormValues>({
-    defaultValues: { name: '', type: 'company', annualIncome: 0, etr: 0, citizenship: '', passiveIncomeShare: 0, hasSubstance: false, headcount: 0, operationalExpenses: 0, payrollCosts: 0, isIPIncome: false, hasSeparateAccounting: false, cigaInZone: false, legalForm: 'LLC' },
+    defaultValues: { name: '', type: 'company', annualIncome: 0, etr: 0, citizenship: '', passiveIncomeShare: 0, hasSubstance: false, headcount: 0, operationalExpenses: 0, payrollCosts: 0, isIPIncome: false, hasSeparateAccounting: false, cigaInZone: false, isQFZP: false, legalForm: 'LLC' },
   });
 
   const ownershipForm = useForm<OwnershipFormValues>({
@@ -738,6 +755,7 @@ export function EditorModal() {
         isIPIncome: n.isIPIncome ?? false,
         hasSeparateAccounting: n.hasSeparateAccounting ?? false,
         cigaInZone: n.complianceData?.aifc?.cigaInZone ?? false,
+        isQFZP: n.isQFZP ?? false,
         legalForm: n.legalForm ?? 'LLC',
       });
     }
@@ -777,6 +795,7 @@ export function EditorModal() {
       hasSubstance: values.hasSubstance,
       isIPIncome: values.isIPIncome,
       hasSeparateAccounting: values.hasSeparateAccounting,
+      isQFZP: values.isQFZP,
       legalForm: values.legalForm as any,
     };
     if (values.hasSubstance && (values.headcount > 0 || values.operationalExpenses > 0 || values.payrollCosts > 0)) {

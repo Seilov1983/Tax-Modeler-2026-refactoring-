@@ -832,10 +832,27 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
       } else {
         citBreakdown = `Astana Hub non-IP: 100% CIT reduction → ${fmtB(adjustedIncome, currency)} × 0% = 0`;
       }
+
+    // ── AIFC: 0% CIT when substance met, 20% KZ fallback otherwise ──
+    } else if (zone && zone.code === 'KZ_AIFC') {
+      const kzBaseCit = getEffectiveRate('KZ', 'cit', fxDate) ?? 0.20;
+      const substanceMet = !!(node.hasSubstance && node.hasSeparateAccounting && node.complianceData?.aifc?.cigaInZone);
+      if (substanceMet) {
+        citAmount = 0;
+        citBreakdown = `AIFC: substance + separate accounting + CIGA met → 0% CIT on ${fmtB(adjustedIncome, currency)}`;
+      } else {
+        citAmount = bankersRound2(adjustedIncome > 0 ? adjustedIncome * kzBaseCit : 0);
+        citBreakdown = `AIFC fallback (substance not met): ${fmtB(adjustedIncome, currency)} × ${fmtR(kzBaseCit)} = ${fmtB(citAmount, currency)}`;
+      }
+
     } else {
+      // QFZP override: when node has isQFZP flag, force QFZP mode (0% qualifying / 9% non-qualifying)
+      const effectiveCit: CITConfig = (node.isQFZP && zone?.jurisdiction === 'UAE')
+        ? { mode: 'qfzp', qualifyingRate: 0, nonQualifyingRate: 0.09 }
+        : cn.effectiveTax.cit;
       // Use the full CIT computation engine (handles all 6 CIT modes)
-      citAmount = computeCITAmount(adjustedIncome, cn.effectiveTax.cit);
-      const cit = cn.effectiveTax.cit as CITConfig;
+      citAmount = computeCITAmount(adjustedIncome, effectiveCit);
+      const cit = effectiveCit as CITConfig;
       const mode = cit?.mode || 'flat';
       const rateStr = mode === 'flat' ? fmtR(cit.rate || 0)
         : mode === 'qfzp' ? `${fmtR(cit.qualifyingRate || 0)} (QFZP)`
@@ -858,7 +875,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
       jurisdiction: jurisdiction as JurisdictionCode | null,
       zoneId: node.zoneId,
       taxableIncome: adjustedIncome,
-      citRate: zone?.code === 'KZ_HUB' ? 0 : cn.effectiveTax.citRateEffective,
+      citRate: zone?.code === 'KZ_HUB' ? 0 : zone?.code === 'KZ_AIFC' ? (node.hasSubstance && node.hasSeparateAccounting && node.complianceData?.aifc?.cigaInZone ? 0 : (getEffectiveRate('KZ', 'cit', fxDate) ?? 0.20)) : cn.effectiveTax.citRateEffective,
       citAmount,
       currency,
       lawRef: citLawRef,

@@ -28,6 +28,7 @@ export function useDebouncedCloudSync(isHydrated: boolean) {
   const remoteProjectIdRef = useRef<string | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isOfflineModeRef = useRef(false);
+  const lastProjectIdRef = useRef<string | null>(null);
 
   const syncToCloud = useCallback(async (proj: Project) => {
     if (isOfflineModeRef.current) {
@@ -71,6 +72,14 @@ export function useDebouncedCloudSync(isHydrated: boolean) {
 
   useEffect(() => {
     if (!project || !isHydrated) return;
+
+    // Detect project change: clear stale remote ID to prevent overwriting old project
+    const currentProjectId = project.projectId ?? null;
+    if (lastProjectIdRef.current !== null && currentProjectId !== lastProjectIdRef.current) {
+      remoteProjectIdRef.current = null;
+      try { localStorage.removeItem(REMOTE_ID_KEY); } catch {}
+    }
+    lastProjectIdRef.current = currentProjectId;
 
     // 1. Immediate: localStorage
     project.updatedAt = new Date().toISOString();

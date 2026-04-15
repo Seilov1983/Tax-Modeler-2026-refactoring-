@@ -241,6 +241,8 @@ export function ProjectHeader() {
     setSelection(null);
     setPastStates([]);
     setFutureStates([]);
+    // Clear stale remote project ID so cloud sync creates a new record
+    try { localStorage.removeItem('tsm26_remote_project_id'); } catch {}
   }, [hydrate, setSelection, setPastStates, setFutureStates]);
 
   const toggleTheme = useCallback(() => {

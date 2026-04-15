@@ -266,6 +266,8 @@ export interface NodeDTO {
   managementTags?: string[];
   /** Legal structure form (LLC, JSC, Trust, etc.) for tax characterization. */
   legalForm?: LegalForm;
+  /** Whether this UAE Free Zone entity qualifies as a QFZP (0% qualifying rate). */
+  isQFZP?: boolean;
 }
 
 export interface AccountingYearData {
