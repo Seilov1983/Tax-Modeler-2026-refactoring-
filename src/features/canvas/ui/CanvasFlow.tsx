@@ -31,25 +31,6 @@ function cubicBez(t: number, p0: number, p1: number, p2: number, p3: number): nu
   return mt * mt * mt * p0 + 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t * p3;
 }
 
-/** Approximate arc length of a cubic Bezier via N-segment polyline. */
-function bezierArcLength(
-  x0: number, y0: number, x1: number, y1: number,
-  x2: number, y2: number, x3: number, y3: number,
-  segments: number = 10,
-): number {
-  let length = 0;
-  let px = x0, py = y0;
-  for (let i = 1; i <= segments; i++) {
-    const t = i / segments;
-    const cx = cubicBez(t, x0, x1, x2, x3);
-    const cy = cubicBez(t, y0, y1, y2, y3);
-    length += Math.sqrt((cx - px) ** 2 + (cy - py) ** 2);
-    px = cx;
-    py = cy;
-  }
-  return length;
-}
-
 // ─── Bezier path builder (reused for draft connections) ─────────────────────
 
 export function buildBezierPath(x1: number, y1: number, x2: number, y2: number): string {
