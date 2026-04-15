@@ -30,6 +30,7 @@ type LedgerRow = {
   dttApplied: boolean;
   zoneName: string;
   tags: ReadonlyArray<string>;
+  lawRef?: string;
 };
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
@@ -95,6 +96,7 @@ export function LedgerTable(props: {
             <th className={`${twTh} text-right`}>{t('colNet')}</th>
             <th className={`${twTh} text-right`}>{t('colWht')}</th>
             <th className={twTh}>{t('colCompliance')}</th>
+            <th className={twTh}>{t('colLawRef')}</th>
             {showCurrency && <th className={twTh}>{t('colCurrency')}</th>}
             {showDtt && <th className={twTh}>{t('colDttApplied')}</th>}
             {showZone && <th className={twTh}>{t('colZone')}</th>}
@@ -125,6 +127,7 @@ export function LedgerTable(props: {
                   {row.complianceStatus === 'OK' ? t('statusOk') : t('violationAcknowledged')}
                 </span>
               </td>
+              <td className={`${twTd} text-[11px] text-slate-500 dark:text-slate-400`}>{row.lawRef || '-'}</td>
               {showCurrency && <td className={twTd}>{row.currency}</td>}
               {showDtt && (
                 <td className={twTd}>{row.dttApplied ? 'Yes' : 'No'}</td>

@@ -21,6 +21,7 @@ import { exportReportPdf } from '@features/project-management/model/export-pdf';
 import type { LedgerRow } from '@entities/report/ui/LedgerTable';
 import { useTranslation } from '@shared/lib/i18n';
 import { fmtMoney, bankersRound2 } from '@shared/lib/engine/utils';
+import { computeGroupTax } from '@shared/lib/engine/engine-tax';
 
 // ─── Tailwind Classes ────────────────────────────────────────────────────────
 const twRoot = "w-full h-full flex flex-col bg-slate-50 dark:bg-slate-900 font-sans overflow-hidden";
@@ -111,6 +112,17 @@ export function ReportsBuilder() {
     return m;
   }, [project]);
 
+  // ── WHT lawRef map from engine ────────────────────────────────────────
+  const whtLawRefMap = useMemo(() => {
+    if (!project) return new Map<string, string>();
+    const groupTax = computeGroupTax(project);
+    const m = new Map<string, string>();
+    for (const w of groupTax.whtLiabilities) {
+      if (w.lawRef) m.set(w.flowId, w.lawRef);
+    }
+    return m;
+  }, [project]);
+
   // ── Filtered & mapped rows ─────────────────────────────────────────────
   const filteredRows: ReadonlyArray<LedgerRow> = useMemo(() => {
     if (!project) return [];
@@ -185,6 +197,7 @@ export function ReportsBuilder() {
           dttApplied: f.applyDTT === true,
           zoneName,
           tags: allTags,
+          lawRef: whtLawRefMap.get(f.id),
         };
       });
   }, [
@@ -197,6 +210,7 @@ export function ReportsBuilder() {
     nodeZoneMap,
     nodeTagMap,
     zoneNameMap,
+    whtLawRefMap,
   ]);
 
   // ── Summary stats ──────────────────────────────────────────────────────

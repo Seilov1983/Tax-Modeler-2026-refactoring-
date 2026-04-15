@@ -795,7 +795,18 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
     const node = cn.node;
     if (node.type !== 'company') continue;
 
-    const income = Number(node.annualIncome || 0);
+    let income = Number(node.annualIncome || 0);
+    if (income <= 0) {
+      // Dynamic income from flows: total inflows − total outflows (mirrors EntityTaxTable pattern)
+      let totalInflows = 0;
+      let totalOutflows = 0;
+      for (const flow of project.flows) {
+        const gross = Number(flow.grossAmount || 0);
+        if (flow.toId === node.id) totalInflows += gross;
+        if (flow.fromId === node.id) totalOutflows += gross;
+      }
+      income = totalInflows - totalOutflows;
+    }
     const zone = node.zoneId ? project.zones.find((z) => z.id === node.zoneId) ?? null : null;
     const jurisdiction = zone?.jurisdiction ?? null;
     const currency: CurrencyCode = zone?.currency ?? baseCurrency;

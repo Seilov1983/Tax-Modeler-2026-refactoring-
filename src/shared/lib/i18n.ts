@@ -69,6 +69,7 @@ const dictionary = {
   colNet: { en: 'Net', ru: '\u041d\u0435\u0442\u0442\u043e' },
   colWht: { en: 'WHT', ru: '\u041d\u0430\u043b\u043e\u0433 (WHT)' },
   colCompliance: { en: 'Compliance Status', ru: '\u0421\u0442\u0430\u0442\u0443\u0441 \u043a\u043e\u043c\u043f\u043b\u0430\u0435\u043d\u0441\u0430' },
+  colLawRef: { en: 'Law Ref', ru: '\u041e\u0431\u043e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0435' },
   colCurrency: { en: 'Currency', ru: '\u0412\u0430\u043b\u044e\u0442\u0430' },
   colDttApplied: { en: 'DTT Applied', ru: '\u0421\u0418\u0414\u041d \u043f\u0440\u0438\u043c\u0435\u043d\u0435\u043d' },
   colZone: { en: 'Zone', ru: '\u0417\u043e\u043d\u0430' },
