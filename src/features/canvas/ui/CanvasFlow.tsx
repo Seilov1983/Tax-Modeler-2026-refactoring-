@@ -8,16 +8,47 @@
  * Includes flow label and WHT badge via Konva <Text> and <Rect>.
  *
  * Hit area: 12px invisible stroke for easy clicking.
+ *
+ * Parallel edges: nudge is applied along the true perpendicular normal
+ * to ALL four Bezier control points (P0, P1, P2, P3), ensuring curves
+ * stay separated even for short/tight flows.
  */
 
 import { useAtom, useAtomValue } from 'jotai';
 import { memo, useCallback, useMemo } from 'react';
-import { Group, Shape, Text, TextPath, Rect, Line } from 'react-konva';
+import { Group, Shape, Text, Rect, Line } from 'react-konva';
 import type { FlowDTO, NodeDTO } from '@shared/types';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
 import { canvasFilterAtom } from '../model/canvas-filter-atom';
 import { fmtMoney, fmtPercent } from '@shared/lib/engine/utils';
+
+// ─── Bezier math helpers ────────────────────────────────────────────────────
+
+/** Evaluate cubic Bezier at parameter t ∈ [0, 1]. */
+function cubicBez(t: number, p0: number, p1: number, p2: number, p3: number): number {
+  const mt = 1 - t;
+  return mt * mt * mt * p0 + 3 * mt * mt * t * p1 + 3 * mt * t * t * p2 + t * t * t * p3;
+}
+
+/** Approximate arc length of a cubic Bezier via N-segment polyline. */
+function bezierArcLength(
+  x0: number, y0: number, x1: number, y1: number,
+  x2: number, y2: number, x3: number, y3: number,
+  segments: number = 10,
+): number {
+  let length = 0;
+  let px = x0, py = y0;
+  for (let i = 1; i <= segments; i++) {
+    const t = i / segments;
+    const cx = cubicBez(t, x0, x1, x2, x3);
+    const cy = cubicBez(t, y0, y1, y2, y3);
+    length += Math.sqrt((cx - px) ** 2 + (cy - py) ** 2);
+    px = cx;
+    py = cy;
+  }
+  return length;
+}
 
 // ─── Bezier path builder (reused for draft connections) ─────────────────────
 
@@ -26,8 +57,6 @@ export function buildBezierPath(x1: number, y1: number, x2: number, y2: number):
   const cpOffset = Math.max(dx * 0.45, 50);
   return `M ${x1} ${y1} C ${x1 + cpOffset} ${y1}, ${x2 - cpOffset} ${y2}, ${x2} ${y2}`;
 }
-
-// ─── Component ──────────────────────────────────────────────────────────────
 
 // ─── Parallel Edge Nudging ───────────────────────────────────────────────────
 const NUDGE_PX = 20;
@@ -66,32 +95,44 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes, parallelIndex 
 
   if (!fromNode || !toNode) return null;
 
-  // Parallel edge nudge: offset perpendicular to flow direction
+  // ── Base anchor points (before parallel nudge) ────────────────────────
+  const x1Base = fromNode.x + fromNode.w;
+  const y1Base = fromNode.y + fromNode.h / 2;
+  const x2Base = toNode.x;
+  const y2Base = toNode.y + toNode.h / 2;
+
+  // ── Perpendicular unit normal to the chord (P0 → P3) ─────────────────
+  const chordDx = x2Base - x1Base;
+  const chordDy = y2Base - y1Base;
+  const chordLen = Math.sqrt(chordDx * chordDx + chordDy * chordDy) || 1;
+  const nx = -chordDy / chordLen; // normal X (perpendicular to chord)
+  const ny = chordDx / chordLen;  // normal Y (perpendicular to chord)
+
+  // ── Nudge: apply perpendicular offset to ALL four Bezier points ───────
   const nudge = parallelCount > 1
     ? (parallelIndex - (parallelCount - 1) / 2) * NUDGE_PX
     : 0;
 
-  // Anchor: right-edge center of source → left-edge center of target (+ nudge)
-  const x1 = fromNode.x + fromNode.w;
-  const y1 = fromNode.y + fromNode.h / 2 + nudge;
-  const x2 = toNode.x;
-  const y2 = toNode.y + toNode.h / 2 + nudge;
+  const x1 = x1Base + nudge * nx;
+  const y1 = y1Base + nudge * ny;
+  const x2 = x2Base + nudge * nx;
+  const y2 = y2Base + nudge * ny;
 
-  const dx = Math.abs(x2 - x1);
-  const cpOffset = Math.max(dx * 0.45, 50);
+  // Control-point horizontal offset (derived from base chord, not nudged distance)
+  const baseDx = Math.abs(chordDx);
+  const cpOffset = Math.max(baseDx * 0.45, 50);
 
-  const midX = (x1 + x2) / 2;
-  const midY = (y1 + y2) / 2;
+  // Explicit control points — shifted by the same perpendicular nudge
+  const cp1x = x1 + cpOffset;
+  const cp1y = y1;
+  const cp2x = x2 - cpOffset;
+  const cp2y = y2;
+
+  // ── True Bezier midpoint at t = 0.5 ──────────────────────────────────
+  const midX = cubicBez(0.5, x1, cp1x, cp2x, x2);
+  const midY = cubicBez(0.5, y1, cp1y, cp2y, y2);
 
   const label = `${flow.flowType}${flow.grossAmount > 0 ? ' ' + fmtMoney(flow.grossAmount) : ''}`;
-
-  // SVG path data for TextPath — follows the Bezier curve exactly
-  const pathData = `M ${x1} ${y1} C ${x1 + cpOffset} ${y1} ${x2 - cpOffset} ${y2} ${x2} ${y2}`;
-  // Dynamic startOffset: shift label position along path for parallel flows to prevent overlap
-  const pathLength = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-  const baseOffset = Math.max(pathLength * 0.25, 40);
-  const parallelShift = parallelCount > 1 ? (parallelIndex - (parallelCount - 1) / 2) * 30 : 0;
-  const labelOffset = baseOffset + parallelShift;
 
   return (
     <Group onClick={handleClick} onTap={handleClick} opacity={isGhosted ? 0.15 : 1} listening={!isGhosted}>
@@ -100,7 +141,7 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes, parallelIndex 
         sceneFunc={(ctx, shape) => {
           ctx.beginPath();
           ctx.moveTo(x1, y1);
-          ctx.bezierCurveTo(x1 + cpOffset, y1, x2 - cpOffset, y2, x2, y2);
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x2, y2);
           ctx.strokeShape(shape);
         }}
         stroke="transparent"
@@ -114,7 +155,7 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes, parallelIndex 
         sceneFunc={(ctx, shape) => {
           ctx.beginPath();
           ctx.moveTo(x1, y1);
-          ctx.bezierCurveTo(x1 + cpOffset, y1, x2 - cpOffset, y2, x2, y2);
+          ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x2, y2);
           ctx.strokeShape(shape);
         }}
         stroke={isSelected ? '#2563eb' : '#94a3b8'}
@@ -134,18 +175,19 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes, parallelIndex 
         listening={false}
       />
 
-      {/* Flow label — follows the Bezier curve via TextPath to avoid collision on parallel edges */}
-      <TextPath
-        data={pathData}
+      {/* Flow label — placed at true Bezier midpoint (t=0.5), not chord midpoint */}
+      <Text
+        x={midX - 40}
+        y={midY - 14}
         text={label}
         fontSize={10}
         fill="#64748b"
+        align="center"
+        width={80}
         listening={false}
-        textBaseline="bottom"
-        letterSpacing={0.3}
       />
 
-      {/* WHT badge (if applicable) */}
+      {/* WHT badge (if applicable) — also placed at true Bezier midpoint */}
       {flow.whtRate > 0 && (
         <Group x={midX - 30} y={midY + 6} listening={false}>
           <Rect

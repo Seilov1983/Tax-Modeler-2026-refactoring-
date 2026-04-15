@@ -250,7 +250,7 @@ export function AICopilotChat() {
     },
   }));
 
-  const { messages, setMessages, sendMessage, status, error } = useChat({
+  const { messages, setMessages, sendMessage, stop, status, error } = useChat({
     id: 'ai-copilot',
     messages: chatHistory.length > 0 ? chatHistory : undefined,
     transport: transportRef.current,
@@ -267,6 +267,13 @@ export function AICopilotChat() {
   const isLoading = status === 'streaming' || status === 'submitted';
   const isError = status === 'error';
   const errorText = friendlyErrorMessage(error);
+
+  // Abort streaming when the panel is hidden — prevents background network requests
+  useEffect(() => {
+    if (!isOpen && isLoading) {
+      stop();
+    }
+  }, [isOpen, isLoading, stop]);
 
   // Auto-scroll on new messages or error
   useEffect(() => {
