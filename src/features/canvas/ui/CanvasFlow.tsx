@@ -12,7 +12,7 @@
 
 import { useAtom, useAtomValue } from 'jotai';
 import { memo, useCallback, useMemo } from 'react';
-import { Group, Shape, Text, Rect, Line } from 'react-konva';
+import { Group, Shape, Text, TextPath, Rect, Line } from 'react-konva';
 import type { FlowDTO, NodeDTO } from '@shared/types';
 import type { KonvaEventObject } from 'konva/lib/Node';
 import { selectionAtom } from '@features/entity-editor/model/atoms';
@@ -85,6 +85,14 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes, parallelIndex 
 
   const label = `${flow.flowType}${flow.grossAmount > 0 ? ' ' + fmtMoney(flow.grossAmount) : ''}`;
 
+  // SVG path data for TextPath — follows the Bezier curve exactly
+  const pathData = `M ${x1} ${y1} C ${x1 + cpOffset} ${y1} ${x2 - cpOffset} ${y2} ${x2} ${y2}`;
+  // Dynamic startOffset: shift label position along path for parallel flows to prevent overlap
+  const pathLength = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+  const baseOffset = Math.max(pathLength * 0.25, 40);
+  const parallelShift = parallelCount > 1 ? (parallelIndex - (parallelCount - 1) / 2) * 30 : 0;
+  const labelOffset = baseOffset + parallelShift;
+
   return (
     <Group onClick={handleClick} onTap={handleClick} opacity={isGhosted ? 0.15 : 1} listening={!isGhosted}>
       {/* Invisible wider hit area (12px) */}
@@ -126,16 +134,15 @@ export const CanvasFlow = memo(function CanvasFlow({ flow, nodes, parallelIndex 
         listening={false}
       />
 
-      {/* Flow label */}
-      <Text
-        x={midX - 40}
-        y={midY - 14}
+      {/* Flow label — follows the Bezier curve via TextPath to avoid collision on parallel edges */}
+      <TextPath
+        data={pathData}
         text={label}
         fontSize={10}
         fill="#64748b"
-        align="center"
-        width={80}
         listening={false}
+        textBaseline="bottom"
+        letterSpacing={0.3}
       />
 
       {/* WHT badge (if applicable) */}

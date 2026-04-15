@@ -1,5 +1,6 @@
 import { atom } from 'jotai';
 import { atomFamily } from 'jotai-family';
+import { loadable } from 'jotai/utils';
 import { projectAtom } from '@features/canvas/model/project-atom';
 import { recomputeRisks } from '@shared/lib/engine/engine-risks';
 import { ensureMasterData } from '@shared/lib/engine/engine-core';
@@ -44,6 +45,24 @@ export const riskCalculationAtom = atom(async (get) => {
   }
 
   return { nodeRisks, flowRisks };
+});
+
+// ─── Sync global risk maps — Single Source of Truth for all UI consumers ────
+// Uses loadable() so that components do NOT need <Suspense>. Returns {} while
+// the async risk computation is in-flight, then the full map once resolved.
+
+const riskLoadable = loadable(riskCalculationAtom);
+
+/** Sync atom: Record<nodeId, RiskFlag[]> — readable anywhere without Suspense. */
+export const activeNodeRisksAtom = atom<Record<string, RiskFlag[]>>((get) => {
+  const l = get(riskLoadable);
+  return l.state === 'hasData' ? l.data.nodeRisks : {};
+});
+
+/** Sync atom: Record<flowId, RiskFlag[]> — readable anywhere without Suspense. */
+export const activeFlowRisksAtom = atom<Record<string, RiskFlag[]>>((get) => {
+  const l = get(riskLoadable);
+  return l.state === 'hasData' ? l.data.flowRisks : {};
 });
 
 // ─── Per-node risk selector ─────────────────────────────────────────────────

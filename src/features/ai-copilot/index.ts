@@ -1,2 +1,2 @@
 export { AICopilotChat } from './ui/AICopilotChat';
-export { copilotOpenAtom, aiChatHistoryAtom } from './model/atoms';
+export { copilotOpenAtom, aiChatHistoryAtom, aiChatInputAtom } from './model/atoms';

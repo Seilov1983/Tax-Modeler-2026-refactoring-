@@ -19,7 +19,7 @@
 import { useChat } from '@ai-sdk/react';
 import { useState, useRef, useEffect, useCallback, type FormEvent } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { copilotOpenAtom, aiChatHistoryAtom } from '../model/atoms';
+import { copilotOpenAtom, aiChatHistoryAtom, aiChatInputAtom } from '../model/atoms';
 import { nodesAtom } from '@entities/node';
 import { zonesAtom } from '@entities/zone';
 import { flowsAtom } from '@entities/flow';
@@ -201,7 +201,7 @@ export function AICopilotChat() {
   const [isOpen, setIsOpen] = useAtom(copilotOpenAtom);
   const chatHistory = useAtomValue(aiChatHistoryAtom);
   const setChatHistory = useSetAtom(aiChatHistoryAtom);
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useAtom(aiChatInputAtom);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { t } = useTranslation();
 

@@ -63,6 +63,24 @@ export const fmtMoney = (n: number, locale: string = 'en-US'): string => {
 };
 
 /**
+ * Compact money formatter for dashboard cards. Prevents layout breakage with
+ * large numbers (e.g. "409.11M" instead of "409,110,000.00").
+ * Returns a compact string; callers should show the full fmtMoney value in a tooltip.
+ */
+export const fmtMoneyCompact = (n: number, locale: string = 'en-US'): string => {
+  const v = bankersRound2(n);
+  try {
+    return new Intl.NumberFormat(locale, {
+      notation: 'compact',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(v);
+  } catch {
+    return fmtMoney(n, locale);
+  }
+};
+
+/**
  * Loose money formatter — handles null/undefined, 0–2 fraction digits.
  * Useful for optional fields in master data and sidebar summaries.
  */

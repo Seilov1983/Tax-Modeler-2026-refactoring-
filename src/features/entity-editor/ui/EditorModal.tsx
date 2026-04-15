@@ -19,6 +19,7 @@ import { useTranslation, localizedName, t } from '@shared/lib/i18n';
 import type { NodeDTO, OwnershipEdge, NodeType, Zone, Project } from '@shared/types';
 import { computeNexusFractionFromFlows } from '@shared/lib/engine/engine-tax';
 import { fmtMoney, fmtPercent, fmtInputDisplay, parseInputDisplay, currencySymbol } from '@shared/lib/engine/utils';
+import { activeNodeRisksAtom } from '@features/risk-analyzer/model/atoms';
 import {
   Dialog,
   DialogContent,
@@ -353,6 +354,10 @@ function NodeEditor({
   // Real-time Nexus calculation for indicator
   const nexusFraction = watchIPIncome ? computeNexusFractionFromFlows(project, node) : null;
 
+  // Global risk state — Single Source of Truth from risk engine (not stale node.riskFlags)
+  const allNodeRisks = useAtomValue(activeNodeRisksAtom);
+  const riskFlags = allNodeRisks[node.id] ?? [];
+
   return (
     <>
       <Field label={t('name')}>
@@ -579,19 +584,20 @@ function NodeEditor({
               </div>
             </div>
 
-            {node.riskFlags && node.riskFlags.length > 0 && (
+            {riskFlags.length > 0 && (
               <div className="space-y-2">
-                {node.riskFlags.map((flag, idx) => {
+                {riskFlags.map((flag, idx) => {
                   const labelKey = RISK_TYPE_I18N[flag.type];
                   const label = labelKey ? t(labelKey as any) : String(flag.type).replace(/_/g, ' ');
                   return (
                     <div key={idx} className="flex items-start gap-2 rounded-lg bg-orange-500/5 dark:bg-orange-500/10 p-2 border border-orange-500/10">
                       <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />
-                      <div>
-                        <p className="text-[11px] font-bold text-orange-700 dark:text-orange-400 leading-tight">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-orange-700 dark:text-orange-400 leading-tight text-wrap break-words">
                           {label}
                         </p>
-                        {!!flag.message && <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{t(String(flag.message) as any)}</p>}
+                        {!!flag.message && <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 text-wrap break-words">{t(String(flag.message) as any)}</p>}
+                        {flag.lawRef && <p className="text-[10px] text-slate-400 mt-0.5">{String(flag.lawRef)}</p>}
                       </div>
                     </div>
                   );
@@ -613,7 +619,7 @@ function NodeEditor({
         <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2">{t('technicalData')}</h4>
         <div className="text-[12px] text-slate-800 dark:text-slate-200 space-y-1 font-mono">
           <p><span className="text-slate-500 dark:text-slate-400">ID:</span> {node.id}</p>
-          <p><span className="text-slate-500 dark:text-slate-400">{t('type')}:</span> {node.type}</p>
+          <p><span className="text-slate-500 dark:text-slate-400">{t('type')}:</span> {t(node.type as any)}</p>
           <p><span className="text-slate-500 dark:text-slate-400">{t('frozen')}:</span> {node.frozen ? t('yes') : t('no')}</p>
           {node.computedEtr != null && <p><span className="text-slate-500 dark:text-slate-400">{t('computedEtr')}:</span> {fmtPercent(node.computedEtr)}</p>}
           {node.computedCitKZT != null && <p><span className="text-slate-500 dark:text-slate-400">{t('computedCitKzt')}:</span> {fmtMoney(node.computedCitKZT)}</p>}

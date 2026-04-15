@@ -202,7 +202,11 @@ function AppContent() {
 
         {/* Right panels — docked flex siblings */}
         {showPropertiesDrawer && <NodePropertiesDrawer />}
-        {isCopilotOpen && <AICopilotChat />}
+        {/* AI Copilot: always mounted to preserve chat state & streaming;
+            visibility toggled via CSS to prevent unmount-induced amnesia. */}
+        <div className={isCopilotOpen ? 'contents' : 'hidden'}>
+          <AICopilotChat />
+        </div>
       </div>
     </div>
   );

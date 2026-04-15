@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { X, Building2, Cpu, ShieldCheck, FlaskConical } from 'lucide-react';
 import type { NodeDTO, Zone, Project } from '@shared/types';
+import { activeNodeRisksAtom } from '@features/risk-analyzer/model/atoms';
 
 // ─── Styling ────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,7 @@ export function NodePropertiesDrawer() {
   const selection = useAtomValue(selectionAtom);
   const project = useAtomValue(projectAtom);
   const updateNode = useSetAtom(updateNodeAtom);
+  const allNodeRisks = useAtomValue(activeNodeRisksAtom);
   const { t } = useTranslation();
 
   // Only show for single-node selection
@@ -304,18 +306,18 @@ export function NodePropertiesDrawer() {
           </div>
         )}
 
-        {/* Risk flags summary */}
-        {node.riskFlags.length > 0 && (
+        {/* Risk flags summary — reads from global risk engine atom */}
+        {(allNodeRisks[node.id] ?? []).length > 0 && (
           <div className={SECTION}>
             <span className={LABEL}>{t('activeRisks')}</span>
             <div className="flex flex-col gap-1.5">
-              {node.riskFlags.map((flag, i) => (
-                <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-red-500/5 dark:bg-red-900/10 border border-red-500/10">
-                  <span className="text-[11px] font-bold text-red-600 dark:text-red-400">
+              {(allNodeRisks[node.id] ?? []).map((flag, i) => (
+                <div key={i} className="flex flex-col gap-0.5 p-2 rounded-lg bg-red-500/5 dark:bg-red-900/10 border border-red-500/10">
+                  <span className="text-[11px] font-bold text-red-600 dark:text-red-400 text-wrap break-words">
                     {String(flag.type).replace(/_/g, ' ')}
                   </span>
                   {flag.lawRef && (
-                    <span className="text-[10px] text-slate-400 ml-auto shrink-0">{String(flag.lawRef)}</span>
+                    <span className="text-[10px] text-slate-400 text-wrap break-words">{String(flag.lawRef)}</span>
                   )}
                 </div>
               ))}

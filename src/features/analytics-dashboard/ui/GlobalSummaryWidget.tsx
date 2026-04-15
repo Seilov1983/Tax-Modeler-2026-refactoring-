@@ -16,7 +16,7 @@ import { Suspense, useState, useCallback } from 'react';
 import { globalSummaryAtom } from '../model/atoms';
 import { riskCalculationAtom } from '@features/risk-analyzer/model/atoms';
 import { projectAtom } from '@features/canvas/model/project-atom';
-import { fmtMoney, fmtPercent, currencySymbol } from '@shared/lib/engine/utils';
+import { fmtMoney, fmtMoneyCompact, fmtPercent, currencySymbol } from '@shared/lib/engine/utils';
 import type { RiskFlag } from '@shared/types';
 import { useTranslation } from '@shared/lib/i18n';
 import type { Language } from '@shared/lib/i18n';
@@ -128,30 +128,30 @@ function SummaryContent() {
         </span>
       </div>
 
-      {/* Metrics grid */}
+      {/* Metrics grid — compact formatting with full value on hover */}
       <div className="grid grid-cols-2 gap-2">
-        <div className="bg-black/5 dark:bg-white/5 rounded-xl p-3 shadow-inner">
+        <div className="bg-black/5 dark:bg-white/5 rounded-xl p-3 shadow-inner" title={`${ccy} ${fmtMoney(s.totalIncome)}`}>
           <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{t('totalIncome')}</span>
-          <span className="text-[14px] font-bold text-slate-700 dark:text-slate-200">
-            {ccy} {fmtMoney(s.totalIncome)}
+          <span className="text-[14px] font-bold text-slate-700 dark:text-slate-200 truncate block">
+            {ccy} {fmtMoneyCompact(s.totalIncome)}
           </span>
         </div>
-        <div className="bg-red-500/10 dark:bg-red-900/20 rounded-xl p-3 shadow-inner">
+        <div className="bg-red-500/10 dark:bg-red-900/20 rounded-xl p-3 shadow-inner" title={`${ccy} ${fmtMoney(s.totalTax)}`}>
           <span className="block text-[10px] font-bold text-red-500/80 dark:text-red-400/80 uppercase tracking-widest mb-1">{t('taxBurden')}</span>
-          <span className="text-[14px] font-bold text-red-600 dark:text-red-400">
-            {ccy} {fmtMoney(s.totalTax)}
+          <span className="text-[14px] font-bold text-red-600 dark:text-red-400 truncate block">
+            {ccy} {fmtMoneyCompact(s.totalTax)}
           </span>
         </div>
-        <div className="bg-black/5 dark:bg-white/5 rounded-xl p-3 shadow-inner">
+        <div className="bg-black/5 dark:bg-white/5 rounded-xl p-3 shadow-inner" title={`${ccy} ${fmtMoney(s.totalCit)}`}>
           <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{t('cit')}</span>
-          <span className="text-[14px] font-bold text-slate-700 dark:text-slate-200">
-            {ccy} {fmtMoney(s.totalCit)}
+          <span className="text-[14px] font-bold text-slate-700 dark:text-slate-200 truncate block">
+            {ccy} {fmtMoneyCompact(s.totalCit)}
           </span>
         </div>
-        <div className="bg-black/5 dark:bg-white/5 rounded-xl p-3 shadow-inner">
+        <div className="bg-black/5 dark:bg-white/5 rounded-xl p-3 shadow-inner" title={`${ccy} ${fmtMoney(s.totalWht)}`}>
           <span className="block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{t('wht')}</span>
-          <span className="text-[14px] font-bold text-slate-700 dark:text-slate-200">
-            {ccy} {fmtMoney(s.totalWht)}
+          <span className="text-[14px] font-bold text-slate-700 dark:text-slate-200 truncate block">
+            {ccy} {fmtMoneyCompact(s.totalWht)}
           </span>
         </div>
       </div>
@@ -190,11 +190,11 @@ function SummaryContent() {
                       className={`flex items-start gap-3 p-3 rounded-xl border ${sc.bg} ${sc.border}`}
                     >
                       <span className="text-[16px] shrink-0 mt-0.5">{entry.icon}</span>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <span className={`text-[9px] font-black uppercase tracking-widest ${sc.text}`}>
                           {t(entry.severity.toLowerCase() as any)}
                         </span>
-                        <p className="mt-0.5 text-[12px] text-slate-700 dark:text-slate-300 font-medium leading-snug">
+                        <p className="mt-0.5 text-[12px] text-slate-700 dark:text-slate-300 font-medium leading-snug text-wrap break-words">
                           {entry.text}
                         </p>
                       </div>

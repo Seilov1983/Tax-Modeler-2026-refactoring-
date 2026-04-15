@@ -35,6 +35,7 @@ import { settingsAtom } from '@features/settings';
 import { nodeLiveCITAtomFamily } from '@features/tax-calculator/model/atoms';
 import { calculateNodeCardLayout } from '../utils/canvas-layout';
 import { fmtMoney, fmtPercent } from '@shared/lib/engine/utils';
+import { activeNodeRisksAtom } from '@features/risk-analyzer/model/atoms';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -143,7 +144,11 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
   const isSelected = selection?.type === 'node' && selection.ids.includes(node.id);
   const isTxa = node.type === 'txa';
   const colors = isDark ? (NODE_COLORS_DARK[node.type] || NODE_COLORS_DARK.company) : (NODE_COLORS[node.type] || NODE_COLORS.company);
-  const riskCount = node.riskFlags?.length || 0;
+
+  // Global risk state — Single Source of Truth from risk engine
+  const allNodeRisks = useAtomValue(activeNodeRisksAtom);
+  const nodeRiskFlags = allNodeRisks[node.id] ?? [];
+  const riskCount = nodeRiskFlags.length;
 
   // ─── Tactile interaction: scale ~1.05 on drag/hover, spring-back to 1 on rest.
   // Applied imperatively via Konva refs so we bypass React render cycles for
@@ -171,15 +176,15 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
 
   // ─── Tax Health: classify the strongest risk flag on this node ─────────
   const riskSeverity: 'critical' | 'warning' | null = useMemo(() => {
-    if (!node.riskFlags?.length) return null;
-    for (const f of node.riskFlags) {
+    if (!nodeRiskFlags.length) return null;
+    for (const f of nodeRiskFlags) {
       if (CRITICAL_RISK_TYPES.has(f.type)) return 'critical';
     }
-    for (const f of node.riskFlags) {
+    for (const f of nodeRiskFlags) {
       if (WARNING_RISK_TYPES.has(f.type)) return 'warning';
     }
     return null;
-  }, [node.riskFlags]);
+  }, [nodeRiskFlags]);
 
   // ─── Glow style resolved once per render — error & frozen keep priority
   const healthGlow = useMemo(() => {
@@ -556,11 +561,11 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
       {/* Risk badges: CFC (coral-red), PILLAR2 (coral-red), TP (amber) */}
       {(() => {
         const badges: Array<{ label: string; color: string; bg: string }> = [];
-        if (node.riskFlags?.some((r) => r.type === 'CFC_RISK'))
+        if (nodeRiskFlags.some((r) => r.type === 'CFC_RISK'))
           badges.push({ label: 'CFC', color: '#ff453a', bg: 'rgba(255,69,58,0.1)' });
-        if (node.riskFlags?.some((r) => r.type === 'PILLAR2_LOW_ETR'))
+        if (nodeRiskFlags.some((r) => r.type === 'PILLAR2_LOW_ETR'))
           badges.push({ label: 'P2', color: '#ff453a', bg: 'rgba(255,69,58,0.1)' });
-        if (node.riskFlags?.some((r) => r.type === 'TRANSFER_PRICING_RISK'))
+        if (nodeRiskFlags.some((r) => r.type === 'TRANSFER_PRICING_RISK'))
           badges.push({ label: 'TP', color: '#ff9f0a', bg: 'rgba(255,159,10,0.1)' });
         if (!badges.length) return null;
         const badgeW = 26;
