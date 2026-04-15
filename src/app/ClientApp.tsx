@@ -68,8 +68,24 @@ function isCompatibleSchema(version: string | undefined): boolean {
   return major === currentMajor;
 }
 
+/**
+ * Migrate legacy zone codes created by the old CanvasBoard drop handler.
+ * Previously regimes dropped from the sidebar got `code: \`${countryId}_${regimeId}\``
+ * producing double-prefixes like 'KZ_KZ_HUB'. Now regimeId IS the canonical code.
+ */
+function migrateZoneCodes(p: Project): void {
+  const doublePrefix = /^([A-Z]+)_\1_/;
+  for (const z of p.zones) {
+    if (doublePrefix.test(z.code)) {
+      // e.g. 'KZ_KZ_HUB' → 'KZ_HUB'
+      z.code = z.code.replace(doublePrefix, '$1_');
+    }
+  }
+}
+
 /** Prepare a raw project object for use: ensure masterData, zones, risks, etc. */
 function prepareProject(p: Project): Project {
+  migrateZoneCodes(p);
   ensureMasterData(p);
   ensureCountriesAndRegimes(p);
   ensureZoneTaxDefaults(p);

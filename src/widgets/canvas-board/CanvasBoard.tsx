@@ -516,7 +516,7 @@ export function CanvasBoard() {
         // All zone coordinates are ABSOLUTE (flat rendering) — never subtract parent offset
         addZone({
           jurisdiction: regimeCountryId as JurisdictionCode,
-          code: `${regimeCountryId}_${regimeId}`,
+          code: regimeId,
           name: regimeName || regimeId,
           currency: COUNTRY_CURRENCY[regimeCountryId] || 'USD',
           x: Math.round(x - REGIME_DEFAULT_W / 2),
