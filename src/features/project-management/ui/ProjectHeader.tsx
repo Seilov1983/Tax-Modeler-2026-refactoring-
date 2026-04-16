@@ -40,6 +40,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { useTranslation } from '@shared/lib/i18n';
+import { Logo } from '@shared/ui/Logo';
 
 // ─── SyncBadge — autosave indicator next to title ────────────────────────────
 
@@ -292,8 +293,9 @@ export function ProjectHeader() {
     >
       {/* Left: branding + title + base currency */}
       <div className="flex items-center gap-3">
-        <span className="font-bold text-[15px] tracking-tight">
-          Tax-Modeler 2026
+        <span className="inline-flex items-center font-bold text-[15px] tracking-tight font-sans">
+          <Logo className="w-6 h-6 mr-2" />
+          TSM26
         </span>
         <input
           ref={titleInputRef}

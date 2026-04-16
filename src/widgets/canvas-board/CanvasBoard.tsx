@@ -54,6 +54,7 @@ import { isSidebarOpenAtom, sidebarContextAtom } from '@features/master-data-sid
 import { pointInZone, zoneArea } from '@shared/lib/engine/engine-core';
 import type { JurisdictionCode, CurrencyCode, Zone, NodeDTO } from '@shared/types';
 import { useTranslation } from '@shared/lib/i18n';
+import { Logo } from '@shared/ui/Logo';
 import type Konva from 'konva';
 import type { KonvaEventObject } from 'konva/lib/Node';
 
@@ -866,8 +867,13 @@ export function CanvasBoard() {
             className="pointer-events-none absolute inset-0 flex items-center justify-center z-10"
             data-testid="canvas-empty-state"
           >
-            <div className="flex flex-col items-center gap-3 px-8 py-6 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-2xl shadow-lg">
-              <span className="text-[48px] leading-none opacity-40">+</span>
+            {/* Giant orthogonal infinity watermark — sits behind the Liquid Glass panel */}
+            <Logo
+              aria-hidden
+              className="absolute w-[560px] h-[560px] max-w-[70vw] max-h-[70vh] opacity-5 dark:opacity-10 pointer-events-none select-none"
+            />
+            <div className="relative flex flex-col items-center gap-3 px-8 py-6 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-2xl shadow-lg">
+              <Logo className="w-10 h-10 opacity-80" />
               <p className="text-[15px] font-semibold text-slate-800 dark:text-slate-100">
                 {t('canvasEmptyTitle')}
               </p>

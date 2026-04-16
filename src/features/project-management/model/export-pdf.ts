@@ -24,6 +24,47 @@ const pct = fmtPercent;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Draw the TSM26 "Infinity What-If" brand mark as a native jsPDF vector.
+ *
+ * Mirrors the geometry of `src/shared/ui/Logo.tsx` — pure orthogonal lines,
+ * zero bezier curves — so the PDF brand mark matches the UI exactly and
+ * stays crisp at any zoom level (no raster resampling).
+ *
+ * The logo's SVG viewBox is 32×32; `size` below is the side length in mm.
+ */
+function drawTsm26Logo(doc: jsPDF, x: number, y: number, size: number): void {
+  const unit = size / 32; // 1 SVG user-unit → mm
+  const prevDraw = doc.getDrawColor();
+  const prevLW = doc.getLineWidth();
+
+  // Primary orthogonal infinity — Apple Blue (#007aff → 0,122,255)
+  doc.setDrawColor(0, 122, 255);
+  doc.setLineWidth(2.5 * unit);
+  doc.setLineCap('butt');
+  doc.setLineJoin('miter');
+  const pts: Array<[number, number]> = [
+    [2, 4], [12, 4], [12, 12], [20, 12], [20, 4],
+    [30, 4], [30, 28], [20, 28], [20, 20], [12, 20],
+    [12, 28], [2, 28], [2, 4],
+  ];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[i + 1];
+    doc.line(x + x1 * unit, y + y1 * unit, x + x2 * unit, y + y2 * unit);
+  }
+
+  // Secondary crosshair — dark slate (#334155 → 51,65,85) marking the A* intersection
+  doc.setDrawColor(51, 65, 85);
+  doc.setLineWidth(2 * unit);
+  doc.line(x + 14 * unit, y + 16 * unit, x + 18 * unit, y + 16 * unit);
+  doc.line(x + 16 * unit, y + 14 * unit, x + 16 * unit, y + 18 * unit);
+
+  // Restore previous draw state
+  doc.setDrawColor(prevDraw);
+  doc.setLineWidth(prevLW);
+}
+
 /** Convert ArrayBuffer to base64 string (browser-safe). */
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -77,17 +118,20 @@ export async function exportReportPdf(project: Project): Promise<void> {
 
   // ── 1. Document Header ──────────────────────────────────────────────────
 
+  // Brand mark — pure-orthogonal "Infinity What-If" logo, top-left corner
+  drawTsm26Logo(doc, 14, 10, 12);
+
   doc.setFont(fontFamily, hasBold ? 'bold' : 'normal');
   doc.setFontSize(18);
   doc.setTextColor(29, 29, 31);
-  doc.text('Tax Report — ' + project.title, 14, 18);
+  doc.text('Corporate Structure Book — ' + project.title, 30, 18);
 
   doc.setFont(fontFamily, 'normal');
   doc.setFontSize(9);
   doc.setTextColor(107, 114, 128);
-  doc.text(`Generated: ${timestamp}`, 14, 25);
-  doc.text(`SHA-256: ${hash}`, 14, 30);
-  doc.text(`Schema: ${project.schemaVersion}  |  Currency: ${project.baseCurrency}`, 14, 35);
+  doc.text(`Generated: ${timestamp}`, 30, 25);
+  doc.text(`SHA-256 Audit Seal: ${hash}`, 30, 30);
+  doc.text(`Schema: ${project.schemaVersion}  |  Currency: ${project.baseCurrency}`, 30, 35);
 
   // Thin separator
   doc.setDrawColor(229, 231, 235);

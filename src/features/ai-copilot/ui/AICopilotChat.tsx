@@ -30,6 +30,7 @@ import { DefaultChatTransport, type UIMessage } from 'ai';
 import { useTranslation } from '@shared/lib/i18n';
 import { fmtMoney } from '@shared/lib/engine/utils';
 import { commitHistoryAtom } from '@features/project-management/model/history-atoms';
+import { Logo } from '@shared/ui/Logo';
 
 /** Extract concatenated text from UIMessage parts. */
 function getMessageText(msg: UIMessage): string {
@@ -455,12 +456,7 @@ export function AICopilotChat() {
                       key={part.toolCallId}
                       className="flex items-center gap-2 w-fit px-3 py-1.5 mt-2 text-xs font-medium text-slate-700 bg-white/40 backdrop-blur-md border border-white/50 rounded-full shadow-sm animate-pulse dark:bg-slate-800/50 dark:text-slate-200 dark:border-slate-700/50"
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-                        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                          <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite" />
-                        </path>
-                      </svg>
+                      <Logo className="w-4 h-4 animate-pulse shrink-0" />
                       {toolActiveLabel(part)}
                     </div>
                   );

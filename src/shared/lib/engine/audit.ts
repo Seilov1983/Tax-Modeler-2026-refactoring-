@@ -187,6 +187,24 @@ export async function generateAuditSnapshot(project: Project): Promise<AuditSnap
 
 // ─── Corporate Structure Book — Markdown Generator ──────────────────────────
 
+/**
+ * TSM26 "Infinity What-If" brand mark, inlined as an SVG string.
+ *
+ * Kept in sync with `src/shared/ui/Logo.tsx` (identical geometry). Pure
+ * orthogonal lines — no bezier curves — embodying A* routing determinism.
+ * This is a plain string constant; it does not violate the engine's zero-
+ * React / zero-DOM invariant.
+ */
+const TSM26_LOGO_SVG = [
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="48" height="48" fill="none" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">',
+  '  <path d="M2 4 H12 V12 H20 V4 H30 V28 H20 V20 H12 V28 H2 Z" stroke="#007aff" stroke-width="2.5" />',
+  '  <g stroke="#334155" stroke-width="2">',
+  '    <path d="M14 16 H18" />',
+  '    <path d="M16 14 V18" />',
+  '  </g>',
+  '</svg>',
+].join('\n');
+
 function formatCurrency(amount: number, currency: string): string {
   return `${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
@@ -213,6 +231,9 @@ export function exportStructureBook(
   const lines: string[] = [];
 
   // ── Header ──────────────────────────────────────────────────────────────
+  // Brand mark (pure orthogonal SVG) sits above the title and audit seal.
+  lines.push(TSM26_LOGO_SVG);
+  lines.push('');
   lines.push('# Corporate Structure Book - Tax Modeler 2026');
   lines.push('');
   lines.push(`**Project:** ${project.title}`);
