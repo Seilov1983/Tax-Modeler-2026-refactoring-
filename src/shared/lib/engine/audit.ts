@@ -190,17 +190,19 @@ export async function generateAuditSnapshot(project: Project): Promise<AuditSnap
 /**
  * TSM26 "Infinity What-If" brand mark, inlined as an SVG string.
  *
- * Kept in sync with `src/shared/ui/Logo.tsx` (identical geometry). Pure
- * orthogonal lines — no bezier curves — embodying A* routing determinism.
- * This is a plain string constant; it does not violate the engine's zero-
- * React / zero-DOM invariant.
+ * Kept in sync with `src/shared/ui/Logo.tsx` (identical 32×16 geometry).
+ * Orthogonal figure-8 silhouette + slate belt/X overlay. Plain string
+ * constant — does not violate the engine's zero-React / zero-DOM invariant.
  */
 const TSM26_LOGO_SVG = [
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="48" height="48" fill="none" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">',
-  '  <path d="M2 4 H12 V12 H20 V4 H30 V28 H20 V20 H12 V28 H2 Z" stroke="#007aff" stroke-width="2.5" />',
-  '  <g stroke="#334155" stroke-width="2">',
-  '    <path d="M14 16 H18" />',
-  '    <path d="M16 14 V18" />',
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 16" width="96" height="48" fill="none" stroke-linecap="square" stroke-linejoin="miter" aria-hidden="true">',
+  '  <path d="M2 4 H6 V2 H11 V4 H14 V6 H18 V4 H21 V2 H26 V4 H30 V12 H26 V14 H21 V12 H18 V10 H14 V12 H11 V14 H6 V12 H2 Z" stroke="#007aff" stroke-width="2" />',
+  '  <path d="M5 6 H7 V4 H10 V6 H12 V10 H10 V12 H7 V10 H5 Z" stroke="#007aff" stroke-width="1.25" />',
+  '  <path d="M20 6 H22 V4 H25 V6 H27 V10 H25 V12 H22 V10 H20 Z" stroke="#007aff" stroke-width="1.25" />',
+  '  <g stroke="#334155" stroke-width="1.5">',
+  '    <path d="M0 8 H32" />',
+  '    <path d="M14 6 L18 10" />',
+  '    <path d="M18 6 L14 10" />',
   '  </g>',
   '</svg>',
 ].join('\n');

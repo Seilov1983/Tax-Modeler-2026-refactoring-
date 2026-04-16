@@ -1,34 +1,36 @@
 /**
- * TSM26 "Infinity What-If" Brand Mark.
+ * TSM26 "Infinity What-If" Brand Mark — final vectorized form.
  *
- * Pure orthogonal infinity (∞) constructed exclusively from horizontal and
- * vertical strokes — no bezier curves, no diagonals. The square-cornered
- * silhouette pays homage to:
- *   - the A* orthogonal flow router that lays every cable on the canvas,
- *   - the Infinite Canvas (pan / zoom without bounds),
- *   - and the mathematical determinism of the tax engine (banker's rounding,
- *     pure functions, hash-chained audit log).
+ * Horizontal 2:1 orthogonal infinity traced directly from the Client-approved
+ * reference (TSM_logo.png). Pure 90-degree geometry for the main silhouette
+ * plus a slate "belt + X" overlay at the central waist, matching the
+ * reference's duotone palette.
  *
- * Geometry (viewBox 0 0 32 32, centered):
- *   • Primary loop (Apple Blue #007aff) traces the figure-8 silhouette as a
- *     single closed path with a pinched waist in the middle.
- *   • Secondary crosshair (dark slate / dark-mode slate-200) marks the
- *     central intersection where the two lobes meet — the "A* node".
+ * Geometry (viewBox 0 0 32 16):
+ *   • Outer figure-8 — a single closed orthogonal path with a pinched waist
+ *     between x=14 and x=18. Apple Blue (#007aff), the system primary.
+ *   • Left / right lobes each contain a nested octagon signalling the
+ *     circuit-like internal routing of the reference.
+ *   • Slate overlay (text-slate-700 / dark:text-slate-200):
+ *       – horizontal "belt" across the midline (y=8)
+ *       – diagonal X inside the waist (14→18 / 18→14) — the "A* crossover".
  *
- * The component accepts `className` so callers can size, tint opacity, or
- * animate the mark (e.g. `animate-pulse`, `opacity-5`, `w-6 h-6`).
+ * The component accepts `className`, so callers control size and effects
+ * (`w-6 h-6`, `w-4 h-4 animate-pulse`, `opacity-5 dark:opacity-10`, etc.).
+ * The 32×16 viewBox preserves aspect in square containers (logo fills width,
+ * pads top/bottom) and keeps strokes pixel-aligned at common sizes.
  */
 import * as React from 'react';
 
 interface LogoProps extends React.SVGProps<SVGSVGElement> {
-  /** Extra Tailwind / CSS classes — e.g. `w-6 h-6`, `opacity-5 dark:opacity-10`, `animate-pulse`. */
+  /** Tailwind / CSS classes — e.g. `w-6 h-6`, `opacity-5 dark:opacity-10`, `animate-pulse`. */
   className?: string;
 }
 
 export function Logo({ className, ...rest }: LogoProps) {
   return (
     <svg
-      viewBox="0 0 32 32"
+      viewBox="0 0 32 16"
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       strokeLinecap="square"
@@ -38,20 +40,34 @@ export function Logo({ className, ...rest }: LogoProps) {
       className={className}
       {...rest}
     >
-      {/* Primary orthogonal infinity — Apple Blue */}
+      {/* Primary orthogonal figure-8 silhouette — Apple Blue */}
       <path
-        d="M2 4 H12 V12 H20 V4 H30 V28 H20 V20 H12 V28 H2 Z"
+        d="M2 4 H6 V2 H11 V4 H14 V6 H18 V4 H21 V2 H26 V4 H30 V12 H26 V14 H21 V12 H18 V10 H14 V12 H11 V14 H6 V12 H2 Z"
         stroke="#007aff"
-        strokeWidth={2.5}
+        strokeWidth={2}
       />
-      {/* Secondary crosshair — the central A* intersection */}
+      {/* Left lobe nested octagon */}
+      <path
+        d="M5 6 H7 V4 H10 V6 H12 V10 H10 V12 H7 V10 H5 Z"
+        stroke="#007aff"
+        strokeWidth={1.25}
+      />
+      {/* Right lobe nested octagon */}
+      <path
+        d="M20 6 H22 V4 H25 V6 H27 V10 H25 V12 H22 V10 H20 Z"
+        stroke="#007aff"
+        strokeWidth={1.25}
+      />
+      {/* Secondary slate overlay — horizontal belt + central A* crossover X */}
       <g
         className="text-slate-700 dark:text-slate-200"
         stroke="currentColor"
-        strokeWidth={2}
+        strokeWidth={1.5}
+        strokeLinecap="butt"
       >
-        <path d="M14 16 H18" />
-        <path d="M16 14 V18" />
+        <path d="M0 8 H32" />
+        <path d="M14 6 L18 10" />
+        <path d="M18 6 L14 10" />
       </g>
     </svg>
   );

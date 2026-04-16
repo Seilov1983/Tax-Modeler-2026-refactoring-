@@ -27,38 +27,57 @@ const pct = fmtPercent;
 /**
  * Draw the TSM26 "Infinity What-If" brand mark as a native jsPDF vector.
  *
- * Mirrors the geometry of `src/shared/ui/Logo.tsx` — pure orthogonal lines,
- * zero bezier curves — so the PDF brand mark matches the UI exactly and
+ * Mirrors the geometry of `src/shared/ui/Logo.tsx` (viewBox 32×16) using
+ * pure line primitives, so the PDF brand mark matches the UI exactly and
  * stays crisp at any zoom level (no raster resampling).
  *
- * The logo's SVG viewBox is 32×32; `size` below is the side length in mm.
+ * `size` below is the logo WIDTH in mm — height is size/2 (2:1 aspect).
  */
 function drawTsm26Logo(doc: jsPDF, x: number, y: number, size: number): void {
   const unit = size / 32; // 1 SVG user-unit → mm
   const prevDraw = doc.getDrawColor();
   const prevLW = doc.getLineWidth();
 
-  // Primary orthogonal infinity — Apple Blue (#007aff → 0,122,255)
-  doc.setDrawColor(0, 122, 255);
-  doc.setLineWidth(2.5 * unit);
+  const stroke = (pts: Array<[number, number]>) => {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [x1, y1] = pts[i];
+      const [x2, y2] = pts[i + 1];
+      doc.line(x + x1 * unit, y + y1 * unit, x + x2 * unit, y + y2 * unit);
+    }
+  };
+
   doc.setLineCap('butt');
   doc.setLineJoin('miter');
-  const pts: Array<[number, number]> = [
-    [2, 4], [12, 4], [12, 12], [20, 12], [20, 4],
-    [30, 4], [30, 28], [20, 28], [20, 20], [12, 20],
-    [12, 28], [2, 28], [2, 4],
-  ];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const [x1, y1] = pts[i];
-    const [x2, y2] = pts[i + 1];
-    doc.line(x + x1 * unit, y + y1 * unit, x + x2 * unit, y + y2 * unit);
-  }
 
-  // Secondary crosshair — dark slate (#334155 → 51,65,85) marking the A* intersection
-  doc.setDrawColor(51, 65, 85);
+  // Primary orthogonal figure-8 — Apple Blue (#007aff → 0,122,255)
+  doc.setDrawColor(0, 122, 255);
   doc.setLineWidth(2 * unit);
-  doc.line(x + 14 * unit, y + 16 * unit, x + 18 * unit, y + 16 * unit);
-  doc.line(x + 16 * unit, y + 14 * unit, x + 16 * unit, y + 18 * unit);
+  stroke([
+    [2, 4], [6, 4], [6, 2], [11, 2], [11, 4], [14, 4], [14, 6], [18, 6], [18, 4], [21, 4],
+    [21, 2], [26, 2], [26, 4], [30, 4], [30, 12], [26, 12], [26, 14], [21, 14], [21, 12],
+    [18, 12], [18, 10], [14, 10], [14, 12], [11, 12], [11, 14], [6, 14], [6, 12], [2, 12],
+    [2, 4], // close
+  ]);
+
+  // Inner left lobe nested octagon
+  doc.setLineWidth(1.25 * unit);
+  stroke([
+    [5, 6], [7, 6], [7, 4], [10, 4], [10, 6], [12, 6], [12, 10],
+    [10, 10], [10, 12], [7, 12], [7, 10], [5, 10], [5, 6],
+  ]);
+
+  // Inner right lobe nested octagon
+  stroke([
+    [20, 6], [22, 6], [22, 4], [25, 4], [25, 6], [27, 6], [27, 10],
+    [25, 10], [25, 12], [22, 12], [22, 10], [20, 10], [20, 6],
+  ]);
+
+  // Secondary slate overlay — horizontal belt + central A* crossover X
+  doc.setDrawColor(51, 65, 85);
+  doc.setLineWidth(1.5 * unit);
+  doc.line(x + 0 * unit, y + 8 * unit, x + 32 * unit, y + 8 * unit);
+  doc.line(x + 14 * unit, y + 6 * unit, x + 18 * unit, y + 10 * unit);
+  doc.line(x + 18 * unit, y + 6 * unit, x + 14 * unit, y + 10 * unit);
 
   // Restore previous draw state
   doc.setDrawColor(prevDraw);
