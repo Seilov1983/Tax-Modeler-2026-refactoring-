@@ -474,10 +474,19 @@ export function computeCITAmount(income: number, cit: CITConfig): number {
   } else if (mode === 'qfzp') {
     tax = income * (cit.qualifyingRate || 0);
   } else if (mode === 'brackets') {
-    const b1 = cit.brackets?.[0] || { upTo: 0, rate: 0 };
-    const b2 = cit.brackets?.[1] || { rate: 0 };
-    if (income <= (b1.upTo || 0)) tax = income * (b1.rate || 0);
-    else tax = (b1.upTo || 0) * (b1.rate || 0) + (income - (b1.upTo || 0)) * (b2.rate || 0);
+    // Generic N-bracket progressive tax calculation
+    const brackets = cit.brackets || [];
+    let remaining = income;
+    let prevLimit = 0;
+    for (const b of brackets) {
+      const limit = b.upTo != null ? Number(b.upTo) : Infinity;
+      const taxableInBracket = Math.min(remaining, limit - prevLimit);
+      if (taxableInBracket <= 0) break;
+      tax += taxableInBracket * (b.rate || 0);
+      remaining -= taxableInBracket;
+      prevLimit = limit;
+      if (remaining <= 0) break;
+    }
   } else if (mode === 'smallProfits') {
     const sl = Number(cit.smallLimit || 0);
     const ml = Number(cit.mainLimit || 0);
