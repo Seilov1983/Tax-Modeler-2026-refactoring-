@@ -268,6 +268,8 @@ export interface NodeDTO {
   legalForm?: LegalForm;
   /** Whether this UAE Free Zone entity qualifies as a QFZP (0% qualifying rate). */
   isQFZP?: boolean;
+  /** Whether this node is included in the Group Consolidation perimeter for Group ETR calculation. */
+  isGroupMember?: boolean;
 }
 
 export interface AccountingYearData {
@@ -576,10 +578,14 @@ export interface GroupTaxSummary {
   totalTopUpTaxBase: number;
   /** Sum of all WHT amounts, converted to project base currency. */
   totalWHTBase: number;
-  /** Total tax burden (CIT + WHT) in project base currency. */
+  /** Total tax burden (CIT + WHT + PIT) in project base currency. */
   totalTaxBase: number;
   /** Total pre-tax income across all company nodes, in project base currency. */
   totalIncomeBase: number;
+  /** Sum of all PIT amounts (Person nodes), converted to project base currency. */
+  totalPITBase: number;
+  /** Per-person PIT liabilities. */
+  pitLiabilities: EntityCITLiability[];
   /** Group-level effective tax rate: totalTaxBase / totalIncomeBase (0–1). */
   totalEffectiveTaxRate: number;
   /** Project base currency used for all *Base amounts. */

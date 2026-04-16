@@ -442,6 +442,7 @@ export const CanvasNode = memo(function CanvasNode({ nodeAtom }: CanvasNodeProps
 
   // Build badge text
   const badges: string[] = [];
+  if (node.isGroupMember !== false) badges.push('GRP');
   if (node.frozen) badges.push('FROZEN');
   if (riskCount > 0) badges.push(`${riskCount} risk${riskCount > 1 ? 's' : ''}`);
 

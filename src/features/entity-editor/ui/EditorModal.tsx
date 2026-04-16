@@ -128,6 +128,7 @@ interface NodeFormValues {
   hasSeparateAccounting: boolean;
   cigaInZone: boolean;
   isQFZP: boolean;
+  isGroupMember: boolean;
   legalForm: string;
 }
 
@@ -449,6 +450,23 @@ function NodeEditor({
               IP Income and Separate Accounting are KZ-specific regime gates (KZ_HUB/KZ_AIFC);
               QFZP is UAE-specific Free Zone gate. */}
           <div className="ml-1 mb-4 space-y-3 rounded-xl border border-amber-400/30 bg-amber-50/50 dark:bg-amber-900/10 p-3">
+            {/* Group Consolidation toggle — always visible */}
+            <Field label={t('includeInGroup')}>
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-medium text-slate-700 dark:text-slate-300">
+                    {t('includeInGroup')}
+                  </span>
+                </div>
+                <Controller
+                  name="isGroupMember"
+                  control={control}
+                  render={({ field }) => (
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  )}
+                />
+              </div>
+            </Field>
             {isSubstanceZone && (
               <Field label={t('isIPIncome')}>
                 <div className="flex items-center justify-between">
@@ -740,7 +758,7 @@ export function EditorModal() {
   const isOwnership = selection?.type === 'ownership';
 
   const nodeForm = useForm<NodeFormValues>({
-    defaultValues: { name: '', type: 'company', annualIncome: 0, etr: 0, citizenship: '', passiveIncomeShare: 0, hasSubstance: false, headcount: 0, operationalExpenses: 0, payrollCosts: 0, isIPIncome: false, hasSeparateAccounting: false, cigaInZone: false, isQFZP: false, legalForm: 'LLC' },
+    defaultValues: { name: '', type: 'company', annualIncome: 0, etr: 0, citizenship: '', passiveIncomeShare: 0, hasSubstance: false, headcount: 0, operationalExpenses: 0, payrollCosts: 0, isIPIncome: false, hasSeparateAccounting: false, cigaInZone: false, isQFZP: false, isGroupMember: true, legalForm: 'LLC' },
   });
 
   const ownershipForm = useForm<OwnershipFormValues>({
@@ -765,6 +783,7 @@ export function EditorModal() {
         hasSeparateAccounting: n.hasSeparateAccounting ?? false,
         cigaInZone: n.complianceData?.aifc?.cigaInZone ?? false,
         isQFZP: n.isQFZP ?? false,
+        isGroupMember: n.isGroupMember !== false,
         legalForm: n.legalForm ?? 'LLC',
       });
     }
@@ -805,6 +824,7 @@ export function EditorModal() {
       isIPIncome: values.isIPIncome,
       hasSeparateAccounting: values.hasSeparateAccounting,
       isQFZP: values.isQFZP,
+      isGroupMember: values.isGroupMember,
       legalForm: values.legalForm as any,
     };
     if (values.hasSubstance && (values.headcount > 0 || values.operationalExpenses > 0 || values.payrollCosts > 0)) {

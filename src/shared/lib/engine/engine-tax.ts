@@ -803,6 +803,7 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
   for (const cn of graph.nodes) {
     const node = cn.node;
     if (node.type !== 'company') continue;
+    if (node.isGroupMember === false) continue;
 
     let income = Number(node.annualIncome || 0);
     if (income <= 0) {
@@ -994,6 +995,63 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
     });
   }
 
+  // ── 2b. PIT liabilities (Person nodes in group perimeter) ──────────────────
+  const pitLiabilities: EntityCITLiability[] = [];
+
+  for (const cn of graph.nodes) {
+    const node = cn.node;
+    if (node.type !== 'person') continue;
+    if (node.isGroupMember === false) continue;
+
+    const income = Number(node.annualIncome || 0);
+    if (income <= 0) continue;
+    const zone = node.zoneId ? project.zones.find((z) => z.id === node.zoneId) ?? null : null;
+    const jurisdiction = zone?.jurisdiction ?? null;
+    const currency: CurrencyCode = zone?.currency ?? baseCurrency;
+
+    let pitAmount = 0;
+    let pitRate = 0;
+    let breakdown = '';
+
+    if (jurisdiction === 'KZ') {
+      // KZ 2026 progressive PIT: 10% up to 8500 MRP, 15% on excess
+      const kz = (project.masterData as Record<string, Record<string, unknown>>).KZ || {};
+      const mci = Number((kz.macroConstants as any)?.mciValue || kz.mciValue || 4325);
+      const mrpValue = mci; // MRP ≈ MCI in KZ tax code
+      const threshold = 8500 * mrpValue;
+      if (income <= threshold) {
+        pitAmount = bankersRound2(income * 0.10);
+        pitRate = 0.10;
+        breakdown = `${fmtB(income, currency)} × 10% = ${fmtB(pitAmount, currency)} (≤8500 MRP)`;
+      } else {
+        const baseTax = threshold * 0.10;
+        const excessTax = (income - threshold) * 0.15;
+        pitAmount = bankersRound2(baseTax + excessTax);
+        pitRate = pitAmount / income;
+        breakdown = `${fmtB(threshold, currency)} × 10% + ${fmtB(income - threshold, currency)} × 15% = ${fmtB(pitAmount, currency)}`;
+      }
+    } else {
+      // Default: use payroll.pitRate from masterData
+      const md = (project.masterData as Record<string, Record<string, unknown>>)[jurisdiction ?? ''] || {};
+      const payroll = md.payroll as Record<string, number> | undefined;
+      pitRate = Number(payroll?.pitRate || 0);
+      pitAmount = bankersRound2(income * pitRate);
+      breakdown = `${fmtB(income, currency)} × ${fmtR(pitRate)} = ${fmtB(pitAmount, currency)}`;
+    }
+
+    pitLiabilities.push({
+      nodeId: node.id,
+      nodeName: node.name,
+      jurisdiction: jurisdiction ?? null,
+      zoneId: node.zoneId,
+      currency,
+      taxableIncome: income,
+      citRate: pitRate,
+      citAmount: pitAmount,
+      calculationBreakdown: `PIT: ${breakdown}`,
+    });
+  }
+
   // ── 3. Aggregate totals in base currency ──────────────────────────────────
   let totalCITBase = 0;
   for (const cit of citLiabilities) {
@@ -1007,13 +1065,24 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
   }
   totalWHTBase = bankersRound2(totalWHTBase);
 
-  const totalTaxBase = bankersRound2(totalCITBase + totalWHTBase);
+  let totalPITBase = 0;
+  for (const pit of pitLiabilities) {
+    totalPITBase += bankersRound2(convert(project, pit.citAmount, pit.currency, baseCurrency));
+  }
+  totalPITBase = bankersRound2(totalPITBase);
 
-  // Total pre-tax income: sum of all company annualIncome, converted to base currency
+  const totalTaxBase = bankersRound2(totalCITBase + totalWHTBase + totalPITBase);
+
+  // Total pre-tax income: sum of all group member income, converted to base currency
   let totalIncomeBase = 0;
   for (const cit of citLiabilities) {
     totalIncomeBase += bankersRound2(
       convert(project, cit.taxableIncome, cit.currency, baseCurrency),
+    );
+  }
+  for (const pit of pitLiabilities) {
+    totalIncomeBase += bankersRound2(
+      convert(project, pit.taxableIncome, pit.currency, baseCurrency),
     );
   }
   totalIncomeBase = bankersRound2(totalIncomeBase);
@@ -1027,9 +1096,11 @@ export function computeGroupTax(project: Project): GroupTaxSummary {
   return {
     citLiabilities,
     whtLiabilities,
+    pitLiabilities,
     totalCITBase,
     totalTopUpTaxBase: 0,
     totalWHTBase,
+    totalPITBase,
     totalTaxBase,
     totalIncomeBase,
     totalEffectiveTaxRate,

@@ -116,9 +116,11 @@ export const flowTaxAtomFamily = atomFamily((flowId: string) =>
 const EMPTY_SUMMARY: GroupTaxSummary = {
   citLiabilities: [],
   whtLiabilities: [],
+  pitLiabilities: [],
   totalCITBase: 0,
   totalTopUpTaxBase: 0,
   totalWHTBase: 0,
+  totalPITBase: 0,
   totalTaxBase: 0,
   totalIncomeBase: 0,
   totalEffectiveTaxRate: 0,
