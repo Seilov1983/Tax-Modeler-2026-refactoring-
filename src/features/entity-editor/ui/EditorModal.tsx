@@ -442,34 +442,39 @@ function NodeEditor({
             </div>
           </Field>
  
-          {/* Compliance toggles — unconditional for ALL company nodes */}
+          {/* Compliance toggles — jurisdiction-aware rendering.
+              hasSubstance is universal (compliance signal across jurisdictions);
+              IP Income and Separate Accounting are KZ-specific regime gates (KZ_HUB/KZ_AIFC);
+              QFZP is UAE-specific Free Zone gate. */}
           <div className="ml-1 mb-4 space-y-3 rounded-xl border border-amber-400/30 bg-amber-50/50 dark:bg-amber-900/10 p-3">
-            <Field label={t('isIPIncome')}>
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-[12px] font-medium text-slate-700 dark:text-slate-300">
-                    {t('isIPIncome')}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <Controller
-                      name="isIPIncome"
-                      control={control}
-                      render={({ field }) => (
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      )}
-                    />
+            {isSubstanceZone && (
+              <Field label={t('isIPIncome')}>
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col">
+                    <span className="text-[12px] font-medium text-slate-700 dark:text-slate-300">
+                      {t('isIPIncome')}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Controller
+                        name="isIPIncome"
+                        control={control}
+                        render={({ field }) => (
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        )}
+                      />
+                    </div>
                   </div>
+                  {nexusFraction !== null && (
+                    <div className="flex flex-col items-end">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{t('nexusFraction')}</span>
+                      <Badge variant="outline" className="bg-blue-500/10 border-blue-500/20 text-blue-600 font-mono">
+                        {fmtPercent(nexusFraction, 1)}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
-                {nexusFraction !== null && (
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{t('nexusFraction')}</span>
-                    <Badge variant="outline" className="bg-blue-500/10 border-blue-500/20 text-blue-600 font-mono">
-                      {fmtPercent(nexusFraction, 1)}
-                    </Badge>
-                  </div>
-                )}
-              </div>
-            </Field>
+              </Field>
+            )}
 
             <Field label={t('hasSubstance')}>
               <Controller
@@ -484,18 +489,20 @@ function NodeEditor({
               />
             </Field>
 
-            <Field label={t('hasSeparateAccounting')}>
-              <Controller
-                name="hasSeparateAccounting"
-                control={control}
-                render={({ field }) => (
-                  <div className="flex items-center justify-between">
-                    <span className="text-[12px] text-slate-600 dark:text-slate-400">{t('hasSeparateAccounting')}</span>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                  </div>
-                )}
-              />
-            </Field>
+            {isSubstanceZone && (
+              <Field label={t('hasSeparateAccounting')}>
+                <Controller
+                  name="hasSeparateAccounting"
+                  control={control}
+                  render={({ field }) => (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-slate-600 dark:text-slate-400">{t('hasSeparateAccounting')}</span>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </div>
+                  )}
+                />
+              </Field>
+            )}
 
             {/* UAE QFZP toggle — only visible for UAE Free Zone entities */}
             {zone?.jurisdiction === 'UAE' && (

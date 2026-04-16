@@ -41,11 +41,12 @@ import { useTranslation } from '@shared/lib/i18n';
 
 function SyncBadge() {
   const { isSyncing, lastSavedAt } = useAtomValue(syncStatusAtom);
+  const { t } = useTranslation();
 
   if (isSyncing) {
     return (
       <span
-        title="Saving..."
+        title={t('savingIndicator')}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -68,7 +69,7 @@ function SyncBadge() {
         >
           <path d="M21 12a9 9 0 1 1-6.219-8.56" />
         </svg>
-        Saving...
+        {t('savingIndicator')}
       </span>
     );
   }
@@ -76,7 +77,7 @@ function SyncBadge() {
   if (lastSavedAt) {
     return (
       <span
-        title={`Saved at ${lastSavedAt.toLocaleTimeString()}`}
+        title={`${t('savedAtTooltip')} ${lastSavedAt.toLocaleTimeString()}`}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -90,7 +91,7 @@ function SyncBadge() {
           <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10" />
           <path d="M7.5 12l3 3 6-6" />
         </svg>
-        Saved
+        {t('savedIndicator')}
       </span>
     );
   }
@@ -173,12 +174,12 @@ export function ProjectHeader() {
 
         hydrate(p);
       } catch {
-        showNotification({ type: 'error', message: 'Не удалось загрузить файл проекта.' });
+        showNotification({ type: 'error', message: t('errorLoadingProjectFile') });
       }
 
       if (fileInputRef.current) fileInputRef.current.value = '';
     },
-    [hydrate],
+    [hydrate, showNotification, t],
   );
 
   const handleExportPng = useCallback(async () => {
@@ -188,9 +189,9 @@ export function ProjectHeader() {
       await exportCanvasToPng('canvas-render-area', `${sanitizedName}-${Date.now()}.png`);
     } catch (err) {
       console.error('[PNG Export]', err);
-      showNotification({ type: 'error', message: 'Ошибка экспорта PNG: ' + ((err as Error).message || 'Граф слишком велик или недоступен') });
+      showNotification({ type: 'error', message: t('errorPngExport') + ((err as Error).message || t('graphTooLargeOrUnavailable')) });
     }
-  }, [project, showNotification]);
+  }, [project, showNotification, t]);
 
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -205,11 +206,11 @@ export function ProjectHeader() {
       await exportReportPdf(project);
     } catch (err) {
       console.error('[PDF Export]', err);
-      showNotification({ type: 'error', message: 'Ошибка экспорта PDF: ' + ((err as Error).message || 'Граф слишком велик или недоступен') });
+      showNotification({ type: 'error', message: t('pdfExportError') + ((err as Error).message || t('graphTooLargeOrUnavailable')) });
     } finally {
       setPdfLoading(false);
     }
-  }, [project, pdfLoading, showNotification]);
+  }, [project, pdfLoading, showNotification, t]);
 
   const handleAuditExport = useCallback(async () => {
     if (!project || auditLoading) return;
@@ -222,14 +223,14 @@ export function ProjectHeader() {
       await downloadMarkdown(markdown, `${sanitizedName}-${ts}.md`);
     } catch (err) {
       console.error('[Audit Export]', err);
-      showNotification({ type: 'error', message: 'Ошибка экспорта аудита: ' + ((err as Error).message || 'Граф слишком велик или недоступен') });
+      showNotification({ type: 'error', message: t('errorAuditExport') + ((err as Error).message || t('graphTooLargeOrUnavailable')) });
     } finally {
       setAuditLoading(false);
     }
-  }, [project, auditLoading, showNotification]);
+  }, [project, auditLoading, showNotification, t]);
 
   const handleNewProject = useCallback(() => {
-    if (!confirm('Create a new blank project? All unsaved changes will be lost.')) return;
+    if (!confirm(t('confirmNewProjectMessage'))) return;
     const p = defaultProject() as Project;
     ensureMasterData(p);
     ensureCountriesAndRegimes(p);
@@ -243,7 +244,7 @@ export function ProjectHeader() {
     setFutureStates([]);
     // Clear stale remote project ID so cloud sync creates a new record
     try { localStorage.removeItem('tsm26_remote_project_id'); } catch {}
-  }, [hydrate, setSelection, setPastStates, setFutureStates]);
+  }, [hydrate, setSelection, setPastStates, setFutureStates, t]);
 
   const toggleTheme = useCallback(() => {
     const newTheme = resolvedTheme === 'dark' ? 'light' : 'dark';
@@ -327,7 +328,7 @@ export function ProjectHeader() {
               activeTab === 'canvas' ? 'bg-white dark:bg-slate-800 text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
             }`}
           >
-            Canvas
+            {t('canvasTabLabel')}
           </button>
           <button
             onClick={() => setActiveTab('reports')}
@@ -336,7 +337,7 @@ export function ProjectHeader() {
             }`}
           >
             <FileText size={12} />
-            Reports
+            {t('reportsTabLabel')}
           </button>
         </div>
       </div>
@@ -353,19 +354,19 @@ export function ProjectHeader() {
         <div className="w-[1px] h-5 bg-black/10 dark:bg-white/10 mx-1" />
 
         <Button variant="secondary" size="sm" onClick={() => setDashboardOpen(true)} className="gap-2 text-[12px]">
-          <LayoutDashboard size={14} /> Projects
+          <LayoutDashboard size={14} /> {t('projectsButton')}
         </Button>
 
         <Button variant="secondary" size="sm" onClick={handleNewProject} className="gap-2 text-[12px] bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-400">
-          <Plus size={14} /> New
+          <Plus size={14} /> {t('newProjectButton')}
         </Button>
 
         <input type="file" accept=".json" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImport} />
-        
+
         <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} className="text-[12px] gap-2">
-          <FileUp size={14} /> Load
+          <FileUp size={14} /> {t('loadProjectButton')}
         </Button>
-        
+
         <Button variant="secondary" size="sm" onClick={handleSaveAs} className="text-[12px] gap-2" aria-label={t('saveAs')}>
           <Files size={14} /> {t('saveAs')}
         </Button>
@@ -373,18 +374,18 @@ export function ProjectHeader() {
         <div className="w-[1px] h-5 bg-black/10 dark:bg-white/10 mx-1" />
 
         <Button variant="ghost" size="sm" onClick={handleExportJson} className="text-[12px] gap-2 text-slate-700 dark:text-slate-300" aria-label={t('exportToJson')}>
-          <FileJson size={14} /> JSON
+          <FileJson size={14} /> {t('jsonExportButton')}
         </Button>
         <Button variant="ghost" size="sm" onClick={handleExportPdf} disabled={pdfLoading} className="text-[12px] gap-2 text-slate-700 dark:text-slate-300" aria-label={t('exportToPdf')}>
-          <FileText size={14} /> {pdfLoading ? '...' : 'PDF'}
+          <FileText size={14} /> {pdfLoading ? '...' : t('pdfExportButton')}
         </Button>
         <Button variant="ghost" size="sm" onClick={handleExportPng} className="text-[12px] gap-2 text-slate-700 dark:text-slate-300" aria-label={t('exportToPng')}>
-          <FileImage size={14} /> PNG
+          <FileImage size={14} /> {t('pngExportButton')}
         </Button>
 
         <Button variant="outline" size="sm" onClick={handleAuditExport} disabled={auditLoading} className="text-[12px] gap-2 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50">
           <ShieldCheck size={14} />
-          {auditLoading ? 'Wait...' : 'Audit'}
+          {auditLoading ? t('auditExportWait') : t('auditExportButton')}
         </Button>
 
         <div className="w-[1px] h-5 bg-black/10 dark:bg-white/10 mx-1" />

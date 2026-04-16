@@ -10,10 +10,15 @@ const Switch = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SwitchPrimitives.Root
     className={cn(
-      "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent shadow-sm transition-colors",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+      // Base: slightly larger & always-visible border for Liquid Glass backdrops
+      "peer inline-flex h-[22px] w-10 shrink-0 cursor-pointer items-center rounded-full shadow-inner transition-colors",
+      "border border-slate-400/70 dark:border-slate-500/70",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
       "disabled:cursor-not-allowed disabled:opacity-50",
-      "data-[state=checked]:bg-primary data-[state=unchecked]:bg-input",
+      // Unchecked track: visible grey on both themes
+      "data-[state=unchecked]:bg-slate-300 dark:data-[state=unchecked]:bg-slate-600",
+      // Checked track: solid bright blue
+      "data-[state=checked]:bg-blue-600 dark:data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-700 dark:data-[state=checked]:border-blue-400",
       className,
     )}
     {...props}
@@ -21,8 +26,9 @@ const Switch = React.forwardRef<
   >
     <SwitchPrimitives.Thumb
       className={cn(
-        "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform",
-        "data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0",
+        // Stark white thumb with strong drop shadow — pops on both themes
+        "pointer-events-none block h-[18px] w-[18px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.35)] ring-0 transition-transform",
+        "data-[state=checked]:translate-x-[20px] data-[state=unchecked]:translate-x-[1px]",
       )}
     />
   </SwitchPrimitives.Root>

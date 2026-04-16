@@ -20,6 +20,7 @@ import {
 import { SCHEMA_VERSION } from '@shared/lib/engine/engine-core';
 import type { Project } from '@shared/types';
 import { FolderOpen, Plus, Trash2, Loader2 } from 'lucide-react';
+import { useTranslation } from '@shared/lib/i18n';
 
 interface ProjectSummary {
   id: string;
@@ -50,6 +51,7 @@ function prepareProject(p: Project): Project {
 
 export function ProjectDashboard({ open, onOpenChange, onProjectLoaded }: Props) {
   const hydrate = useSetAtom(hydrateProjectAtom);
+  const { t } = useTranslation();
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export function ProjectDashboard({ open, onOpenChange, onProjectLoaded }: Props)
         headers: { 'x-user-id': USER_ID },
       });
       if (res.status === 503) {
-        setError('Database offline. Projects saved locally only.');
+        setError(t('errorDbOffline'));
         setProjects([]);
         return;
       }
@@ -72,12 +74,12 @@ export function ProjectDashboard({ open, onOpenChange, onProjectLoaded }: Props)
       const data = await res.json();
       setProjects(Array.isArray(data) ? data : []);
     } catch {
-      setError('Cannot reach server. Working in offline mode.');
+      setError(t('errorServerUnreachable'));
       setProjects([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (open) fetchProjects();
@@ -98,11 +100,11 @@ export function ProjectDashboard({ open, onOpenChange, onProjectLoaded }: Props)
         onOpenChange(false);
       }
     } catch {
-      setError('Failed to load project.');
+      setError(t('errorLoadProject'));
     } finally {
       setLoading(false);
     }
-  }, [hydrate, onOpenChange, onProjectLoaded]);
+  }, [hydrate, onOpenChange, onProjectLoaded, t]);
 
   const handleCreate = useCallback(async () => {
     setCreating(true);
@@ -126,35 +128,35 @@ export function ProjectDashboard({ open, onOpenChange, onProjectLoaded }: Props)
       onProjectLoaded?.(created.id);
       onOpenChange(false);
     } catch {
-      setError('Failed to create project.');
+      setError(t('errorCreateProject'));
     } finally {
       setCreating(false);
     }
-  }, [hydrate, onOpenChange, onProjectLoaded]);
+  }, [hydrate, onOpenChange, onProjectLoaded, t]);
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(`Delete project "${name}"? This cannot be undone.`)) return;
+    if (!confirm(`${t('confirmDeleteProjectPrefix')} "${name}"${t('confirmDeleteProjectSuffix')}`)) return;
     setDeletingId(id);
     try {
       const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
       setProjects(prev => prev.filter(p => p.id !== id));
     } catch {
-      setError('Failed to delete project.');
+      setError(t('errorDeleteProject'));
     } finally {
       setDeletingId(null);
     }
-  }, []);
+  }, [t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl bg-white/72 backdrop-blur-[40px] backdrop-saturate-[180%] dark:bg-black/60 dark:text-white border-white/25">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold tracking-tight">
-            Project Dashboard
+            {t('dashboardTitle')}
           </DialogTitle>
           <DialogDescription className="text-sm text-slate-500 dark:text-slate-400">
-            Manage your tax structure projects
+            {t('dashboardDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -171,7 +173,7 @@ export function ProjectDashboard({ open, onOpenChange, onProjectLoaded }: Props)
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors disabled:opacity-50"
           >
             {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-            New Project
+            {t('dashboardNewProject')}
           </button>
         </div>
 
@@ -179,13 +181,13 @@ export function ProjectDashboard({ open, onOpenChange, onProjectLoaded }: Props)
           {loading && projects.length === 0 && (
             <div className="flex items-center justify-center py-8 text-slate-400">
               <Loader2 size={20} className="animate-spin mr-2" />
-              Loading...
+              {t('dashboardLoading')}
             </div>
           )}
 
           {!loading && projects.length === 0 && !error && (
             <div className="text-center py-8 text-slate-400 text-sm">
-              No saved projects yet. Create one to get started.
+              {t('dashboardEmpty')}
             </div>
           )}
 
@@ -209,7 +211,7 @@ export function ProjectDashboard({ open, onOpenChange, onProjectLoaded }: Props)
                   className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition-colors"
                 >
                   <FolderOpen size={12} />
-                  Open
+                  {t('openProjectButton')}
                 </button>
                 <button
                   onClick={() => handleDelete(p.id, p.name)}
