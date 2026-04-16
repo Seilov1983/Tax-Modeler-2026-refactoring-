@@ -328,6 +328,15 @@ const dictionary = {
   canvasEmptyTitle: { en: 'Your canvas is empty', ru: '\u0425\u043e\u043b\u0441\u0442 \u043f\u0443\u0441\u0442' },
   canvasEmptyHint: { en: 'Drag zones from the sidebar to start', ru: '\u041f\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0437\u043e\u043d\u044b \u0438\u0437 \u0431\u043e\u043a\u043e\u0432\u043e\u0439 \u043f\u0430\u043d\u0435\u043b\u0438, \u0447\u0442\u043e\u0431\u044b \u043d\u0430\u0447\u0430\u0442\u044c' },
 
+  // ProjectHeader dropdown triggers
+  projects: { en: 'Projects', ru: '\u041f\u0440\u043e\u0435\u043a\u0442\u044b' },
+  export: { en: 'Export', ru: '\u042d\u043a\u0441\u043f\u043e\u0440\u0442' },
+  lightMode: { en: 'Light mode', ru: '\u0421\u0432\u0435\u0442\u043b\u0430\u044f \u0442\u0435\u043c\u0430' },
+  darkMode: { en: 'Dark mode', ru: '\u0422\u0451\u043c\u043d\u0430\u044f \u0442\u0435\u043c\u0430' },
+  preferencesLabel: { en: 'Preferences', ru: '\u041f\u0440\u0435\u0434\u043f\u043e\u0447\u0442\u0435\u043d\u0438\u044f' },
+  advancedSettings: { en: 'Advanced settings\u2026', ru: '\u0420\u0430\u0441\u0448\u0438\u0440\u0435\u043d\u043d\u044b\u0435 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438\u2026' },
+  projectDashboardItem: { en: 'Project dashboard\u2026', ru: '\u041f\u0430\u043d\u0435\u043b\u044c \u043f\u0440\u043e\u0435\u043a\u0442\u043e\u0432\u2026' },
+
   // ProjectHeader UI
   savingIndicator: { en: 'Saving...', ru: '\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u0435...' },
   savedIndicator: { en: 'Saved', ru: '\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e' },

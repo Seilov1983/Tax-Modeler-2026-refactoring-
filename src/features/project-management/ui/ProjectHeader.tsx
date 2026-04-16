@@ -27,7 +27,7 @@ import type { Project } from '@shared/types';
 import { exportProjectJson, duplicateProject, importProjectJson, exportCanvasToPng } from '../model/export-actions';
 import { exportReportPdf } from '../model/export-pdf';
 import { generateAuditSnapshot, exportStructureBook, downloadMarkdown } from '@shared/lib/engine';
-import { Sun, Moon, Globe, ShieldCheck, LayoutDashboard, FileText, Download, FileJson, FileImage, Undo2, Redo2, Plus, FileUp, Files, Settings, Sparkles } from 'lucide-react';
+import { Sun, Moon, ShieldCheck, LayoutDashboard, FileText, Download, FileJson, FileImage, Undo2, Redo2, Plus, FileUp, Files, Settings, Sparkles, ChevronDown, Folder, Languages, SlidersHorizontal } from 'lucide-react';
 import { activeTabAtom } from '@features/canvas/model/project-atom';
 import { copilotOpenAtom } from '@features/ai-copilot/model/atoms';
 import { syncStatusAtom } from '@shared/hooks/sync-status-atom';
@@ -35,6 +35,10 @@ import { showNotificationAtom } from '@features/canvas/model/notification-atom';
 import { ProjectDashboard } from './ProjectDashboard';
 import { SettingsModal } from '../../settings/ui/SettingsModal';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 import { useTranslation } from '@shared/lib/i18n';
 
 // ─── SyncBadge — autosave indicator next to title ────────────────────────────
@@ -342,7 +346,7 @@ export function ProjectHeader() {
         </div>
       </div>
 
-      {/* Right: actions & toggles */}
+      {/* Right: actions & toggles — grouped into dropdowns for density */}
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" onClick={() => undo()} disabled={!canUndo} title={t('undo')} aria-label={t('undo')}>
           <Undo2 size={16} />
@@ -353,70 +357,131 @@ export function ProjectHeader() {
 
         <div className="w-[1px] h-5 bg-black/10 dark:bg-white/10 mx-1" />
 
-        <Button variant="secondary" size="sm" onClick={() => setDashboardOpen(true)} className="gap-2 text-[12px]">
-          <LayoutDashboard size={14} /> {t('projectsButton')}
-        </Button>
-
-        <Button variant="secondary" size="sm" onClick={handleNewProject} className="gap-2 text-[12px] bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-400">
-          <Plus size={14} /> {t('newProjectButton')}
-        </Button>
-
+        {/* Hidden file input for Load — driven by Projects menu item */}
         <input type="file" accept=".json" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImport} />
 
-        <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} className="text-[12px] gap-2">
-          <FileUp size={14} /> {t('loadProjectButton')}
-        </Button>
+        {/* ─── Projects Dropdown ───────────────────────────────── */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="secondary" size="sm" className="gap-2 text-[12px]" aria-label={t('projects')}>
+              <Folder size={14} />
+              {t('projects')}
+              <ChevronDown size={12} className="opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[13rem]">
+            <DropdownMenuItem onSelect={() => setDashboardOpen(true)}>
+              <LayoutDashboard size={14} />
+              <span>{t('projectDashboardItem')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={handleNewProject}>
+              <Plus size={14} />
+              <span>{t('newProjectButton')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
+              <FileUp size={14} />
+              <span>{t('loadProjectButton')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleSaveAs}>
+              <Files size={14} />
+              <span>{t('saveAs')}</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        <Button variant="secondary" size="sm" onClick={handleSaveAs} className="text-[12px] gap-2" aria-label={t('saveAs')}>
-          <Files size={14} /> {t('saveAs')}
-        </Button>
+        {/* ─── Export Dropdown ─────────────────────────────────── */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="secondary" size="sm" className="gap-2 text-[12px]" aria-label={t('export')}>
+              <Download size={14} />
+              {t('export')}
+              <ChevronDown size={12} className="opacity-60" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[13rem]">
+            <DropdownMenuItem onSelect={handleExportJson} aria-label={t('exportToJson')}>
+              <FileJson size={14} />
+              <span>{t('exportToJson')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleExportPdf} disabled={pdfLoading} aria-label={t('exportToPdf')}>
+              <FileText size={14} />
+              <span>{pdfLoading ? '\u2026' : t('exportToPdf')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleExportPng} aria-label={t('exportToPng')}>
+              <FileImage size={14} />
+              <span>{t('exportToPng')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={handleAuditExport}
+              disabled={auditLoading}
+              className="text-emerald-700 dark:text-emerald-400"
+            >
+              <ShieldCheck size={14} />
+              <span>{auditLoading ? t('auditExportWait') : t('auditExportButton')}</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-        <div className="w-[1px] h-5 bg-black/10 dark:bg-white/10 mx-1" />
+        {/* ─── Right-pinned icon group (never wraps, never shrinks) ─── */}
+        <div className="shrink-0 flex items-center gap-2">
+          <div className="w-[1px] h-5 bg-black/10 dark:bg-white/10" />
 
-        <Button variant="ghost" size="sm" onClick={handleExportJson} className="text-[12px] gap-2 text-slate-700 dark:text-slate-300" aria-label={t('exportToJson')}>
-          <FileJson size={14} /> {t('jsonExportButton')}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={handleExportPdf} disabled={pdfLoading} className="text-[12px] gap-2 text-slate-700 dark:text-slate-300" aria-label={t('exportToPdf')}>
-          <FileText size={14} /> {pdfLoading ? '...' : t('pdfExportButton')}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={handleExportPng} className="text-[12px] gap-2 text-slate-700 dark:text-slate-300" aria-label={t('exportToPng')}>
-          <FileImage size={14} /> {t('pngExportButton')}
-        </Button>
+          {/* Settings Dropdown — consolidates Theme, Language, and advanced preferences */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t('settings')}
+                title={t('settings')}
+                className="text-slate-700 dark:text-slate-200 rounded-full hover:bg-black/10 dark:hover:bg-white/15"
+              >
+                <Settings size={16} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-[14rem]">
+              <DropdownMenuLabel>{t('preferencesLabel')}</DropdownMenuLabel>
+              <DropdownMenuItem
+                onSelect={(e) => { e.preventDefault(); toggleTheme(); }}
+              >
+                {isDark ? <Moon size={14} /> : <Sun size={14} />}
+                <span>{t('theme')}</span>
+                <span className="ml-auto text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                  {isDark ? t('darkMode') : t('lightMode')}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => { e.preventDefault(); toggleLanguage(); }}
+              >
+                <Languages size={14} />
+                <span>{t('language')}</span>
+                <span className="ml-auto text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  {lang === 'en' ? 'EN' : 'RU'}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setSettingsOpen(true)}>
+                <SlidersHorizontal size={14} />
+                <span>{t('advancedSettings')}</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-        <Button variant="outline" size="sm" onClick={handleAuditExport} disabled={auditLoading} className="text-[12px] gap-2 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50">
-          <ShieldCheck size={14} />
-          {auditLoading ? t('auditExportWait') : t('auditExportButton')}
-        </Button>
-
-        <div className="w-[1px] h-5 bg-black/10 dark:bg-white/10 mx-1" />
-
-        {/* Theme toggle */}
-        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label={t('toggleTheme')} title={t('toggleTheme')} className="text-slate-700 dark:text-slate-200 rounded-full hover:bg-black/10 dark:hover:bg-white/15">
-          {isDark ? <Moon size={16} /> : <Sun size={16} />}
-        </Button>
-
-        {/* Language toggle */}
-        <Button variant="ghost" size="icon" onClick={toggleLanguage} aria-label={t('toggleLanguage')} title={t('toggleLanguage')} className="text-[11px] font-bold text-slate-700 dark:text-slate-200 rounded-full hover:bg-black/10 dark:hover:bg-white/15">
-          {lang === 'en' ? 'RU' : 'EN'}
-        </Button>
-
-        {/* Settings toggle */}
-        <Button variant="ghost" size="icon" onClick={() => setSettingsOpen(true)} aria-label={t('settings')} title={t('settings')} className="text-slate-700 dark:text-slate-200 rounded-full hover:bg-black/10 dark:hover:bg-white/15">
-          <Settings size={16} />
-        </Button>
-
-        {/* AI Copilot toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setCopilotOpen((o) => !o)}
-          aria-label={t('aiCopilot')}
-          title={t('aiCopilot')}
-          aria-pressed={copilotOpen}
-          className={`rounded-full hover:bg-black/10 dark:hover:bg-white/15 ${copilotOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-200'}`}
-        >
-          <Sparkles size={16} />
-        </Button>
+          {/* AI Copilot toggle — pinned at the far right */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setCopilotOpen((o) => !o)}
+            aria-label={t('aiCopilot')}
+            title={t('aiCopilot')}
+            aria-pressed={copilotOpen}
+            className={`rounded-full hover:bg-black/10 dark:hover:bg-white/15 ${copilotOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-200'}`}
+          >
+            <Sparkles size={16} />
+          </Button>
+        </div>
       </div>
 
       <ProjectDashboard
