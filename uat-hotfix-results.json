@@ -1,0 +1,22 @@
+{
+  "t1": {
+    "rateOn": "0.00%",
+    "rateOff": "20.00%",
+    "amtOn": "0.00",
+    "amtOff": "200,000,000.00",
+    "brkOn": "AIFC: substance + separate accounting + CIGA met → 0% CIT on 1,000,000,000.00 KZT",
+    "brkOff": "AIFC fallback (substance not met): 1,000,000,000.00 KZT × 20% = 200,000,000.00 KZT"
+  },
+  "t2": {
+    "rateQfzpOn": "9.00%",
+    "rateQfzpOff": "9.00%",
+    "toggleExists": true
+  },
+  "t3": {
+    "remoteIdCleared": false,
+    "projectTitle": "UAT Project"
+  },
+  "t1pass": true,
+  "t2pass": true,
+  "t3pass": false
+}

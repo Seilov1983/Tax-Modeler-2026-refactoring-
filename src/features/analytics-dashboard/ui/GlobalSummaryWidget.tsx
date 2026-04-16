@@ -42,6 +42,8 @@ const RISK_LABEL_KEYS: Record<string, string> = {
   ADVANCE_RULING: 'riskAdvanceRuling',
   SEPARATE_ACCOUNTING: 'riskSeparateAccounting',
   NON_DEDUCTIBLE_EXPENSE: 'riskNonDeductibleExpense',
+  KR_CORPORATE_TAX: 'riskKrCorporateTax',
+  KR_TP_ADJUSTMENT: 'riskKrTpAdjustment',
 };
 
 const RISK_ICONS: Record<string, string> = {

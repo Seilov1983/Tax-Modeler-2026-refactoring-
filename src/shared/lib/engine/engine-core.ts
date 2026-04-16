@@ -80,6 +80,7 @@ export function defaultMasterData(): MasterData {
     BVI: { countryCode: 'BVI', baseCurrency: 'USD', vatRateStandard: 0.00, citRateStandard: 0.00, wht: { dividends: 0.00, interest: 0.00, royalties: 0.00, services: 0.00 }, payroll: { pitRate: 0.00 }, statuteOfLimitationsYears: 5 },
     CAY: { countryCode: 'CAY', baseCurrency: 'USD', vatRateStandard: 0.00, citRateStandard: 0.00, wht: { dividends: 0.00, interest: 0.00, royalties: 0.00, services: 0.00 }, payroll: { pitRate: 0.00 }, statuteOfLimitationsYears: 5 },
     SEY: { countryCode: 'SEY', baseCurrency: 'SCR', vatRateStandard: 0.15, cit: { mode: 'brackets', currency: 'SCR', brackets: [{ upTo: 1000000, rate: 0.15 }, { upTo: null, rate: 0.25 }] }, wht: { dividends: 0.00, interest: 0.00, royalties: 0.00, services: 0.00 }, payroll: { pitRate: 0.00 }, statuteOfLimitationsYears: 5 },
+    KR: { countryCode: 'KR', baseCurrency: 'KRW', vatRateStandard: 0.10, cit: { mode: 'brackets', currency: 'KRW', brackets: [{ upTo: 200000000, rate: 0.09 }, { upTo: 20000000000, rate: 0.19 }, { upTo: 300000000000, rate: 0.21 }, { upTo: null, rate: 0.24 }] }, wht: { dividends: 0.20, interest: 0.20, royalties: 0.20, services: 0.20 }, payroll: { pitRate: 0.10 }, statuteOfLimitationsYears: 5 },
   } as MasterData;
 }
 
@@ -97,6 +98,7 @@ export function defaultCountries(): Country[] {
     { id: 'BVI', name: 'BVI', baseCurrency: 'USD' },
     { id: 'CAY', name: 'Cayman', baseCurrency: 'USD' },
     { id: 'SEY', name: 'Seychelles', baseCurrency: 'SCR' },
+    { id: 'KR', name: 'South Korea', baseCurrency: 'KRW' },
   ];
 }
 
@@ -116,6 +118,7 @@ export function defaultRegimes(): TaxRegime[] {
     { id: 'BVI_STD', countryId: 'BVI', name: 'Standard', cit: 0, wht: 0 },
     { id: 'CAY_STD', countryId: 'CAY', name: 'Standard', cit: 0, wht: 0 },
     { id: 'SEY_STD', countryId: 'SEY', name: 'Standard', cit: 15, wht: 0 },
+    { id: 'KR_STD', countryId: 'KR', name: 'Standard', cit: 24, wht: 20 },
   ];
 }
 

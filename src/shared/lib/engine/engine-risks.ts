@@ -320,7 +320,7 @@ export function recomputeRisks(p: Project): void {
   }
 
   // ── TP_SCANNER: Related Party and HK Transit Checks ─────────────────────
-  p.flows.forEach((f) => {
+   p.flows.forEach((f) => {
     if (['Goods', 'Equipment', 'Services', 'Royalties'].includes(f.flowType) && isRelatedParty(p, f.fromId, f.toId)) {
       const pZ = getZone(p, getNode(p, f.fromId)?.zoneId);
       const payeeZ = getZone(p, getNode(p, f.toId)?.zoneId);
@@ -328,6 +328,36 @@ export function recomputeRisks(p: Project): void {
         getNode(p, f.fromId)?.riskFlags.push({ type: 'TRANSFER_PRICING_RISK', lawRef: 'НК РК 2025 ст. 351-362 (ТЦО)', flowId: f.id });
       }
     }
+  });
+
+  // ── KR D-MACE: South Korea Corporate Tax and TP Adjustment Risks ────────
+  listCompanies(p).forEach((co) => {
+    const z = getZone(p, co.zoneId);
+    if (!z || z.jurisdiction !== 'KR') return;
+    // KR_CORPORATE_TAX: flag progressive CIT compliance burden (9-24% brackets)
+    if (!co.riskFlags.some((r) => r.type === 'KR_CORPORATE_TAX')) {
+      co.riskFlags.push({
+        type: 'KR_CORPORATE_TAX',
+        lawRef: '한국 법인세법 제55조 (Corporate Income Tax Act Art. 55, progressive brackets 9-24%)',
+        message: 'South Korea imposes a progressive CIT scale (9%–24%) with strict reporting obligations.',
+      });
+    }
+    // KR_TP_ADJUSTMENT: check for cross-border flows involving KR entity
+    p.flows.forEach((f) => {
+      if (f.fromId !== co.id && f.toId !== co.id) return;
+      const otherId = f.fromId === co.id ? f.toId : f.fromId;
+      const otherZ = getZone(p, getNode(p, otherId)?.zoneId);
+      if (otherZ && otherZ.jurisdiction !== 'KR') {
+        if (!co.riskFlags.some((r) => r.type === 'KR_TP_ADJUSTMENT' && (r as any).flowId === f.id)) {
+          co.riskFlags.push({
+            type: 'KR_TP_ADJUSTMENT',
+            lawRef: '국제조세조정에 관한 법률 제4-11조 (International Tax Coordination Act Art. 4-11, arm\'s-length)',
+            flowId: f.id,
+            message: 'Cross-border flow with KR entity triggers strict transfer pricing adjustment risk under ITCA.',
+          });
+        }
+      }
+    });
   });
 
   listCompanies(p).forEach((co) => {

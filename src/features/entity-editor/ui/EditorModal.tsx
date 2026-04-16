@@ -69,6 +69,8 @@ const RISK_TYPE_I18N: Record<string, string> = {
   ADVANCE_RULING: 'riskAdvanceRuling',
   SEPARATE_ACCOUNTING: 'riskSeparateAccounting',
   NON_DEDUCTIBLE_EXPENSE: 'riskNonDeductibleExpense',
+  KR_CORPORATE_TAX: 'riskKrCorporateTax',
+  KR_TP_ADJUSTMENT: 'riskKrTpAdjustment',
 };
 
 // ─── Masked Money Input ─────────────────────────────────────────────────────

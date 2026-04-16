@@ -42,10 +42,10 @@ export type NexusCategory = 'R_OUT_UNRELATED' | 'R_OUT_RELATED_FOR' | 'R_IP_ACQU
 // ─── Core Domain Types ───────────────────────────────────────────────────────
 
 export type JurisdictionCode =
-  | 'KZ' | 'UAE' | 'HK' | 'CY' | 'SG' | 'UK' | 'US' | 'BVI' | 'CAY' | 'SEY';
+  | 'KZ' | 'UAE' | 'HK' | 'CY' | 'SG' | 'UK' | 'US' | 'BVI' | 'CAY' | 'SEY' | 'KR';
 
 export type CurrencyCode =
-  | 'KZT' | 'AED' | 'HKD' | 'EUR' | 'SGD' | 'GBP' | 'USD' | 'SCR' | 'CNY';
+  | 'KZT' | 'AED' | 'HKD' | 'EUR' | 'SGD' | 'GBP' | 'USD' | 'SCR' | 'CNY' | 'KRW';
 
 export type FlowType =
   | 'Services' | 'Dividends' | 'Royalties' | 'Interest' | 'Salary'
@@ -361,7 +361,8 @@ export type RiskFlagType =
   | 'CFC_RISK' | 'SUBSTANCE_BREACH' | 'AIFC_PRESENCE_BREACH'
   | 'PILLAR2_LOW_ETR' | 'TRANSFER_PRICING_RISK'
   | 'CASH_LIMIT_EXCEEDED' | 'INTERIM_DIVIDENDS_RISK' | 'CONSTRUCTIVE_DIVIDEND'
-  | 'PILLAR2_TOPUP_RISK' | 'PILLAR2_TRIGGER' | 'NO_JURISDICTION';
+  | 'PILLAR2_TOPUP_RISK' | 'PILLAR2_TRIGGER' | 'NO_JURISDICTION'
+  | 'KR_CORPORATE_TAX' | 'KR_TP_ADJUSTMENT';
 
 export interface RiskFlag {
   type: RiskFlagType | string;

@@ -49,6 +49,7 @@ const REGIME_TOOLTIPS: Record<string, string> = {
   BVI_STD: 'BVI entity: Economic Substance Act requires relevant activity, qualified employees, and physical premises.',
   CY_STD: 'Cyprus holding: IP Box and NID benefits available. Watch for EU defensive measures on dividends from low-tax jurisdictions.',
   SG_STD: 'Singapore: Consider Section 13R/13X fund incentives. WHT on services requires careful structuring.',
+  KR_STD: 'South Korea: Progressive CIT (9%–24%) with 4 brackets. Strict TP documentation under ITCA Art. 4-11. 10% VAT.',
 };
 
 // ─── Fuzzy search helper ─────────────────────────────────────────────────────
