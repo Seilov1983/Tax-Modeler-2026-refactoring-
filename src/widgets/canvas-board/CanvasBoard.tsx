@@ -861,6 +861,22 @@ export function CanvasBoard() {
         </Stage>
 
         {/* HTML overlays positioned on top of Konva Stage */}
+        {nodes.length === 0 && zones.length === 0 && (
+          <div
+            className="pointer-events-none absolute inset-0 flex items-center justify-center z-10"
+            data-testid="canvas-empty-state"
+          >
+            <div className="flex flex-col items-center gap-3 px-8 py-6 bg-white/60 dark:bg-slate-900/60 backdrop-blur-2xl border border-black/10 dark:border-white/10 rounded-2xl shadow-lg">
+              <span className="text-[48px] leading-none opacity-40">+</span>
+              <p className="text-[15px] font-semibold text-slate-800 dark:text-slate-100">
+                {t('canvasEmptyTitle')}
+              </p>
+              <p className="text-[13px] text-slate-600 dark:text-slate-400 max-w-[320px] text-center">
+                {t('canvasEmptyHint')}
+              </p>
+            </div>
+          </div>
+        )}
         <CanvasFilterPanel />
         <GlobalSummaryWidget />
         <CanvasControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} onReset={resetViewport} />

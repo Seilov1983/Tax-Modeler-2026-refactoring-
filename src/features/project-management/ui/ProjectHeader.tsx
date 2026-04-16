@@ -343,10 +343,10 @@ export function ProjectHeader() {
 
       {/* Right: actions & toggles */}
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => undo()} disabled={!canUndo} title="Undo">
+        <Button variant="ghost" size="icon" onClick={() => undo()} disabled={!canUndo} title={t('undo')} aria-label={t('undo')}>
           <Undo2 size={16} />
         </Button>
-        <Button variant="ghost" size="icon" onClick={() => redo()} disabled={!canRedo} title="Redo">
+        <Button variant="ghost" size="icon" onClick={() => redo()} disabled={!canRedo} title={t('redo')} aria-label={t('redo')}>
           <Redo2 size={16} />
         </Button>
 
@@ -366,19 +366,19 @@ export function ProjectHeader() {
           <FileUp size={14} /> Load
         </Button>
         
-        <Button variant="secondary" size="sm" onClick={handleSaveAs} className="text-[12px] gap-2">
-          <Files size={14} /> Save As
+        <Button variant="secondary" size="sm" onClick={handleSaveAs} className="text-[12px] gap-2" aria-label={t('saveAs')}>
+          <Files size={14} /> {t('saveAs')}
         </Button>
 
         <div className="w-[1px] h-5 bg-black/10 dark:bg-white/10 mx-1" />
 
-        <Button variant="ghost" size="sm" onClick={handleExportJson} className="text-[12px] gap-2 text-slate-600 dark:text-slate-400">
+        <Button variant="ghost" size="sm" onClick={handleExportJson} className="text-[12px] gap-2 text-slate-700 dark:text-slate-300" aria-label={t('exportToJson')}>
           <FileJson size={14} /> JSON
         </Button>
-        <Button variant="ghost" size="sm" onClick={handleExportPdf} disabled={pdfLoading} className="text-[12px] gap-2 text-slate-600 dark:text-slate-400">
+        <Button variant="ghost" size="sm" onClick={handleExportPdf} disabled={pdfLoading} className="text-[12px] gap-2 text-slate-700 dark:text-slate-300" aria-label={t('exportToPdf')}>
           <FileText size={14} /> {pdfLoading ? '...' : 'PDF'}
         </Button>
-        <Button variant="ghost" size="sm" onClick={handleExportPng} className="text-[12px] gap-2 text-slate-600 dark:text-slate-400">
+        <Button variant="ghost" size="sm" onClick={handleExportPng} className="text-[12px] gap-2 text-slate-700 dark:text-slate-300" aria-label={t('exportToPng')}>
           <FileImage size={14} /> PNG
         </Button>
 
@@ -390,17 +390,17 @@ export function ProjectHeader() {
         <div className="w-[1px] h-5 bg-black/10 dark:bg-white/10 mx-1" />
 
         {/* Theme toggle */}
-        <Button variant="ghost" size="icon" onClick={toggleTheme} className="text-slate-500 rounded-full hover:bg-black/5 dark:hover:bg-white/10">
+        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label={t('toggleTheme')} title={t('toggleTheme')} className="text-slate-700 dark:text-slate-200 rounded-full hover:bg-black/10 dark:hover:bg-white/15">
           {isDark ? <Moon size={16} /> : <Sun size={16} />}
         </Button>
 
         {/* Language toggle */}
-        <Button variant="ghost" size="icon" onClick={toggleLanguage} className="text-[11px] font-bold text-slate-500 rounded-full hover:bg-black/5 dark:hover:bg-white/10">
+        <Button variant="ghost" size="icon" onClick={toggleLanguage} aria-label={t('toggleLanguage')} title={t('toggleLanguage')} className="text-[11px] font-bold text-slate-700 dark:text-slate-200 rounded-full hover:bg-black/10 dark:hover:bg-white/15">
           {lang === 'en' ? 'RU' : 'EN'}
         </Button>
 
         {/* Settings toggle */}
-        <Button variant="ghost" size="icon" onClick={() => setSettingsOpen(true)} className="text-slate-500 rounded-full hover:bg-black/5 dark:hover:bg-white/10">
+        <Button variant="ghost" size="icon" onClick={() => setSettingsOpen(true)} aria-label={t('settings')} title={t('settings')} className="text-slate-700 dark:text-slate-200 rounded-full hover:bg-black/10 dark:hover:bg-white/15">
           <Settings size={16} />
         </Button>
 
@@ -409,7 +409,10 @@ export function ProjectHeader() {
           variant="ghost"
           size="icon"
           onClick={() => setCopilotOpen((o) => !o)}
-          className={`rounded-full hover:bg-black/5 dark:hover:bg-white/10 ${copilotOpen ? 'text-indigo-500' : 'text-slate-500'}`}
+          aria-label={t('aiCopilot')}
+          title={t('aiCopilot')}
+          aria-pressed={copilotOpen}
+          className={`rounded-full hover:bg-black/10 dark:hover:bg-white/15 ${copilotOpen ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-200'}`}
         >
           <Sparkles size={16} />
         </Button>

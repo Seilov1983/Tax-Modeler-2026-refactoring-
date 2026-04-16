@@ -35,30 +35,33 @@ export const CanvasControls = memo(function CanvasControls({
 
   return (
     <div
-      className="exclude-from-export absolute bottom-12 left-4 flex items-stretch bg-white/70 dark:bg-slate-950/70 backdrop-blur-2xl border border-black/5 dark:border-white/5 shadow-xl shadow-black/5 dark:shadow-white/5 rounded-2xl overflow-hidden z-40 select-none"
+      className="exclude-from-export absolute bottom-12 left-4 flex items-stretch bg-white/85 dark:bg-slate-900/85 backdrop-blur-2xl border border-black/10 dark:border-white/10 shadow-xl shadow-black/5 dark:shadow-white/5 rounded-2xl overflow-hidden z-40 select-none"
       data-testid="canvas-controls"
     >
       <button
         onClick={onZoomOut}
         data-testid="btn-zoom-out"
-        className="px-4 py-2 bg-transparent border-none text-[18px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 transition-colors active:bg-black/10 dark:active:bg-white/20"
+        aria-label={t('zoomOut')}
+        className="px-4 py-2 bg-transparent border-none text-[18px] font-bold text-slate-900 dark:text-slate-50 cursor-pointer hover:bg-black/10 dark:hover:bg-white/15 transition-colors active:bg-black/15 dark:active:bg-white/25 disabled:opacity-50 disabled:cursor-not-allowed"
         title={t('zoomOut')}
       >
         &minus;
       </button>
 
-      <div
+      <button
         onClick={handleReset}
         title={t('resetZoom')}
-        className="px-3 py-2 text-[12px] font-mono font-bold text-slate-500 dark:text-slate-400 cursor-pointer flex items-center justify-center min-w-[56px] border-x border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/10 transition-colors bg-black/5 dark:bg-white/5"
+        aria-label={t('resetZoom')}
+        className="px-3 py-2 text-[12px] font-mono font-bold text-slate-900 dark:text-slate-50 cursor-pointer flex items-center justify-center min-w-[56px] border-x border-black/10 dark:border-white/10 hover:bg-black/10 dark:hover:bg-white/15 transition-colors bg-black/10 dark:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {percent}%
-      </div>
+      </button>
 
       <button
         onClick={onZoomIn}
         data-testid="btn-zoom-in"
-        className="px-4 py-2 bg-transparent border-none text-[18px] font-bold text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-black/5 dark:hover:bg-white/10 transition-colors active:bg-black/10 dark:active:bg-white/20"
+        aria-label={t('zoomIn')}
+        className="px-4 py-2 bg-transparent border-none text-[18px] font-bold text-slate-900 dark:text-slate-50 cursor-pointer hover:bg-black/10 dark:hover:bg-white/15 transition-colors active:bg-black/15 dark:active:bg-white/25 disabled:opacity-50 disabled:cursor-not-allowed"
         title={t('zoomIn')}
       >
         +

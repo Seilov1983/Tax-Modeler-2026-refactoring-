@@ -24,6 +24,7 @@ import { useDebouncedCloudSync } from '@shared/hooks/useDebouncedCloudSync';
 import { isSidebarOpenAtom } from '@features/master-data-sidebar';
 import { copilotOpenAtom } from '@features/ai-copilot';
 import { selectionAtom } from '@features/entity-editor';
+import { settingsAtom } from '@features/settings/model/settings-atom';
 
 const CanvasBoard = dynamic(
   () => import('@widgets/canvas-board').then((mod) => ({ default: mod.CanvasBoard })),
@@ -95,9 +96,26 @@ function prepareProject(p: Project): Project {
   return p;
 }
 
+const SETTINGS_STORAGE_KEY = 'tax-modeler-settings';
+
 function AppContent() {
   const hydrate = useSetAtom(hydrateProjectAtom);
   const [isHydrated, setIsHydrated] = useState(false);
+  const setSettings = useSetAtom(settingsAtom);
+
+  // ─── First-run language auto-detection from navigator.language ────────
+  // Runs only if settings haven't been persisted yet. Ensures RU users don't
+  // get an English-default UI on first visit.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(SETTINGS_STORAGE_KEY)) return;
+      const nav = typeof navigator !== 'undefined' ? navigator.language : 'en';
+      const detected: 'en' | 'ru' = nav.toLowerCase().startsWith('ru') ? 'ru' : 'en';
+      setSettings((prev) => ({ ...prev, language: detected }));
+    } catch {
+      /* ignore — fall back to default */
+    }
+  }, [setSettings]);
 
   // ─── Cloud Sync: debounced at 1500ms via /api/projects/sync ──────────
   const { remoteProjectIdRef, isOfflineModeRef } = useDebouncedCloudSync(isHydrated);
